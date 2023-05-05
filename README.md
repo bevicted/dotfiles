@@ -60,5 +60,14 @@ ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
 - https://addons.mozilla.org/en-US/firefox/addon/skip-redirect/
 
 ## general
+
 - https://github.com/ryanoasis/nerd-fonts
+
+## manjaro
+
+disable PC speaker beep
+
+```sh
+echo "blacklist pcspkr" | sudo tee /etc/modprobe.d/nobeep.conf
+```
 
