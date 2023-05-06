@@ -9,5 +9,8 @@ vim.opt.termguicolors = true
 local api = require("nvim-tree.api")
 vim.keymap.set("n", "<leader>t", function() api.tree.toggle() end)
 
--- empty setup using defaults
-require("nvim-tree").setup()
+require("nvim-tree").setup({
+    git = {
+        ignore = false,
+    },
+})
