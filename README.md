@@ -73,3 +73,8 @@ echo "blacklist pcspkr" | sudo tee /etc/modprobe.d/nobeep.conf
 
 - https://github.com/linuxmint/timeshift
 
+## instructions
+
+- https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent
+- https://docs.github.com/en/authentication/managing-commit-signature-verification/generating-a-new-gpg-key
+
