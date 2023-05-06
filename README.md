@@ -12,6 +12,12 @@ e.g.:
 ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
 ```
 
+add the bin folder to your path in your rc file:
+
+```sh
+PATH=~/Projects/.dotfiles/bin:$PATH
+```
+
 ## nvim
 
 - https://github.com/neovim/neovim
@@ -44,6 +50,7 @@ ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
 ## cli
 
 - https://github.com/alacritty/alacritty
+- https://github.com/ohmyzsh/ohmyzsh
 - https://github.com/tmux/tmux
 - https://github.com/BurntSushi/ripgrep
 - https://github.com/sharkdp/fd
@@ -61,6 +68,7 @@ ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
 
 ## general
 
+- https://github.com/i3/i3
 - https://github.com/ryanoasis/nerd-fonts
 
 ## other
