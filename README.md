@@ -41,7 +41,7 @@ ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
 - https://github.com/mhinz/vim-galore
 - https://theprimeagen.github.io/vim-fundamentals
 
-## cli / util
+## cli
 
 - https://github.com/alacritty/alacritty
 - https://github.com/tmux/tmux
@@ -50,6 +50,7 @@ ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
 - https://github.com/junegunn/fzf
 - https://github.com/dylanaraps/neofetch
 - https://github.com/lsd-rs/lsd
+- https://github.com/aome510/spotify-player
 
 ## browser
 
@@ -61,6 +62,10 @@ ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
 ## general
 
 - https://github.com/ryanoasis/nerd-fonts
+
+## other
+
+- https://github.com/flightlessmango/MangoHud
 
 ## manjaro
 
