@@ -23,13 +23,12 @@ ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
 - https://github.com/theprimeagen/harpoon
 - https://github.com/mbbill/undotree
 - https://github.com/tpope/vim-fugitive
-
-- items below seem interesting/good but I havent tried them yet
 - https://github.com/nvim-tree/nvim-tree.lua
 - https://github.com/lewis6991/gitsigns.nvim
 - https://github.com/LionC/nest.nvim
 - https://github.com/folke/trouble.nvim
 - https://github.com/folke/which-key.nvim
+- https://github.com/Eandrju/cellular-automaton.nvim
 
 ### themes
 

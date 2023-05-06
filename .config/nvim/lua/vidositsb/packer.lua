@@ -5,6 +5,7 @@ return require('packer').startup(function(use)
     -- Packer can manage itself
     use 'wbthomason/packer.nvim'
     use 'folke/tokyonight.nvim'
+    use('lewis6991/gitsigns.nvim')
 
     use {
         'nvim-lualine/lualine.nvim',
@@ -19,11 +20,6 @@ return require('packer').startup(function(use)
         config = function()
             require("nvim-tree").setup {}
         end
-    }
-
-    use {
-        'lewis6991/gitsigns.nvim',
-        tag = 'release',
     }
 
     use {
@@ -58,4 +54,5 @@ return require('packer').startup(function(use)
     use('theprimeagen/harpoon')
     use('mbbill/undotree')
     use('tpope/vim-fugitive')
+    use('eandrju/cellular-automaton.nvim')
 end)
