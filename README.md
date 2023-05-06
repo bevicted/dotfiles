@@ -71,3 +71,5 @@ disable PC speaker beep
 echo "blacklist pcspkr" | sudo tee /etc/modprobe.d/nobeep.conf
 ```
 
+- https://github.com/linuxmint/timeshift
+
