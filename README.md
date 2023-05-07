@@ -53,6 +53,7 @@ PATH=~/Projects/.dotfiles/bin:$PATH
 - https://github.com/tmux/tmux
 - https://github.com/ohmyzsh/ohmyzsh
 - https://github.com/romkatv/powerlevel10k
+- https://github.com/zsh-users/zsh-syntax-highlighting/tree/master
 - https://github.com/dylanaraps/neofetch
 - https://github.com/aome510/spotify-player
 
