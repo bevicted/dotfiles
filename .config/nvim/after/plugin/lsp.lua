@@ -3,6 +3,7 @@ local lsp = require('lsp-zero').preset({})
 lsp.ensure_installed({
     'lua_ls',
     'bashls',
+    'shellcheck',
     'rust_analyzer',
 })
 
