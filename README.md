@@ -50,14 +50,20 @@ PATH=~/Projects/.dotfiles/bin:$PATH
 ## cli
 
 - https://github.com/alacritty/alacritty
-- https://github.com/ohmyzsh/ohmyzsh
 - https://github.com/tmux/tmux
+- https://github.com/ohmyzsh/ohmyzsh
+- https://github.com/romkatv/powerlevel10k
+- https://github.com/dylanaraps/neofetch
+- https://github.com/aome510/spotify-player
+
+### tools
+
 - https://github.com/BurntSushi/ripgrep
 - https://github.com/sharkdp/fd
 - https://github.com/junegunn/fzf
-- https://github.com/dylanaraps/neofetch
-- https://github.com/lsd-rs/lsd
-- https://github.com/aome510/spotify-player
+- https://github.com/sharkdp/bat
+- https://github.com/ogham/exa
+
 
 ## browser
 
