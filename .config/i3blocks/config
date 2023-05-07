@@ -1,0 +1,44 @@
+# i3blocks configuration file
+#
+# The i3blocks man page describes the usage of the binary,
+# and its website describes the configuration:
+#
+#     https://vivien.github.io/i3blocks
+
+BIN=/home/vidosits/Projects/.dotfiles/bin
+
+# Global properties
+separator=true
+separator_block_width=15
+
+[bandwidth]
+command=$BIN/bandwidth
+interval=persist
+markup=pango
+#LABEL=<span font='FontAwesome'>  </span>
+#IFACE=[automatically determined]
+#DT=3
+#UNIT=Mb
+# Exposed variables: rx, wx, tx, unit, iface
+#PRINTF_COMMAND=printf "${LABEL}%-5.1f/%5.1f %s/s\n", rx, wx, unit;
+
+[cpu_usage]
+command=$BIN/cpu
+interval=10
+LABEL=CPU 
+#min_width=CPU: 100.00%
+#T_WARN=50
+#T_CRIT=80
+#DECIMALS=2
+#COLOR_NORMAL=#EBDBB2
+#COLOR_WARN=#FFFC00
+#COLOR_CRIT=#FF0000
+
+[memory]
+command=$BIN/memory
+label=MEM 
+interval=5
+
+[time]
+command=date '+%Y-%m-%d %H:%M:%S'
+interval=1
