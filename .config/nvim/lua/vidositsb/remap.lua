@@ -1,7 +1,5 @@
 -- use space as <leader>
 vim.g.mapleader = " "
--- file explore
-vim.keymap.set("n", "<leader>ex", vim.cmd.Ex)
 
 -- move and indent v selected lines
 vim.keymap.set("v", "J", ":m '>+1<CR>gv=gv")
@@ -45,4 +43,5 @@ vim.keymap.set("n", "<leader>k", "<cmd>lnext<CR>zz")
 vim.keymap.set("n", "<leader>j", "<cmd>lprev<CR>zz")
 
 -- make file executable
-vim.keymap.set("n", "<leader>x", "<cmd>!chmod +x %<CR>")
+vim.keymap.set("n", "<leader>x", "<cmd>!chmod +x %<CR><CR>")
+vim.keymap.set("n", "<leader>ex", "<cmd>:!%:p<CR>")
