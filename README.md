@@ -65,7 +65,6 @@ PATH=~/Projects/.dotfiles/bin:$PATH
 - https://github.com/sharkdp/bat
 - https://github.com/ogham/exa
 
-
 ## browser
 
 - https://github.com/arkenfox/user.js/
@@ -75,7 +74,6 @@ PATH=~/Projects/.dotfiles/bin:$PATH
 
 ## general
 
-- https://github.com/i3/i3
 - https://github.com/ryanoasis/nerd-fonts
 
 ## other
@@ -84,13 +82,17 @@ PATH=~/Projects/.dotfiles/bin:$PATH
 
 ## manjaro
 
+- https://github.com/i3/i3
+- https://github.com/davatorium/rofi
+- https://github.com/linuxmint/timeshift
+
+### settings
+
 disable PC speaker beep
 
 ```sh
 echo "blacklist pcspkr" | sudo tee /etc/modprobe.d/nobeep.conf
 ```
-
-- https://github.com/linuxmint/timeshift
 
 ## instructions
 
