@@ -94,6 +94,11 @@ disable PC speaker beep
 echo "blacklist pcspkr" | sudo tee /etc/modprobe.d/nobeep.conf
 ```
 
+## macos
+
+- https://github.com/koekeishiya/yabai
+- https://github.com/koekeishiya/skhd
+
 ## instructions
 
 - https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent
