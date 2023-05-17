@@ -1,3 +1,11 @@
+-- Options are automatically loaded before lazy.nvim startup
+-- Default options that are always set: https://github.com/LazyVim/LazyVim/blob/main/lua/lazyvim/config/options.lua
+-- Add any additional options here
+
+-- use space as <leader>
+vim.g.mapleader = " "
+vim.g.maplocalleader = " "
+
 -- block cursor
 vim.opt.guicursor = ""
 
@@ -40,3 +48,6 @@ vim.opt.updatetime = 50
 
 -- color columns
 vim.opt.colorcolumn = { "80", "100" }
+
+-- winbar
+vim.opt.winbar = "%=%m %f"
