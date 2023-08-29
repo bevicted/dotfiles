@@ -7,6 +7,9 @@ return {
             require("telescope").load_extension("fzf")
         end,
     },
+    keys = {
+        { "<leader>rg", "<cmd>Telescope live_grep<cr>", desc = "ripgrep" },
+    },
     opts = {
         defaults = {
             file_ignore_patterns = {
