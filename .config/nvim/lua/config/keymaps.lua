@@ -55,3 +55,11 @@ vim.keymap.set("n", "<leader>j", "<cmd>lprev<CR>zz", { noremap = true, silent = 
 -- make file executable
 vim.keymap.set("n", "<leader>chm", "<cmd>!chmod +x %<CR><CR>", { noremap = true, silent = true })
 vim.keymap.set("n", "<leader>ex", "<cmd>:!%:p<CR>", { noremap = true, silent = true })
+
+-- custom
+vim.keymap.set(
+    "n",
+    "<leader>i",
+    "<cmd>lua vim.lsp.buf.hover()<CR>",
+    { noremap = true, silent = true, desc = "Inspect" }
+)
