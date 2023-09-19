@@ -10,4 +10,5 @@ alias find='fd'
 # shortcuts
 alias ic='ibmcloud'
 alias v='nvim .'
+alias c='code .'
 
