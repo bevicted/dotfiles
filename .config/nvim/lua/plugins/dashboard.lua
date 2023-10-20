@@ -1,7 +1,7 @@
 return {
-    "goolord/alpha-nvim",
+    "nvimdev/dashboard-nvim",
     opts = function(_, opts)
-        opts.section.header.val = {
+        opts.config.header = {
             "                                                     ",
             "  ███╗   ██╗███████╗ ██████╗ ██╗   ██╗██╗███╗   ███╗ ",
             "  ████╗  ██║██╔════╝██╔═══██╗██║   ██║██║████╗ ████║ ",
