@@ -18,6 +18,47 @@ add the bin folder to your path in your rc file:
 PATH=~/Projects/.dotfiles/bin:$PATH
 ```
 
+## quick script
+
+### fedora
+```sh
+sudo dnf install \
+    zsh \
+    vim \
+    neovim \
+    neofetch \
+    alacritty \
+    ripgrep \
+    fd-find \
+    fzf \
+    bat \
+    exa \
+    gcc \
+    g++ \
+    golang \
+    rust \
+    cargo
+```
+
+```sh
+mv ~/.zshrc ~/.zshrc.backup && \
+    ln -s "$(pwd)"/.zshrc ~ && \
+    mkdir -p ~/.oh-my-zsh/custom && \
+    ln -s "$(pwd)"/.oh-my-zsh/custom/*.zsh ~/.oh-my-zsh/custom/ && \
+    mkdir -p ~/.mozilla/firefox/user.arkenfox && \
+    ln -s "$(pwd)"/.mozilla/firefox/user.arkenfox/* ~/.mozilla/firefox/user.arkenfox/ && \
+    mkdir -p ~/.config/tmux && \
+    ln -s "$(pwd)"/.config/tmux/* ~/.config/tmux/ && \
+    mkdir -p ~/.config/alacritty && \
+    ln -s "$(pwd)".config/alacritty/* ~/.config/alacritty/ && \
+    mkdir -p ~/.config/gtk-3.0/ && \
+    ln -s "$(pwd)"/.config/gtk-3.0/* ~/.config/gtk-3.0/ && \
+    mv ~/.config/i3/config ~/.config/i3/config.backup && \
+    ln -s "$(pwd)"/.config/i3/* ~/.config/i3/ && \
+    mkdir -p ~/.config/i3blocks && \
+    ln -s "$(pwd)"/.config/i3blocks/* ~/.config/i3blocks/
+```
+
 ## nvim
 
 - https://github.com/neovim/neovim
