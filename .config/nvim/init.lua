@@ -209,10 +209,11 @@ require('lazy').setup({
 
   {
     -- Theme inspired by Atom
-    'navarasu/onedark.nvim',
+    'catppuccin/nvim',
+    name = 'catppuccin',
     priority = 1000,
     config = function()
-      vim.cmd.colorscheme 'onedark'
+      vim.cmd.colorscheme 'catppuccin'
     end,
   },
 
@@ -300,6 +301,10 @@ require('lazy').setup({
 
 -- [[ Setting options ]]
 -- See `:help vim.o`
+
+-- cursorline
+vim.o.cursorline = true
+vim.o.cursorlineopt = 'number'
 
 -- block cursor
 vim.o.guicursor = ""
