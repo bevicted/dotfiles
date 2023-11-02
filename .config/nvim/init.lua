@@ -71,7 +71,7 @@ require('lazy').setup({
   {
     "tpope/vim-fugitive",
     keys = {
-      { "<leader>vf", "<cmd>Git<cr>", desc = "fugitive git" },
+      { "<leader>vf", "<cmd>Git<cr>", desc = "[V]im [F]ugitive" },
     },
   },
   'tpope/vim-rhubarb',
@@ -208,13 +208,19 @@ require('lazy').setup({
   },
 
   {
-    -- Theme inspired by Atom
     'catppuccin/nvim',
     name = 'catppuccin',
     priority = 1000,
     config = function()
       vim.cmd.colorscheme 'catppuccin'
     end,
+  },
+
+  {
+    "SmiteshP/nvim-navic",
+    dependencies = {
+      "neovim/nvim-lspconfig",
+    },
   },
 
   {
@@ -227,6 +233,15 @@ require('lazy').setup({
         theme = 'onedark',
         component_separators = '|',
         section_separators = '',
+      },
+      sections = {
+        lualine_c = {
+          {
+            "navic",
+            color_correction = nil,
+            navic_opts = nil,
+          }
+        }
       },
     },
   },
@@ -273,7 +288,7 @@ require('lazy').setup({
           hidden = true,
         },
         live_grep = {
-          additional_args = function(opts)
+          additional_args = function(_)
             return { "--hidden" }
           end,
         },
@@ -582,7 +597,7 @@ vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagn
 
 -- [[ Configure LSP ]]
 --  This function gets run when an LSP connects to a particular buffer.
-local on_attach = function(_, bufnr)
+local on_attach = function(client, bufnr)
   -- NOTE: Remember that lua is a real programming language, and as such it is possible
   -- to define small helper and utility functions so you don't have to repeat yourself
   -- many times.
@@ -623,6 +638,11 @@ local on_attach = function(_, bufnr)
   vim.api.nvim_buf_create_user_command(bufnr, 'Format', function(_)
     vim.lsp.buf.format()
   end, { desc = 'Format current buffer with LSP' })
+
+  -- navic setup
+  if client.server_capabilities.documentSymbolProvider then
+    require("nvim-navic").attach(client, bufnr)
+  end
 end
 
 -- document existing key chains
