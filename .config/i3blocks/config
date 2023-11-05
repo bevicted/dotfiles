@@ -5,14 +5,14 @@
 #
 #     https://vivien.github.io/i3blocks
 
-BIN=/home/vidosits/Projects/.dotfiles/bin
+SCRIPT_DIR=/home/bvidosits/Projects/.dotfiles/bin
 
 # Global properties
 separator=true
 separator_block_width=15
 
 [bandwidth]
-command=$BIN/bandwidth
+command=$SCRIPT_DIR/bandwidth
 interval=persist
 markup=pango
 #LABEL=<span font='FontAwesome'>  </span>
@@ -23,7 +23,7 @@ markup=pango
 #PRINTF_COMMAND=printf "${LABEL}%-5.1f/%5.1f %s/s\n", rx, wx, unit;
 
 [cpu_usage]
-command=$BIN/cpu
+command=$SCRIPT_DIR/cpu
 interval=10
 LABEL=CPU 
 #min_width=CPU: 100.00%
@@ -35,9 +35,16 @@ LABEL=CPU
 #COLOR_CRIT=#FF0000
 
 [memory]
-command=$BIN/memory
+command=$SCRIPT_DIR/memory
 label=MEM 
 interval=5
+
+[battery]
+command=$SCRIPT_DIR/battery
+interval=30
+LABEL=BAT
+#LABEL=⚡
+#BAT_NUMBER=0
 
 [time]
 command=date '+%Y-%m-%d %H:%M:%S'
