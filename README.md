@@ -100,11 +100,15 @@ mv ~/.zshrc ~/.zshrc.backup && \
 
 ### tools
 
+- https://github.com/i3/i3
+- https://github.com/davatorium/rofi
 - https://github.com/BurntSushi/ripgrep
 - https://github.com/sharkdp/fd
 - https://github.com/junegunn/fzf
 - https://github.com/sharkdp/bat
 - https://github.com/ogham/exa
+- https://github.com/flightlessmango/MangoHud
+- https://github.com/linuxmint/timeshift
 
 ## browser
 
@@ -117,28 +121,13 @@ mv ~/.zshrc ~/.zshrc.backup && \
 
 - https://github.com/ryanoasis/nerd-fonts
 
-## other
-
-- https://github.com/flightlessmango/MangoHud
-
-## manjaro
-
-- https://github.com/i3/i3
-- https://github.com/davatorium/rofi
-- https://github.com/linuxmint/timeshift
-
-### settings
+## settings
 
 disable PC speaker beep
 
 ```sh
 echo "blacklist pcspkr" | sudo tee /etc/modprobe.d/nobeep.conf
 ```
-
-## macos
-
-- https://github.com/koekeishiya/yabai
-- https://github.com/koekeishiya/skhd
 
 ## instructions
 
