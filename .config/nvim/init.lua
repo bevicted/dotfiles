@@ -282,15 +282,27 @@ require('lazy').setup({
         file_ignore_patterns = {
           ".git/",
         },
+        layout_strategy = 'vertical',
+        layout_config = {
+          height = 0.9,
+          width = 0.9,
+        },
       },
       pickers = {
         find_files = {
           hidden = true,
+          no_ignore = true,
+          layout_config = {
+            preview_height = 0.7,
+          },
         },
         live_grep = {
           additional_args = function(_)
-            return { "--hidden" }
+            return { "--hidden", "-u" }
           end,
+          layout_config = {
+            preview_height = 0.7,
+          },
         },
       },
     },
