@@ -71,7 +71,8 @@ require('lazy').setup({
   {
     "tpope/vim-fugitive",
     keys = {
-      { "<leader>vf", "<cmd>Git<cr>", desc = "[V]im [F]ugitive" },
+      { "<leader>vf", "<cmd>Git<cr>",       desc = "[V]im [F]ugitive - Git" },
+      { "<leader>vb", "<cmd>Git blame<cr>", desc = "[V]im Fugitive - Git blame" },
     },
   },
   'tpope/vim-rhubarb',
@@ -182,6 +183,7 @@ require('lazy').setup({
       },
       on_attach = function(bufnr)
         vim.keymap.set('n', '<leader>hp', require('gitsigns').preview_hunk, { buffer = bufnr, desc = 'Preview git hunk' })
+        vim.keymap.set('n', '<leader>gb', require('gitsigns').blame_line, { buffer = bufnr, desc = '[G]it [B]lame Line' })
 
         -- don't override the built-in and fugitive keymaps
         local gs = package.loaded.gitsigns
