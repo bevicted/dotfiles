@@ -5,8 +5,8 @@
 -- [ cursor ]
 
 vim.opt.cursorline = true
-vim.opt.cursorlineopt = "number"
-vim.opt.guicursor = ""
+vim.opt.cursorlineopt = 'number'
+vim.opt.guicursor = ''
 
 -- [ line numbers ]
 
@@ -27,7 +27,7 @@ vim.opt.smartindent = true
 
 vim.opt.swapfile = false
 vim.opt.backup = false
-vim.opt.undodir = os.getenv("HOME") .. "/.vim/undodir"
+vim.opt.undodir = os.getenv 'HOME' .. '/.vim/undodir'
 vim.opt.undofile = true
 
 -- [ search ]
@@ -39,7 +39,7 @@ vim.opt.smartcase = true
 
 -- [ substitute ]
 
-vim.opt.inccommand = "split"
+vim.opt.inccommand = 'split'
 
 -- [ wrap ]
 
@@ -55,14 +55,14 @@ vim.g.netrw_winsize = 25
 -- [ display ]
 
 vim.opt.termguicolors = true
-vim.opt.isfname:append("@-@")
+vim.opt.isfname:append '@-@'
 -- vim.opt.colorcolumn = { "80", "100" }
-vim.opt.winbar = "%=%m %f"
+vim.opt.winbar = '%=%m %f'
 vim.opt.showmode = false
-vim.opt.signcolumn = "yes"
+vim.opt.signcolumn = 'yes'
 vim.opt.updatetime = 250
 vim.opt.list = true
-vim.opt.listchars = { tab = "» ", trail = "·", nbsp = "␣" }
+vim.opt.listchars = { tab = '» ', trail = '·', nbsp = '␣' }
 vim.opt.scrolloff = 10
 
 -- [ splits ]
@@ -72,11 +72,11 @@ vim.opt.splitbelow = true
 
 -- [ autocomplete ]
 
-vim.opt.completeopt = "menuone,noselect"
+vim.opt.completeopt = 'menuone,noselect'
 
 -- [ interaction ]
 
-vim.opt.mouse = "a"
+vim.opt.mouse = 'a'
 vim.opt.timeoutlen = 300
 
 -- vim: ts=2 sts=2 sw=2 et
