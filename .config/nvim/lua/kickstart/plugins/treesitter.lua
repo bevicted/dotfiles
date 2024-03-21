@@ -32,6 +32,7 @@ return {
       indent = { enable = true, disable = { 'ruby' } },
       context = {
         enable = true,
+        multiline_threshold = 3,
       },
       textobjects = {
         enable = true,
@@ -42,6 +43,8 @@ return {
 
       ---@diagnostic disable-next-line: missing-fields
       require('nvim-treesitter.configs').setup(opts)
+      ---@diagnostic disable-next-line: missing-fields
+      require('treesitter-context').setup(opts.context)
     end,
   },
 }
