@@ -14,7 +14,7 @@ return {
       vim.g.github_enterprise_urls = { 'https://github.ibm.com' }
     end,
   },
-  { 'tpope/vim-sleuth', lazy = false },
+  { 'tpope/vim-sleuth' },
 }
 
 -- vim: ts=2 sts=2 sw=2 et
