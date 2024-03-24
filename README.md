@@ -33,6 +33,7 @@ sudo dnf install \
     fzf \
     bat \
     exa \
+    git-delta \
     gcc \
     g++ \
     golang \
@@ -107,6 +108,7 @@ mv ~/.zshrc ~/.zshrc.backup && \
 - https://github.com/junegunn/fzf
 - https://github.com/sharkdp/bat
 - https://github.com/ogham/exa
+- https://github.com/dandavison/delta
 - https://github.com/flightlessmango/MangoHud
 - https://github.com/linuxmint/timeshift
 
