@@ -90,7 +90,6 @@ return {
           { name = 'luasnip' },
           { name = 'path' },
           { name = 'git' },
-          { name = 'orgmode' },
         },
       }
     end,
