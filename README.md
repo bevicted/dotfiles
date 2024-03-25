@@ -98,6 +98,7 @@ mv ~/.zshrc ~/.zshrc.backup && \
 - https://github.com/zsh-users/zsh-syntax-highlighting/tree/master
 - https://github.com/dylanaraps/neofetch
 - https://github.com/aome510/spotify-player
+- https://cli.github.com/
 
 ### tools
 
