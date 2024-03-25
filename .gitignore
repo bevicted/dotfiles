@@ -1,3 +1,7 @@
+# custom
+.config/nvim/lua/work.lua
+
+# nvim
 .config/nvim/tt.*
 .config/nvim/.tests
 .config/nvim/doc/tags
