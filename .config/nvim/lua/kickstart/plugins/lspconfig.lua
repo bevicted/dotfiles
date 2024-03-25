@@ -14,6 +14,16 @@ return {
       -- `neodev` configures Lua LSP for your Neovim config, runtime and plugins
       -- used for completion, annotations and signatures of Neovim apis
       { 'folke/neodev.nvim', opts = {} },
+
+      {
+        'SmiteshP/nvim-navbuddy',
+        dependencies = {
+          'SmiteshP/nvim-navic',
+          'MunifTanjim/nui.nvim',
+        },
+        keys = { { '<leader>n', '<cmd>Navbuddy<cr>' } },
+        opts = { lsp = { auto_attach = true } },
+      },
     },
     config = function()
       -- Brief aside: **What is LSP?**
