@@ -148,10 +148,10 @@ return {
       local servers = {
         gopls = {},
         golangci_lint_ls = {},
-        pyright = {},
+        pyright = {}, -- requires nodejs
         rust_analyzer = {},
-        bashls = {},
-        yamlls = {},
+        bashls = {}, -- requires nodejs
+        yamlls = {}, -- requires nodejs
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         --
         -- Some languages (like typescript) have entire language plugins that can be useful:
