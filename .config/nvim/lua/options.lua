@@ -57,7 +57,6 @@ vim.g.netrw_winsize = 25
 vim.opt.termguicolors = true
 vim.opt.isfname:append '@-@'
 -- vim.opt.colorcolumn = { "80", "100" }
-vim.opt.winbar = '%=%m %f'
 vim.opt.showmode = false
 vim.opt.signcolumn = 'yes'
 vim.opt.updatetime = 250
