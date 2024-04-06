@@ -20,10 +20,12 @@ PATH=~/Projects/.dotfiles/bin:$PATH
 
 ## quick script
 
-### fedora
+### debian
 ```sh
-sudo dnf install \
+sudo apt install \
     zsh \
+    tmux \
+    rofi \
     vim \
     neovim \
     neofetch \
@@ -33,12 +35,9 @@ sudo dnf install \
     fzf \
     bat \
     exa \
-    git-delta \
     gcc \
     g++ \
-    golang \
-    rust \
-    cargo
+    golang
 ```
 
 ```sh
@@ -63,7 +62,6 @@ mv ~/.zshrc ~/.zshrc.backup && \
 ## nvim
 
 - https://github.com/neovim/neovim
-- https://github.com/wbthomason/packer.nvim
 - https://github.com/nvim-telescope/telescope.nvim
 - https://github.com/nvim-treesitter/nvim-treesitter
 - https://github.com/VonHeikemen/lsp-zero.nvim
