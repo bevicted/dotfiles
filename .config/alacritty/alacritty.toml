@@ -37,17 +37,17 @@ TERM = "xterm-256color"
 size = 12.0
 
 [font.bold]
-family = "Terminess Nerd Font Mono"
+family = "JetBrainsMono Nerd Font Mono"
 style = "Bold"
 
 [font.bold_italic]
-family = "Terminess Nerd Font Mono"
+family = "JetBrainsMono Nerd Font Mono"
 style = "Bold Italic"
 
 [font.italic]
-family = "Terminess Nerd Font Mono"
+family = "JetBrainsMono Nerd Font Mono"
 style = "Italic"
 
 [font.normal]
-family = "Terminess Nerd Font Mono"
+family = "JetBrainsMono Nerd Font Mono"
 style = "Regular"
