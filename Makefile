@@ -3,10 +3,18 @@ arch-packages:
 	sudo pacman -S \
 		zsh \
 		git \
-		xorg-zrandr \
+		xorg-xrandr \
 		man \
 		stow \
-		alacritty
+		vim \
+		neovim \
+		ripgrep \
+		fzf \
+		alacritty \
+		ttf-jetbrains-mono-nerd \
+		nodejs \ # needed for some Mason LSPs
+		npm \ # needed for some Mason LSPs
+		go
 
 .PHONY: stow
 stow:

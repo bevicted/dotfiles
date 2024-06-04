@@ -96,7 +96,6 @@ vim.g.have_nerd_font = true
 require 'options'
 require 'autocommands'
 require 'keymaps'
-require 'work'
 require 'lazy_bootstrap'
 require 'lazy_plugins'
 

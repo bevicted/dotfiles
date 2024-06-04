@@ -160,7 +160,6 @@ return {
       local servers = {
         gopls = {},
         golangci_lint_ls = {},
-        pyright = {}, -- requires nodejs
         rust_analyzer = {},
         bashls = {}, -- requires nodejs
         yamlls = {}, -- requires nodejs
