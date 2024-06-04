@@ -1,0 +1,9 @@
+Makefile
+bin
+.git
+git_configs.sh
+python/
+.gitconfig
+.gitignore
+LICENSE.md
+README.md
