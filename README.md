@@ -21,6 +21,7 @@ PATH=~/Projects/.dotfiles/bin:$PATH
 ## quick script
 
 ### debian
+
 ```sh
 sudo apt install \
     zsh \
@@ -127,6 +128,7 @@ mv ~/.zshrc ~/.zshrc.backup && \
 disable PC speaker beep
 
 ```sh
+sudo rmmod pcspkr
 echo "blacklist pcspkr" | sudo tee /etc/modprobe.d/nobeep.conf
 ```
 

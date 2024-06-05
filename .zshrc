@@ -22,6 +22,7 @@ autoload -U compinit && compinit
 zstyle ':completion.*' matcher-list 'm:{a-z}={A-Za-z}'
 # set list-colors to enable filename colorizing
 zstyle ':completion.*' list-colors "${(s.:.)LS_COLORS}"
+zinit cdreplay -q
 
 # Funcs
 command_exists() {
@@ -70,7 +71,8 @@ zinit light zsh-users/zsh-syntax-highlighting
 bindkey '^p' history-search-backward
 bindkey '^n' history-search-forward
 
-# History
+# ZSH options
+## History
 HISTSIZE=5000
 SAVEHIST=$HISTSIZE
 HISTFILE=~/.zsh_history
@@ -83,7 +85,13 @@ setopt HIST_IGNORE_ALL_DUPS
 setopt HIST_SAVE_NO_DUPS
 setopt HIST_FIND_NO_DUPS
 
+## Other
+setopt globdots
+
 # Aliases
+## snippets
+zinit snippet OMZP::git
+
 ## Shortcuts
 alias ic='ibmcloud'
 alias k='kubectl'
