@@ -108,3 +108,14 @@ alias_command_if_exists 'find' 'fdfind'
 export VISUAL=nvim
 export EDITOR=nvim
 export GPG_TTY="${tty}"
+
+# Pop me into tmux if it exists, current shell is interactive and is not already inside tmux
+if command_exists 'tmux' && \
+  [ -n "$PS1" ] && \
+  [[ ! "$TERM" =~ screen ]] && \
+  [[ ! "$TERM" =~ tmux ]] && \
+  [ -z "$TMUX" ]
+then
+  exec tmux
+fi
+
