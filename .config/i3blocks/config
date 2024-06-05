@@ -5,7 +5,7 @@
 #
 #     https://vivien.github.io/i3blocks
 
-SCRIPT_DIR=/home/dev/dotfiles/bin
+SCRIPT_DIR=/$HOME/dev/dotfiles/bin
 
 # Global properties
 separator=true
