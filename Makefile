@@ -19,4 +19,5 @@ arch-packages:
 .PHONY: stow
 stow:
 	stow -t "${HOME}" .
+	sudo stow -d ./bin -t "/usr/local/bin" .
 
