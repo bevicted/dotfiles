@@ -8,8 +8,10 @@ arch-packages:
 		stow \
 		vim \
 		neovim \
+		tmux \
 		ripgrep \
 		fzf \
+		timeshift \
 		alacritty \
 		ttf-jetbrains-mono-nerd \
 		nodejs \ # needed for some Mason LSPs
