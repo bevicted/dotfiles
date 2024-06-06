@@ -7,7 +7,7 @@ if [[ $# -eq 1 ]]; then
 	selected_path=$1
 else
 	# do not break this line, could introduce weird behaviour
-	selected_path=$(fd . "$HOME/dev" --max-depth 3 --type directory --unrestricted --follow | cat - <(echo "$HOME/dev") | fzf)
+	selected_path=$(fd --max-depth 3 --type directory --unrestricted --follow --prune '^\.git$' "$HOME/dev" --exec dirname {} | cat - <(echo "$HOME/dev/") | fzf)
 fi
 
 if [[ -z $selected_path ]]; then

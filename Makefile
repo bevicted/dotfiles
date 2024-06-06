@@ -4,6 +4,7 @@ arch-packages:
 		zsh \
 		git \
 		xorg-xrandr \
+		coreutils \
 		xsel \
 		man \
 		stow \
