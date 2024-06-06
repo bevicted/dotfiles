@@ -16,6 +16,9 @@ arch-packages:
 		timeshift \
 		alacritty \
 		ttf-jetbrains-mono-nerd \
+		podman \
+		kubectl \
+		minikube \
 		nodejs \ # needed for some Mason LSPs
 		npm \ # needed for some Mason LSPs
 		go
