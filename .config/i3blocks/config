@@ -5,46 +5,61 @@
 #
 #     https://vivien.github.io/i3blocks
 
-SCRIPT_DIR=/$HOME/dev/dotfiles/bin
+SCRIPT_DIR=/usr/local/bin
 
 # Global properties
 separator=true
 separator_block_width=15
 
+[kubernetes]
+command=$SCRIPT_DIR/i3block-kubernetes
+interval=10
+
+#[systemctl]
+#command=$SCRIPT_DIR/i3block-systemctl
+#interval=once
+#markup=pango
+#instance=podman
+#
+#[systemctl]
+#command=$SCRIPT_DIR/i3block-systemctl
+#interval=once
+#markup=pango
+#instance=redis
+#
+#[systemctl]
+#command=$SCRIPT_DIR/i3block-systemctl
+#interval=once
+#markup=pango
+#instance=postgresql
+
 [bandwidth]
-command=$SCRIPT_DIR/bandwidth
+command=$SCRIPT_DIR/i3block-bandwidth
 interval=persist
 markup=pango
-#LABEL=<span font='FontAwesome'>  </span>
-#IFACE=[automatically determined]
-#DT=3
-#UNIT=Mb
-# Exposed variables: rx, wx, tx, unit, iface
-#PRINTF_COMMAND=printf "${LABEL}%-5.1f/%5.1f %s/s\n", rx, wx, unit;
 
 [cpu_usage]
-command=$SCRIPT_DIR/cpu
+command=$SCRIPT_DIR/i3block-cpu
 interval=10
 LABEL=CPU 
-#min_width=CPU: 100.00%
-#T_WARN=50
-#T_CRIT=80
-#DECIMALS=2
-#COLOR_NORMAL=#EBDBB2
-#COLOR_WARN=#FFFC00
-#COLOR_CRIT=#FF0000
+
+[temperature]
+command=$SCRIPT_DIR/i3block-temperature
+label=TEMP 
+interval=10
+#T_WARN=70
+#T_CRIT=90
+#SENSOR_CHIP=""
 
 [memory]
-command=$SCRIPT_DIR/memory
+command=$SCRIPT_DIR/i3block-memory
 label=MEM 
 interval=5
 
 [battery]
-command=$SCRIPT_DIR/battery
+command=$SCRIPT_DIR/i3block-battery
 interval=30
 LABEL=BAT
-#LABEL=⚡
-#BAT_NUMBER=0
 
 [time]
 command=date '+%Y-%m-%d %H:%M:%S'
