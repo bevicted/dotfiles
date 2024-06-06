@@ -18,6 +18,13 @@ add the bin folder to your path in your rc file:
 PATH=~/Projects/.dotfiles/bin:$PATH
 ```
 
+## Docs
+
+links to docs I find myself revisiting
+
+- [archwiki](https://archlinux.org)
+  - [Display Power Management Signaling](https://wiki.archlinux.org/title/Display_Power_Management_Signaling)
+
 ## nvim
 
 - https://github.com/neovim/neovim
