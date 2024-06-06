@@ -21,6 +21,7 @@ arch-packages:
 		minikube \
 		nodejs \ # needed for some Mason LSPs
 		npm \ # needed for some Mason LSPs
+		python \
 		go
 
 .PHONY: common
