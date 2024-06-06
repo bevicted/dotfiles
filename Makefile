@@ -4,6 +4,7 @@ arch-packages:
 		zsh \
 		git \
 		xorg-xrandr \
+		xsel \
 		man \
 		stow \
 		vim \
@@ -11,12 +12,16 @@ arch-packages:
 		tmux \
 		ripgrep \
 		fzf \
+		fd \
 		timeshift \
 		alacritty \
 		ttf-jetbrains-mono-nerd \
 		nodejs \ # needed for some Mason LSPs
 		npm \ # needed for some Mason LSPs
 		go
+
+.PHONY: common
+common:
 	git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 .PHONY: link
