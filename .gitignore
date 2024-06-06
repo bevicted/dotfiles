@@ -1,5 +1,5 @@
-# custom
-.config/nvim/lua/work.lua
+# tmux
+.config/tmux/plugins
 
 # nvim
 .config/nvim/tt.*
