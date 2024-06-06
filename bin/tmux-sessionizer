@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 
-# slightly modified version of chad primeagen's
-# https://github.com/ThePrimeagen/.dotfiles/blob/master/bin/.local/scripts/tmux-sessionizer
+# slightly modified version of primeagen's
+# https://github.com/ThePrimeagen/.dotfiles/blob/62eb982a12d75abbdeb6d679504382365456d75c/bin/.local/scripts/tmux-sessionizer
 
 if [[ $# -eq 1 ]]; then
-	selected=$1
+	selected_path=$1
 else
 	# do not break this line, could introduce weird behaviour
-	selected=$(fd . ~/Projects ~/Projects/ironsides/svc ~/Projects/ironsides/lib --exact-depth 1 --type directory --unrestricted --follow | cat - <(echo "$HOME/Projects") | fzf)
+	selected_path=$(fd . "$HOME/dev" --max-depth 3 --type directory --unrestricted --follow | cat - <(echo "$HOME/dev") | fzf)
 fi
 
-if [[ -z $selected ]]; then
+if [[ -z $selected_path ]]; then
 	exit 0
 fi
 
-selected_name=$(basename "$selected" | tr . _)
+selected_name=$(basename "$selected_path" | tr . _)
 tmux_running=$(pgrep tmux)
 
 if [[ -z $TMUX ]] && [[ -z $tmux_running ]]; then
-	tmux new-session -s "$selected_name" -c "$selected"
+	tmux new-session -s "$selected_name" -c "$selected_path"
 	exit 0
 fi
 
 if ! tmux has-session -t="$selected_name" 2>/dev/null; then
-	tmux new-session -ds "$selected_name" -c "$selected"
+	tmux new-session -ds "$selected_name" -c "$selected_path"
 fi
 
 tmux switch-client -t "$selected_name"
