@@ -15,18 +15,18 @@ separator_block_width=15
 command=$SCRIPT_DIR/i3block-kubernetes
 interval=10
 
-#[systemctl]
-#command=$SCRIPT_DIR/i3block-systemctl
-#interval=once
-#markup=pango
-#instance=podman
-#
+[systemctl]
+command=$SCRIPT_DIR/i3block-systemctl
+interval=once
+markup=pango
+instance=podman
+
 #[systemctl]
 #command=$SCRIPT_DIR/i3block-systemctl
 #interval=once
 #markup=pango
 #instance=redis
-#
+
 #[systemctl]
 #command=$SCRIPT_DIR/i3block-systemctl
 #interval=once
