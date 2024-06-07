@@ -30,6 +30,7 @@ arch-packages:
 osx-packages:
 	brew install \
 		coreutils \
+		bash \
 		stow
 	brew install --cask \
 		font-jetbrains-mono-nerd-font
@@ -41,6 +42,7 @@ osx-shims:
 	curl -LO https://invisible-island.net/datafiles/current/terminfo.src.gz && gunzip terminfo.src.gz
 	/usr/bin/tic -xe tmux-256color terminfo.src
 	rm terminfo.src
+	sudo sh -c 'echo /usr/local/opt/bash/bin/bash >> /etc/shells'
 
 .PHONY: common
 common:
