@@ -26,6 +26,22 @@ arch-packages:
 		python \
 		go
 
+.PHONY: osx-packages
+osx-packages:
+	brew install \
+		coreutils \
+		stow
+	brew install --cask \
+		font-jetbrains-mono-nerd-font
+
+.PHONY: osx-shims
+osx-shims:
+	# https://gist.github.com/bbqtd/a4ac060d6f6b9ea6fe3aabe735aa9d95
+	# fix osx tmux colors
+	curl -LO https://invisible-island.net/datafiles/current/terminfo.src.gz && gunzip terminfo.src.gz
+	/usr/bin/tic -xe tmux-256color terminfo.src
+	rm terminfo.src
+
 .PHONY: common
 common:
 	git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
