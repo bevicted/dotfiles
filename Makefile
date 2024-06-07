@@ -17,6 +17,7 @@ arch-packages:
 		timeshift \
 		alacritty \
 		ttf-jetbrains-mono-nerd \
+		git-delta \
 		podman \
 		kubectl \
 		minikube \
