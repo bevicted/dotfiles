@@ -109,6 +109,19 @@ export VISUAL=nvim
 export EDITOR=nvim
 export GPG_TTY="${tty}"
 
+# PATH
+if [[ "$OSTYPE" == "darwin"* ]]
+then
+  # Make all GNU flavor commands available, may override same-name BSD flavor commands
+  # For x86 Mac
+  export PATH="/usr/local/opt/coreutils/libexec/gnubin:${PATH}"
+  export MANPATH="/usr/local/opt/coreutils/libexec/gnuman:${MANPATH}"
+
+  # For M1 Mac
+  # export PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:${PATH}"
+  # export MANPATH="/opt/homebrew/opt/coreutils/libexec/gnuman:${MANPATH}"
+fi
+
 # Pop me into tmux if it exists, current shell is interactive and is not already inside tmux
 if command_exists 'tmux' && \
   [ -n "$PS1" ] && \
