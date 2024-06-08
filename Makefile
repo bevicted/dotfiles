@@ -16,6 +16,7 @@ arch-packages:
 		fzf \
 		fd \
 		entr \
+		parallel \
 		jq \
 		yq \
 		timeshift \
@@ -60,6 +61,7 @@ osx-packages:
 		fzf \
 		fd \
 		entr \
+		parallel \
 		jq \
 		yq \
 		git-delta \
