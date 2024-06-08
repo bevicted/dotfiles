@@ -4,6 +4,7 @@ arch-packages:
 		zsh \
 		git \
 		xorg-xrandr \
+		base-devel \
 		coreutils \
 		xsel \
 		man \
@@ -28,6 +29,23 @@ arch-packages:
 		npm \ # needed for some Mason LSPs
 		python \
 		go
+
+.PHONY: arch-aur-packages
+ifeq (, $(shell command -v yay 2> /dev/null))
+arch-aur-packages: yay
+else
+arch-aur-packages:
+endif
+	yay -S golangci-lint
+
+.PHONY: arch-yay
+arch-yay:
+	mkdir -p ~/dev/aur/
+	git clone https://aur.archlinux.org/yay.git ~/dev/aur/yay
+	cd ~/dev/aur/yay && makepkg -si
+	yay -Y --gendb
+	yay -Syu --devel
+	yay -Y --devel --save
 
 .PHONY: osx-packages
 osx-packages:
