@@ -14,6 +14,9 @@ arch-packages:
 		ripgrep \
 		fzf \
 		fd \
+		entr \
+		jq \
+		yq \
 		timeshift \
 		alacritty \
 		ttf-jetbrains-mono-nerd \
@@ -31,8 +34,25 @@ osx-packages:
 	brew install \
 		coreutils \
 		bash \
-		stow
+		stow \
+		vim \
+		neovim \
+		tmux \
+		ripgrep \
+		fzf \
+		fd \
+		entr \
+		jq \
+		yq \
+		git-delta \
+		podman \
+		kubectl \
+		nodejs \ # needed for some Mason LSPs
+		npm \ # needed for some Mason LSPs
+		python \
+		go
 	brew install --cask \
+		alacritty \
 		font-jetbrains-mono-nerd-font
 
 .PHONY: osx-shims
