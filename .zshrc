@@ -96,7 +96,7 @@ zinit snippet OMZP::git
 alias ic='ibmcloud'
 alias k='kubectl'
 alias v='nvim .'
-alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -l --time-style=long-iso'
+alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
 
 ## Tool replacements
 alias_command_if_exists 'vim' 'nvim'
