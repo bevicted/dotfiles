@@ -15,6 +15,7 @@ arch-packages:
 		ripgrep \
 		fzf \
 		fd \
+		sad \
 		entr \
 		parallel \
 		jq \
@@ -60,6 +61,7 @@ osx-packages:
 		ripgrep \
 		fzf \
 		fd \
+		sad \
 		entr \
 		parallel \
 		jq \
