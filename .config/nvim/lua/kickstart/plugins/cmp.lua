@@ -82,6 +82,7 @@ return {
             end
           end, { 'i', 's' }),
 
+          require('luasnip.loaders.from_lua').load { paths = { '~/.config/nvim/lua/custom/snippets' } },
           -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
           --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
         },
