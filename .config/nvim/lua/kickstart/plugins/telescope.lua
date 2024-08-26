@@ -60,6 +60,7 @@ return {
           file_ignore_patterns = {
             '.git/',
             'node_modules/',
+            '.venv/',
           },
           -- layout_strategy = "vertical",
           -- layout_config = {
