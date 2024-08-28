@@ -95,6 +95,7 @@ zinit snippet OMZP::git
 ## Shortcuts
 alias ic='ibmcloud'
 alias k='kubectl'
+alias t='terraform'
 alias v='nvim .'
 alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
 
@@ -108,6 +109,11 @@ alias_command_if_exists 'find' 'fdfind'
 export VISUAL=nvim
 export EDITOR=nvim
 export GPG_TTY="${tty}"
+
+# Work
+if [ -f "$HOME/work.sh" ]; then
+    source "$HOME/work.sh"
+fi
 
 # PATH
 if [[ "$OSTYPE" == "darwin"* ]]
