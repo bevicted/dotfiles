@@ -12,3 +12,6 @@
 .config/nvim/data
 .config/nvim/lazy-lock.json
 
+# work
+work.sh
+
