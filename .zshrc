@@ -93,13 +93,15 @@ setopt globdots
 zinit snippet OMZP::git
 
 ## Shortcuts
-alias ic='ibmcloud'
+alias p='podman'
 alias k='kubectl'
+alias ic='ibmcloud'
 alias t='terraform'
 alias v='nvim .'
 alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
 
 ## Tool replacements
+alias_command_if_exists 'docker' 'podman'
 alias_command_if_exists 'vim' 'nvim'
 alias_command_if_exists 'grep' 'rg'
 alias_command_if_exists 'find' 'fd'
