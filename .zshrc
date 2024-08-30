@@ -95,10 +95,11 @@ zinit snippet OMZP::git
 ## Shortcuts
 alias p='podman'
 alias k='kubectl'
-alias ic='ibmcloud'
 alias t='terraform'
 alias v='nvim .'
 alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
+alias ic='ibmcloud'
+alias iks='ic ks'
 
 ## Tool replacements
 alias_command_if_exists 'docker' 'podman'
