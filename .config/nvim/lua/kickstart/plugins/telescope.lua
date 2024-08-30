@@ -61,6 +61,7 @@ return {
             '.git/',
             'node_modules/',
             '.venv/',
+            '.godot/',
           },
           -- layout_strategy = "vertical",
           -- layout_config = {
