@@ -112,6 +112,7 @@ alias_command_if_exists 'find' 'fdfind'
 export VISUAL=nvim
 export EDITOR=nvim
 export GPG_TTY="${tty}"
+export GEM_HOME="$HOME/.gem"
 
 # Work
 if [ -f "$HOME/work.sh" ]; then
