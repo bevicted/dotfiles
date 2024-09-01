@@ -25,6 +25,8 @@ zstyle ':completion.*' list-colors "${(s.:.)LS_COLORS}"
 zinit cdreplay -q
 
 # Funcs
+source "${HOME}/scripts/funcs.sh"
+
 command_exists() {
     command -v "$1" &> /dev/null
     return $?
