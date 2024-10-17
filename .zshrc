@@ -27,18 +27,6 @@ zinit cdreplay -q
 # Funcs
 source "${HOME}/scripts/funcs.sh"
 
-command_exists() {
-    command -v "$1" &> /dev/null
-    return $?
-}
-
-alias_command_if_exists() {
-  if command_exists "${2%% *}"
-  then
-    alias "$1"="$2"
-  fi
-}
-
 # fzf
 if command_exists 'fzf'
 then
@@ -66,6 +54,7 @@ fi
 # Autosuggest
 zinit light zsh-users/zsh-autosuggestions
 bindkey '^y' autosuggest-accept
+
 # Syntax Highlight
 zinit light zsh-users/zsh-syntax-highlighting
 
@@ -91,17 +80,8 @@ setopt HIST_FIND_NO_DUPS
 setopt globdots
 
 # Aliases
-## snippets
-zinit snippet OMZP::git
-
 ## Shortcuts
-alias p='podman'
-alias k='kubectl'
-alias t='terraform'
-alias v='nvim .'
-alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
-alias ic='ibmcloud'
-alias iks='ic ks'
+source $HOME/scripts/shortcuts.sh
 
 ## Tool replacements
 alias_command_if_exists 'docker' 'podman'
