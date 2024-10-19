@@ -9,6 +9,7 @@ alias n='nix --extra-experimental-features "nix-command flakes"'
 alias ns='nix-shell --extra-experimental-features "nix-command flakes"'
 alias hm='home-manager --extra-experimental-features "nix-command flakes"'
 alias hms='hm switch'
+alias gui='gitui'
 
 # git
 

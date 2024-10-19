@@ -16,9 +16,10 @@
   home.stateVersion = "24.05"; # Please read the comment before changing.
 
   imports = [
-    ./tmux.nix
     ./gitui.nix
     ./nix.nix
+    ./rofi.nix
+    ./tmux.nix
   ];
 
   # The home.packages option allows you to install Nix packages into your
@@ -31,6 +32,8 @@
     pkgs.ripgrep
     pkgs.fd
     pkgs.fzf
+    pkgs.jq
+    pkgs.yq
     pkgs.entr
     pkgs.sampler
     pkgs.hey
