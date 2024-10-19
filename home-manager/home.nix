@@ -25,18 +25,31 @@
   # The home.packages option allows you to install Nix packages into your
   # environment.
   home.packages = [
-    # tried and tested
+    # shells
     pkgs.zsh
+    pkgs.bash
+
+    # dev
     pkgs.git
     pkgs.neovim
+
+    # tools
+    pkgs.fzf
     pkgs.ripgrep
     pkgs.fd
-    pkgs.fzf
     pkgs.jq
     pkgs.yq
     pkgs.entr
     pkgs.sampler
     pkgs.hey
+
+    # langs
+    pkgs.go
+
+    # cloud
+    pkgs.podman
+    pkgs.kubectl
+    pkgs.terraform
 
     # # It is sometimes useful to fine-tune packages, for example, by applying
     # # overrides. You can do that directly here, just don't forget the
