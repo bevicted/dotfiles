@@ -25,7 +25,6 @@
     pkgs.fd
     pkgs.fzf
     pkgs.entr
-    pkgs.alacritty
     pkgs.tmux
     pkgs.sampler
     pkgs.hey
