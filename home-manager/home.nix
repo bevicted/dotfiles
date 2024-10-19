@@ -15,9 +15,14 @@
   # release notes.
   home.stateVersion = "24.05"; # Please read the comment before changing.
 
+  imports = [
+    ./tmux.nix
+  ];
+
   # The home.packages option allows you to install Nix packages into your
   # environment.
   home.packages = [
+    # tried and tested
     pkgs.zsh
     pkgs.git
     pkgs.neovim
@@ -25,7 +30,6 @@
     pkgs.fd
     pkgs.fzf
     pkgs.entr
-    pkgs.tmux
     pkgs.sampler
     pkgs.hey
 
