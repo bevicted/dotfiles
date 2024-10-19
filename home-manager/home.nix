@@ -26,22 +26,18 @@
   # environment.
   home.packages = [
     # shells
-    pkgs.zsh
     pkgs.bash
+    pkgs.zsh
 
-    # dev
+    # core tools
     pkgs.git
     pkgs.neovim
-
-    # tools
     pkgs.fzf
     pkgs.ripgrep
     pkgs.fd
     pkgs.jq
     pkgs.yq
     pkgs.entr
-    pkgs.sampler
-    pkgs.hey
 
     # langs
     pkgs.go
@@ -50,6 +46,10 @@
     pkgs.podman
     pkgs.kubectl
     pkgs.terraform
+
+    # experimentals
+    pkgs.sampler
+    pkgs.hey
 
     # # It is sometimes useful to fine-tune packages, for example, by applying
     # # overrides. You can do that directly here, just don't forget the
