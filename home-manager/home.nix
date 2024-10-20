@@ -45,7 +45,7 @@
     # cloud
     podman
     kubectl
-    terraform
+    terraform-1_5_7
 
     # experimentals
     sampler
