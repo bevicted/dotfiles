@@ -24,32 +24,32 @@
 
   # The home.packages option allows you to install Nix packages into your
   # environment.
-  home.packages = [
+  home.packages = with pkgs; [
     # shells
-    pkgs.bash
-    pkgs.zsh
+    bash
+    zsh
 
     # core tools
-    pkgs.git
-    pkgs.neovim
-    pkgs.fzf
-    pkgs.ripgrep
-    pkgs.fd
-    pkgs.jq
-    pkgs.yq
-    pkgs.entr
+    git
+    neovim
+    fzf
+    ripgrep
+    fd
+    jq
+    yq
+    entr
 
     # langs
-    pkgs.go
+    go
 
     # cloud
-    pkgs.podman
-    pkgs.kubectl
-    pkgs.terraform
+    podman
+    kubectl
+    terraform
 
     # experimentals
-    pkgs.sampler
-    pkgs.hey
+    sampler
+    hey
 
     # # It is sometimes useful to fine-tune packages, for example, by applying
     # # overrides. You can do that directly here, just don't forget the
@@ -97,7 +97,9 @@
   #  /etc/profiles/per-user/bevicted/etc/profile.d/hm-session-vars.sh
   #
   home.sessionVariables = {
-    # EDITOR = "emacs";
+    LANG="C";
+    EDITOR = "nvim";
+    LOCALES_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
   };
 
   # Let Home Manager install and manage itself.
