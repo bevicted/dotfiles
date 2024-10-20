@@ -16,7 +16,7 @@
       system = "x86_64-linux";
       pkgs_terraform = nixpkgs_terraform.legacyPackages.${system};
       terraform_overlay = final: prev: {
-        terraform = pkgs_terraform.terraform;
+        terraform-1_5_7 = pkgs_terraform.terraform;
       };
       pkgs = nixpkgs.legacyPackages.${system}.extend terraform_overlay;
     in {
