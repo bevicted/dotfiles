@@ -1,8 +1,9 @@
 { ... }:
+
 {
   programs.rofi = {
     enable = true;
-    theme = "Arc-Dark";
+    catppuccin.enable = true;
     extraConfig = {
       modi = "drun,run";
       show-icons = true;

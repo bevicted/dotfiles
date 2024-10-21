@@ -5,13 +5,14 @@
     # Specify the source of Home Manager and Nixpkgs.
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     nixpkgs_terraform.url = "github:nixos/nixpkgs/517501bcf14ae6ec47efd6a17dda0ca8e6d866f9";
+    catppuccin.url = "github:catppuccin/nix";
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { nixpkgs, nixpkgs_terraform, home-manager, ... }:
+  outputs = { nixpkgs, nixpkgs_terraform, catppuccin, home-manager, ... }:
     let
       system = "x86_64-linux";
       pkgs_terraform = nixpkgs_terraform.legacyPackages.${system};
@@ -25,7 +26,10 @@
 
         # Specify your home configuration modules here, for example,
         # the path to your home.nix.
-        modules = [ ./home.nix ];
+        modules = [
+          ./home.nix
+          catppuccin.homeManagerModules.catppuccin
+        ];
 
         # Optionally use extraSpecialArgs
         # to pass through arguments to home.nix
