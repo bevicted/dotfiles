@@ -1,9 +1,11 @@
-{ ... }:
+{ config, pkgs, ... }:
 let
   fontFamily = "JetBrainsMono Nerd Font";
 in {
   programs.alacritty = {
     enable = true;
+    package = config.lib.nixGL.wrap pkgs.alacritty;
+    catppuccin.enable = true;
     settings = {
       env = {
         "TERM" = "xterm-256color";
@@ -27,7 +29,6 @@ in {
           style = "Bold Italic";
         };
       };
-      colors = {};
     };
   };
 }
