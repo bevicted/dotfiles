@@ -1,7 +1,9 @@
 { pkgs, ... }:
+
 {
   programs.tmux = {
     enable = true;
+    catppuccin.enable = true;
 
     baseIndex = 1;
 
@@ -37,10 +39,6 @@ bind c new-window -c "#{pane_current_path}"
       }
       {
         plugin = tmuxPlugins.vim-tmux-navigator;
-      }
-      {
-        plugin = tmuxPlugins.catppuccin;
-        extraConfig = "set -g @catppuccin_flavour 'mocha'";
       }
       {
         plugin = tmuxPlugins.yank;
