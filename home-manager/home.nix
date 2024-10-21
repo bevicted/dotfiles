@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, nixgl, ... }:
 
 {
   # Home Manager needs a bit of information about you and the paths it should
@@ -16,43 +16,57 @@
   home.stateVersion = "24.05"; # Please read the comment before changing.
 
   imports = [
+    # TODO: remove when https://github.com/nix-community/home-manager/pull/5355 gets merged:
+    (builtins.fetchurl {
+      url = "https://raw.githubusercontent.com/Smona/home-manager/nixgl-compat/modules/misc/nixgl.nix";
+      sha256 = "1krclaga358k3swz2n5wbni1b2r7mcxdzr6d7im6b66w3sbpvnb3";
+    })
+    ./alacritty.nix
     ./gitui.nix
     ./nix.nix
     ./rofi.nix
     ./tmux.nix
   ];
 
+  # nixGL.prefix = "${pkgs.nixgl.nixGLIntel}/bin/nixGLIntel";
+  nixGL = {
+    packages = nixgl.packages;
+    defaultWrapper = "mesa";
+  };
+
   # The home.packages option allows you to install Nix packages into your
   # environment.
-  home.packages = with pkgs; [
+  home.packages = [
+    pkgs.nixgl.nixGLIntel
+
     # shells
-    bash
-    zsh
+    pkgs.bash
+    pkgs.zsh
 
     # core tools
-    git
-    neovim
-    fzf
-    ripgrep
-    fd
-    jq
-    yq
-    entr
+    pkgs.git
+    pkgs.neovim
+    pkgs.fzf
+    pkgs.ripgrep
+    pkgs.fd
+    pkgs.jq
+    pkgs.yq
+    pkgs.entr
 
     # langs
-    go
+    pkgs.go
 
     # cloud
-    podman
-    kubectl
-    terraform-1_5_7
+    pkgs.podman
+    pkgs.kubectl
+    pkgs.terraform-1_5_7
 
     # experimentals
-    sampler
-    hey
+    pkgs.sampler
+    pkgs.hey
 
     # fonts
-    (nerdfonts.override { fonts = [ "JetBrainsMono" ]; })
+    (pkgs.nerdfonts.override { fonts = [ "JetBrainsMono" ]; })
 
     # # You can also create simple shell scripts directly inside your
     # # configuration. For example, this adds a command 'my-hello' to your
