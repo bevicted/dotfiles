@@ -29,6 +29,9 @@
           nixgl.overlay
           terraform_overlay
         ];
+        config.allowUnfreePredicate = pkg: builtins.elem (nixpkgs.lib.getName pkg) [
+          "obsidian"
+        ];
       };
     in {
       homeConfigurations."bevicted" = home-manager.lib.homeManagerConfiguration {

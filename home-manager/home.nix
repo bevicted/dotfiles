@@ -64,6 +64,7 @@
     # experimentals
     pkgs.sampler
     pkgs.hey
+    pkgs.obsidian
 
     # fonts
     (pkgs.nerdfonts.override { fonts = [ "JetBrainsMono" ]; })
