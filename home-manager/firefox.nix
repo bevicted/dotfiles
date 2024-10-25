@@ -218,7 +218,7 @@ in {
           "datareporting.healthreport.uploadEnabled" = F;
           "toolkit.telemetry.unified" = F;
           "toolkit.telemetry.enabled" = F;
-          "toolkit.telemetry.server" = "data:,";
+          "toolkit.telemetry.server" = lock "data:,";
           "toolkit.telemetry.archive.enabled" = F;
           "toolkit.telemetry.newProfilePing.enabled" = F;
           "toolkit.telemetry.shutdownPingSender.enabled" = F;
@@ -230,418 +230,128 @@ in {
           "toolkit.coverage.endpoint.base" = E;
           "browser.newtabpage.activity-stream.feeds.telemetry" = F;
           "browser.newtabpage.activity-stream.telemetry" = F;
-
-          ## STUDIES
           "app.shield.optoutstudies.enabled" = F;
           "app.normandy.enabled" = F;
           "app.normandy.api_url" = E;
-
-          ## CRASH REPORTS
           "breakpad.reportURL" = E;
           "browser.tabs.crashReporting.sendReport" = F;
           "browser.crashReports.unsubmittedCheck.enabled" = F;
           "browser.crashReports.unsubmittedCheck.autoSubmit2" = F;
+          "captivedetect.canonicalURL" = E;
+          "network.captive-portal-service.enabled" = F;
+          "network.connectivity-service.enabled" = F;
 
-            /** OTHER ***/
-            /* 0360: disable Captive Portal detection
-* [1] https:#www.eff.org/deeplinks/2017/08/how-captive-portals-interfere-wireless-security-and-privacy ***/
-            "captivedetect.canonicalURL" = E;
-              "network.captive-portal-service.enabled" = F; # [FF52+]
-            /* 0361: disable Network Connectivity checks [FF65+]
-* [1] https:#bugzilla.mozilla.org/1460537 ***/
-            "network.connectivity-service.enabled" = F;
+          # [SECTION 0400]: SAFE BROWSING (SB)
+          "browser.safebrowsing.malware.enabled" = F;
+          "browser.safebrowsing.phishing.enabled" = F;
+          "browser.safebrowsing.downloads.enabled" = F;
+          "browser.safebrowsing.downloads.remote.enabled" = F;
+          "browser.safebrowsing.downloads.remote.url" = E;
+          "browser.safebrowsing.downloads.remote.block_potentially_unwanted" = F;
+          "browser.safebrowsing.downloads.remote.block_uncommon" = F;
+          "browser.safebrowsing.allowOverride" = F;
 
-            /*** [SECTION 0400]: SAFE BROWSING (SB)
-SB has taken many steps to preserve privacy. If required, a full url is never sent
-to Google, only a part-hash of the prefix, hidden with noise of other real part-hashes.
-Firefox takes measures such as stripping out identifying parameters and since SBv4 (FF57+)
-doesn't even use cookies. (#Turn on browser.safebrowsing.debug to monitor this activity)
+          # [SECTION 0600]: BLOCK IMPLICIT OUTBOUND [not explicitly asked for - e.g. clicked on]
+          "network.prefetch-next" = F;
+          "network.dns.disablePrefetch" = T;
+          "network.dns.disablePrefetchFromHTTPS" = T;
+          "network.predictor.enabled" = F;
+          "network.predictor.enable-prefetch" = F;
+          "network.http.speculative-parallel-limit" = lock 0;
+          "browser.places.speculativeConnect.enabled" = F;
+          "browser.send_pings" = F;
 
-[1] https:#feeding.cloud.geek.nz/posts/how-safe-browsing-works-in-firefox/
-[2] https:#wiki.mozilla.org/Security/Safe_Browsing
-[3] https:#support.mozilla.org/kb/how-does-phishing-and-malware-protection-work
-[4] https:#educatedguesswork.org/posts/safe-browsing-privacy/
-***/
-              /* 0401: disable SB (Safe Browsing)
-* [WARNING] Do this at your own risk! These are the master switches
-* [SETTING] Privacy & Security>Security>... Block dangerous and deceptive content ***/
-              # "browser.safebrowsing.malware.enabled" = F;
-              # "browser.safebrowsing.phishing.enabled" = F;
-              /* 0402: disable SB checks for downloads (both local lookups + remote)
-* This is the master switch for the safebrowsing.downloads* prefs (0403, 0404)
-* [SETTING] Privacy & Security>Security>... "Block dangerous downloads" ***/
-              # "browser.safebrowsing.downloads.enabled" = F;
-            /* 0403: disable SB checks for downloads (remote)
-* To verify the safety of certain executable files, Firefox may submit some information about the
-* file, including the name, origin, size and a cryptographic hash of the contents, to the Google
-* Safe Browsing service which helps Firefox determine whether or not the file should be blocked
-* [SETUP-SECURITY] If you do not understand this, or you want this protection, then override this ***/
-            "browser.safebrowsing.downloads.remote.enabled" = F;
-              # "browser.safebrowsing.downloads.remote.url" = E; # Defense-in-depth
-              /* 0404: disable SB checks for unwanted software
-* [SETTING] Privacy & Security>Security>... "Warn you about unwanted and uncommon software" ***/
-              # "browser.safebrowsing.downloads.remote.block_potentially_unwanted" = F;
-              # "browser.safebrowsing.downloads.remote.block_uncommon" = F;
-              /* 0405: disable "ignore this warning" on SB warnings [FF45+]
-* If clicked, it bypasses the block for that session. This is a means for admins to enforce SB
-* [TEST] see https:#github.com/arkenfox/user.js/wiki/Appendix-A-Test-Sites#-mozilla
-* [1] https:#bugzilla.mozilla.org/1226490 ***/
-              # "browser.safebrowsing.allowOverride" = F;
+          # [SECTION 0700]: DNS / DoH / PROXY / SOCKS
+          "network.proxy.socks_remote_dns" = T;
+          "network.file.disable_unc_paths" = T;
+          "network.gio.supported-protocols" = E;
+          "network.proxy.failover_direct" = F;
+          "network.proxy.allow_bypass" = F;
+          # "network.trr.mode" = 3;
+          # "network.trr.uri" = "https:#example.dns";
+          # "network.trr.custom_uri" = "https:#example.dns";
 
-            # [SECTION 0600]: BLOCK IMPLICIT OUTBOUND [not explicitly asked for - e.g. clicked on]
-            /* 0601: disable link prefetching
-* [1] https:#developer.mozilla.org/docs/Web/HTTP/Link_prefetching_FAQ ***/
-            "network.prefetch-next" = F;
-            /* 0602: disable DNS prefetching
-* [1] https:#developer.mozilla.org/docs/Web/HTTP/Headers/X-DNS-Prefetch-Control ***/
-            "network.dns.disablePrefetch" = T;
-              "network.dns.disablePrefetchFromHTTPS" = T;
-            /* 0603: disable predictor / prefetching ***/
-            "network.predictor.enabled" = F;
-              "network.predictor.enable-prefetch" = F; # [FF48+] [DEFAULT: false]
-            /* 0604: disable link-mouseover opening connection to linked server
-* [1] https:#news.slashdot.org/story/15/08/14/2321202/how-to-quash-firefoxs-silent-requests ***/
-            "network.http.speculative-parallel-limit" = 0;
-            /* 0605: disable mousedown speculative connections on bookmarks and history [FF98+] ***/
-"browser.places.speculativeConnect.enabled" = F;
-              /* 0610: enforce no "Hyperlink Auditing" (click tracking)
-* [1] https:#www.bleepingcomputer.com/news/software/major-browsers-to-prevent-disabling-of-click-tracking-privacy-risk/ ***/
-# "browser.send_pings" = F; # [DEFAULT: false]
+          # [SECTION 0800]: LOCATION BAR / SEARCH BAR / SUGGESTIONS / HISTORY / FORMS
+          "browser.urlbar.speculativeConnect.enabled" = F;
+          "browser.urlbar.quicksuggest.enabled" = F;
+          "browser.urlbar.suggest.quicksuggest.nonsponsored" = F;
+          "browser.urlbar.suggest.quicksuggest.sponsored" = F;
+          "browser.search.suggest.enabled" = F;
+          "browser.urlbar.suggest.searches" = F;
+          "browser.urlbar.trending.featureGate" = F;
+          "browser.urlbar.addons.featureGate" = F;
+          "browser.urlbar.mdn.featureGate" = F;
+          "browser.urlbar.pocket.featureGate" = F;
+          "browser.urlbar.weather.featureGate" = F;
+          "browser.urlbar.yelp.featureGate" = F;
+          "browser.urlbar.clipboard.featureGate" = F;
+          "browser.urlbar.recentsearches.featureGate" = F; # TODO: decide
+          "browser.formfill.enable" = F;
+          "browser.urlbar.suggest.engines" = F;
+          "layout.css.visited_links_enabled" = F;
+          "browser.search.separatePrivateDefault" = T;
+          "browser.search.separatePrivateDefault.ui.enabled" = T;
 
-            # [SECTION 0700]: DNS / DoH / PROXY / SOCKS
-            /* 0702: set the proxy server to do any DNS lookups when using SOCKS
-* e.g. in Tor, this stops your local DNS server from knowing your Tor destination
-* as a remote Tor node will handle the DNS request
-* [1] https:#trac.torproject.org/projects/tor/wiki/doc/TorifyHOWTO/WebBrowsers ***/
-            "network.proxy.socks_remote_dns" = T;
-            /* 0703: disable using UNC (Uniform Naming Convention) paths [FF61+]
-* [SETUP-CHROME] Can break extensions for profiles on network shares
-* [1] https:#bugzilla.mozilla.org/1413868 ***/
-            "network.file.disable_unc_paths" = T; # [HIDDEN PREF]
-            /* 0704: disable GIO as a potential proxy bypass vector
-* Gvfs/GIO has a set of supported protocols like obex, network, archive, computer,
-* dav, cdda, gphoto2, trash, etc. From FF87-117, by default only sftp was accepted
-* [1] https:#bugzilla.mozilla.org/1433507
-* [2] https:#en.wikipedia.org/wiki/GVfs
-* [3] https:#en.wikipedia.org/wiki/GIO_(software) ***/
-            "network.gio.supported-protocols" = E; # [HIDDEN PREF] [DEFAULT: "" FF118+]
-            /* 0705: disable proxy direct failover for system requests [FF91+]
-* [WARNING] Default true is a security feature against malicious extensions [1]
-* [SETUP-CHROME] If you use a proxy and you trust your extensions
-* [1] https:#blog.mozilla.org/security/2021/10/25/securing-the-proxy-api-for-firefox-add-ons/ ***/
-            # "network.proxy.failover_direct" = F;
-/* 0706: disable proxy bypass for system request failures [FF95+]
-* RemoteSettings, UpdateService, Telemetry [1]
-* [WARNING] If false, this will break the fallback for some security features
-* [SETUP-CHROME] If you use a proxy and you understand the security impact
-* [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=1732792,1733994,1733481 ***/
-# "network.proxy.allow_bypass" = F;
-        /* 0710: enable DNS-over-HTTPS (DoH) [FF60+]
-* 0=default, 2=increased (TRR (Trusted Recursive Resolver) first), 3=max (TRR only), 5=off (no rollout)
- * see "doh-rollout.home-region": USA 2019, Canada 2021, Russia/Ukraine 2022 [3]
- * [SETTING] Privacy & Security>DNS over HTTPS
- * [1] https:#hacks.mozilla.org/2018/05/a-cartoon-intro-to-dns-over-https/
- * [2] https:#wiki.mozilla.org/Security/DOH-resolver-policy
- * [3] https:#support.mozilla.org/kb/firefox-dns-over-https
- * [4] https:#www.eff.org/deeplinks/2020/12/dns-doh-and-odoh-oh-my-year-review-2020 ***/
-   # "network.trr.mode" = 3;
-/* 0712: set DoH provider
- * The custom uri is the value shown when you "Choose provider>Custom>"
- * [NOTE] If you USE custom then "network.trr.uri" should be set the same
- * [SETTING] Privacy & Security>DNS over HTTPS>Increased/Max>Choose provider ***/
-   # "network.trr.uri" = "https:#example.dns";
-   # "network.trr.custom_uri" = "https:#example.dns";
+          # [SECTION 0900]: PASSWORDS
+          "signon.autofillForms" = F;
+          "signon.formlessCapture.enabled" = F;
+          "network.http.windows-sso.enabled" = F;
 
-# [SECTION 0800]: LOCATION BAR / SEARCH BAR / SUGGESTIONS / HISTORY / FORMS
-/* 0801: disable location bar making speculative connections [FF56+]
- * [1] https:#bugzilla.mozilla.org/1348275 ***/
-"browser.urlbar.speculativeConnect.enabled" = F;
-/* 0802: disable location bar contextual suggestions
- * [NOTE] The UI is controlled by the .enabled pref
- * [SETTING] Search>Address Bar>Suggestions from...
- * [1] https:#blog.mozilla.org/data/2021/09/15/data-and-firefox-suggest/ ***/
-"browser.urlbar.quicksuggest.enabled" = F; # [FF92+]
-"browser.urlbar.suggest.quicksuggest.nonsponsored" = F; # [FF95+]
-"browser.urlbar.suggest.quicksuggest.sponsored" = F; # [FF92+]
-/* 0803: disable live search suggestions
- * [NOTE] Both must be true for live search to work in the location bar
- * [SETUP-CHROME] Override these if you trust and use a privacy respecting search engine
- * [SETTING] Search>Show search suggestions | Show search suggestions in address bar results ***/
-"browser.search.suggest.enabled" = F;
-"browser.urlbar.suggest.searches" = F;
-/* 0805: disable urlbar trending search suggestions [FF118+]
- * [SETTING] Search>Search Suggestions>Show trending search suggestions (FF119) ***/
-"browser.urlbar.trending.featureGate" = F;
-/* 0806: disable urlbar suggestions ***/
-"browser.urlbar.addons.featureGate" = F; # [FF115+]
-"browser.urlbar.mdn.featureGate" = F; # [FF117+] [HIDDEN PREF]
-"browser.urlbar.pocket.featureGate" = F; # [FF116+] [DEFAULT: false]
-"browser.urlbar.weather.featureGate" = F; # [FF108+] [DEFAULT: false]
-"browser.urlbar.yelp.featureGate" = F; # [FF124+] [DEFAULT: false]
-/* 0807: disable urlbar clipboard suggestions [FF118+] ***/
-   # "browser.urlbar.clipboard.featureGate" = F;
-/* 0808: disable recent searches [FF120+]
- * [NOTE] Recent searches are cleared with history (2811)
- * [1] https:#support.mozilla.org/kb/search-suggestions-firefox ***/
-   # "browser.urlbar.recentsearches.featureGate" = F;
-/* 0810: disable search and form history
- * [NOTE] We also clear formdata on exit (2811)
- * [SETUP-WEB] Be aware that autocomplete form data can be read by third parties [1][2]
- * [SETTING] Privacy & Security>History>Custom Settings>Remember search and form history
- * [1] https:#blog.mindedsecurity.com/2011/10/autocompleteagain.html
- * [2] https:#bugzilla.mozilla.org/381681 ***/
-"browser.formfill.enable" = F;
-/* 0815: disable tab-to-search [FF85+]
- * Alternatively, you can exclude on a per-engine basis by unchecking them in Options>Search
- * [SETTING] Search>Address Bar>When using the address bar, suggest>Search engines ***/
-   # "browser.urlbar.suggest.engines" = F;
-/* 0820: disable coloring of visited links
- * [SETUP-HARDEN] Bulk rapid history sniffing was mitigated in 2010 [1][2]. Slower and more expensive
- * redraw timing attacks were largely mitigated in FF77+ [3]. Using RFP (4501) further hampers timing
- * attacks. Don't forget clearing history on exit (2811). However, social engineering [2#limits][4][5]
- * and advanced targeted timing attacks could still produce usable results
- * [1] https:#developer.mozilla.org/docs/Web/CSS/Privacy_and_the_:visited_selector
- * [2] https:#dbaron.org/mozilla/visited-privacy
- * [3] https:#bugzilla.mozilla.org/1632765
- * [4] https:#earthlng.github.io/testpages/visited_links.html (see github wiki APPENDIX A on how to use)
- * [5] https:#lcamtuf.blogspot.com/2016/08/css-mix-blend-mode-is-bad-for-keeping.html ***/
-   # "layout.css.visited_links_enabled" = F;
-/* 0830: enable separate default search engine in Private Windows and its UI setting
- * [SETTING] Search>Default Search Engine>Choose a different default search engine for Private Windows only ***/
-"browser.search.separatePrivateDefault" = T; # [FF70+]
-"browser.search.separatePrivateDefault.ui.enabled" = T; # [FF71+]
+          # [SECTION 1000]: DISK AVOIDANCE
+          "browser.cache.disk.enable" = F;
+          "browser.privatebrowsing.forceMediaMemoryCache" = T;
+          "media.memory_cache_max_size" = lock 65536;
+          "browser.sessionstore.privacy_level" = lock 2;
+          "toolkit.winRegisterApplicationRestart" = F;
+          "browser.shell.shortcutFavicons" = F;
 
-/*** [SECTION 0900]: PASSWORDS
-   [1] https:#support.mozilla.org/kb/use-primary-password-protect-stored-logins-and-pas
-***/
-/* 0903: disable auto-filling username & password form fields
- * can leak in cross-site forms *and* be spoofed
- * [NOTE] Username & password is still available when you enter the field
- * [SETTING] Privacy & Security>Logins and Passwords>Autofill logins and passwords
- * [1] https:#freedom-to-tinker.com/2017/12/27/no-boundaries-for-user-identities-web-trackers-exploit-browser-login-managers/
- * [2] https:#homes.esat.kuleuven.be/~asenol/leaky-forms/ ***/
-"signon.autofillForms" = F;
-/* 0904: disable formless login capture for Password Manager [FF51+] ***/
-"signon.formlessCapture.enabled" = F;
-/* 0905: limit (or disable) HTTP authentication credentials dialogs triggered by sub-resources [FF41+]
- * hardens against potential credentials phishing
- * 0 = don't allow sub-resources to open HTTP authentication credentials dialogs
- * 1 = don't allow cross-origin sub-resources to open HTTP authentication credentials dialogs
- * 2 = allow sub-resources to open HTTP authentication credentials dialogs (default) ***/
-"network.auth.subresource-http-auth-allow" = 1;
-/* 0906: enforce no automatic authentication on Microsoft sites [FF91+] [WINDOWS 10+]
- * [SETTING] Privacy & Security>Logins and Passwords>Allow Windows single sign-on for...
- * [1] https:#support.mozilla.org/kb/windows-sso ***/
-   # "network.http.windows-sso.enabled" = F; # [DEFAULT: false]
+          # [SECTION 1200]: HTTPS (SSL/TLS / OCSP / CERTS / HPKP)
+          "security.ssl.require_safe_negotiation" = T;
+          "security.tls.enable_0rtt_data" = F;
+          "security.OCSP.enabled" = lock 1;
+          "security.OCSP.require" = T;
+          "security.cert_pinning.enforcement_level" = lock 2;
+          "security.remote_settings.crlite_filters.enabled" = T;
+          "security.pki.crlite_mode" = lock 2;
+          "security.mixed_content.block_display_content" = T; # TODO: find out if this causes any problems
+          "dom.security.https_only_mode" = T;
+          "dom.security.https_only_mode_pbm" = T;
+          # "dom.security.https_only_mode.upgrade_local" = T;
+          "dom.security.https_only_mode_send_http_background_request" = F;
+          "security.ssl.treat_unsafe_negotiation_as_broken" = T;
+          "browser.xul.error_pages.expert_bad_cert" = T;
 
-# [SECTION 1000]: DISK AVOIDANCE
-/* 1001: disable disk cache
- * [NOTE] We also clear cache on exit (2811)
- * [SETUP-CHROME] If you think disk cache helps perf, then feel free to override this ***/
-"browser.cache.disk.enable" = F;
-/* 1002: disable media cache from writing to disk in Private Browsing
- * [NOTE] MSE (Media Source Extensions) are already stored in-memory in PB ***/
-"browser.privatebrowsing.forceMediaMemoryCache" = T; # [FF75+]
-"media.memory_cache_max_size" = 65536;
-/* 1003: disable storing extra session data [SETUP-CHROME]
- * define on which sites to save extra session data such as form content, cookies and POST data
- * 0=everywhere, 1=unencrypted sites, 2=nowhere ***/
-"browser.sessionstore.privacy_level" = 2;
-/* 1005: disable automatic Firefox start and session restore after reboot [FF62+] [WINDOWS]
- * [1] https:#bugzilla.mozilla.org/603903 ***/
-"toolkit.winRegisterApplicationRestart" = F;
-/* 1006: disable favicons in shortcuts [WINDOWS]
- * URL shortcuts use a cached randomly named .ico file which is stored in your
- * profile/shortcutCache directory. The .ico remains after the shortcut is deleted
- * If set to false then the shortcuts use a generic Firefox icon ***/
-"browser.shell.shortcutFavicons" = F;
+          # [SECTION 1600]: REFERERS
+          "network.http.referer.XOriginTrimmingPolicy" = lock 2;
 
-/*** [SECTION 1200]: HTTPS (SSL/TLS / OCSP / CERTS / HPKP)
-   Your cipher and other settings can be used in server side fingerprinting
-   [TEST] https:#www.ssllabs.com/ssltest/viewMyClient.html
-   [TEST] https:#browserleaks.com/ssl
-   [TEST] https:#ja3er.com/
-   [1] https:#www.securityartwork.es/2017/02/02/tls-client-fingerprinting-with-bro/
-***/
-/** SSL (Secure Sockets Layer) / TLS (Transport Layer Security) ***/
-/* 1201: require safe negotiation
- * Blocks connections to servers that don't support RFC 5746 [2] as they're potentially vulnerable to a
- * MiTM attack [3]. A server without RFC 5746 can be safe from the attack if it disables renegotiations
- * but the problem is that the browser can't know that. Setting this pref to true is the only way for the
- * browser to ensure there will be no unsafe renegotiations on the channel between the browser and the server
- * [SETUP-WEB] SSL_ERROR_UNSAFE_NEGOTIATION: is it worth overriding this for that one site?
- * [STATS] SSL Labs (May 2024) reports over 99.7% of top sites have secure renegotiation [4]
- * [1] https:#wiki.mozilla.org/Security:Renegotiation
- * [2] https:#datatracker.ietf.org/doc/html/rfc5746
- * [3] https:#cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2009-3555
- * [4] https:#www.ssllabs.com/ssl-pulse/ ***/
-"security.ssl.require_safe_negotiation" = T;
-/* 1206: disable TLS1.3 0-RTT (round-trip time) [FF51+]
- * This data is not forward secret, as it is encrypted solely under keys derived using
- * the offered PSK. There are no guarantees of non-replay between connections
- * [1] https:#github.com/tlswg/tls13-spec/issues/1001
- * [2] https:#www.rfc-editor.org/rfc/rfc9001.html#name-replay-attacks-with-0-rtt
- * [3] https:#blog.cloudflare.com/tls-1-3-overview-and-q-and-a/ ***/
-"security.tls.enable_0rtt_data" = F;
+          # [SECTION 1700]: CONTAINERS
+          "privacy.userContext.enabled" = T;
+          "privacy.userContext.ui.enabled" = T;
+          "privacy.userContext.newTabContainerOnLeftClick.enabled" = F;
+          # "browser.link.force_default_user_context_id_for_external_opens" = T;
 
-/** OCSP (Online Certificate Status Protocol)
-   [1] https:#scotthelme.co.uk/revocation-is-broken/
-   [2] https:#blog.mozilla.org/security/2013/07/29/ocsp-stapling-in-firefox/
-***/
-/* 1211: enforce OCSP fetching to confirm current validity of certificates
- * 0=disabled, 1=enabled (default), 2=enabled for EV certificates only
- * OCSP (non-stapled) leaks information about the sites you visit to the CA (cert authority)
- * It's a trade-off between security (checking) and privacy (leaking info to the CA)
- * [NOTE] This pref only controls OCSP fetching and does not affect OCSP stapling
- * [SETTING] Privacy & Security>Security>Certificates>Query OCSP responder servers...
- * [1] https:#en.wikipedia.org/wiki/Ocsp ***/
-"security.OCSP.enabled" = 1; # [DEFAULT: 1]
-/* 1212: set OCSP fetch failures (non-stapled, see 1211) to hard-fail
- * [SETUP-WEB] SEC_ERROR_OCSP_SERVER_ERROR
- * When a CA cannot be reached to validate a cert, Firefox just continues the connection (=soft-fail)
- * Setting this pref to true tells Firefox to instead terminate the connection (=hard-fail)
- * It is pointless to soft-fail when an OCSP fetch fails: you cannot confirm a cert is still valid (it
- * could have been revoked) and/or you could be under attack (e.g. malicious blocking of OCSP servers)
- * [1] https:#blog.mozilla.org/security/2013/07/29/ocsp-stapling-in-firefox/
- * [2] https:#www.imperialviolet.org/2014/04/19/revchecking.html ***/
-"security.OCSP.require" = T;
+          # [SECTION 2000]: PLUGINS / MEDIA / WEBRTC
+          "media.peerconnection.ice.proxy_only_if_behind_proxy" = T;
+          "media.peerconnection.ice.default_address_only" = T;
+          "media.peerconnection.ice.no_host" = T; # NOTE: breaks video conferencing sites
+          "media.gmp-provider.enabled" = F; # TODO: find out if it causes any problems
 
-/** CERTS / HPKP (HTTP Public Key Pinning) ***/
-/* 1223: enable strict PKP (Public Key Pinning)
- * 0=disabled, 1=allow user MiTM (default; such as your antivirus), 2=strict
- * [SETUP-WEB] MOZILLA_PKIX_ERROR_KEY_PINNING_FAILURE ***/
-"security.cert_pinning.enforcement_level" = 2;
-/* 1224: enable CRLite [FF73+]
- * 0 = disabled
- * 1 = consult CRLite but only collect telemetry
- * 2 = consult CRLite and enforce both "Revoked" and "Not Revoked" results
- * 3 = consult CRLite and enforce "Not Revoked" results, but defer to OCSP for "Revoked" (default)
- * [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=1429800,1670985,1753071
- * [2] https:#blog.mozilla.org/security/tag/crlite/ ***/
-"security.remote_settings.crlite_filters.enabled" = T;
-"security.pki.crlite_mode" = 2;
+          # [SECTION 2400]: DOM (DOCUMENT OBJECT MODEL)
+          "dom.disable_window_move_resize" = T;
 
-/** MIXED CONTENT ***/
-/* 1241: disable insecure passive content (such as images) on https pages ***/
-   # "security.mixed_content.block_display_content" = T; # Defense-in-depth (see 1244)
-/* 1244: enable HTTPS-Only mode in all windows
- * When the top-level is HTTPS, insecure subresources are also upgraded (silent fail)
- * [SETTING] to add site exceptions: Padlock>HTTPS-Only mode>On (after "Continue to HTTP Site")
- * [SETTING] Privacy & Security>HTTPS-Only Mode (and manage exceptions)
- * [TEST] http:#example.com [upgrade]
- * [TEST] http:#httpforever.com/ | http:#http.rip [no upgrade] ***/
-"dom.security.https_only_mode" = T; # [FF76+]
-   # "dom.security.https_only_mode_pbm" = T; # [FF80+]
-/* 1245: enable HTTPS-Only mode for local resources [FF77+] ***/
-   # "dom.security.https_only_mode.upgrade_local" = T;
-/* 1246: disable HTTP background requests [FF82+]
- * When attempting to upgrade, if the server doesn't respond within 3 seconds, Firefox sends
- * a top-level HTTP request without path in order to check if the server supports HTTPS or not
- * This is done to avoid waiting for a timeout which takes 90 seconds
- * [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=1642387,1660945 ***/
-"dom.security.https_only_mode_send_http_background_request" = F;
-
-/** UI (User Interface) ***/
-/* 1270: display warning on the padlock for "broken security" (if 1201 is false)
- * Bug: warning padlock not indicated for subresources on a secure page! [2]
- * [1] https:#wiki.mozilla.org/Security:Renegotiation
- * [2] https:#bugzilla.mozilla.org/1353705 ***/
-"security.ssl.treat_unsafe_negotiation_as_broken" = T;
-/* 1272: display advanced information on Insecure Connection warning pages
- * only works when it's possible to add an exception
- * i.e. it doesn't work for HSTS discrepancies (https:#subdomain.preloaded-hsts.badssl.com/)
- * [TEST] https:#expired.badssl.com/ ***/
-"browser.xul.error_pages.expert_bad_cert" = T;
-
-/*** [SECTION 1600]: REFERERS
-                  full URI: https:#example.com:8888/foo/bar.html?id=1234
-     scheme+host+port+path: https:#example.com:8888/foo/bar.html
-          scheme+host+port: https:#example.com:8888
-   [1] https:#feeding.cloud.geek.nz/posts/tweaking-referrer-for-privacy-in-firefox/
-***/
-/* 1602: control the amount of cross-origin information to send [FF52+]
- * 0=send full URI (default), 1=scheme+host+port+path, 2=scheme+host+port ***/
-"network.http.referer.XOriginTrimmingPolicy" = 2;
-
-# [SECTION 1700]: CONTAINERS
-/* 1701: enable Container Tabs and its UI setting [FF50+]
- * [SETTING] General>Tabs>Enable Container Tabs
- * https:#wiki.mozilla.org/Security/Contextual_Identity_Project/Containers ***/
-"privacy.userContext.enabled" = T;
-"privacy.userContext.ui.enabled" = T;
-/* 1702: set behavior on "+ Tab" button to display container menu on left click [FF74+]
- * [NOTE] The menu is always shown on long press and right click
- * [SETTING] General>Tabs>Enable Container Tabs>Settings>Select a container for each new tab ***/
-   # "privacy.userContext.newTabContainerOnLeftClick.enabled" = T;
-/* 1703: set external links to open in site-specific containers [FF123+]
- * [SETUP-WEB] Depending on your container extension(s) and their settings
- * true=Firefox will not choose a container (so your extension can)
- * false=Firefox will choose the container/no-container (default)
- * [1] https:#bugzilla.mozilla.org/1874599 ***/
-   # "browser.link.force_default_user_context_id_for_external_opens" = T;
-
-# [SECTION 2000]: PLUGINS / MEDIA / WEBRTC
-/* 2002: force WebRTC inside the proxy [FF70+] ***/
-"media.peerconnection.ice.proxy_only_if_behind_proxy" = T;
-/* 2003: force a single network interface for ICE candidates generation [FF42+]
- * When using a system-wide proxy, it uses the proxy interface
- * [1] https:#developer.mozilla.org/docs/Web/API/RTCIceCandidate
- * [2] https:#wiki.mozilla.org/Media/WebRTC/Privacy ***/
-"media.peerconnection.ice.default_address_only" = T;
-/* 2004: force exclusion of private IPs from ICE candidates [FF51+]
- * [SETUP-HARDEN] This will protect your private IP even in TRUSTED scenarios after you
- * grant device access, but often results in breakage on video-conferencing platforms ***/
-   # "media.peerconnection.ice.no_host" = T;
-/* 2020: disable GMP (Gecko Media Plugins)
- * [1] https:#wiki.mozilla.org/GeckoMediaPlugins ***/
-   # "media.gmp-provider.enabled" = F;
-
-# [SECTION 2400]: DOM (DOCUMENT OBJECT MODEL)
-/* 2402: prevent scripts from moving and resizing open windows ***/
-"dom.disable_window_move_resize" = T;
-
-# [SECTION 2600]: MISCELLANEOUS
-/* 2603: remove temp files opened from non-PB windows with an external application
- * [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=302433,1738574 ***/
-"browser.download.start_downloads_in_tmp_dir" = T; # [FF102+]
-"browser.helperApps.deleteTempFileOnExit" = T;
-/* 2606: disable UITour backend so there is no chance that a remote page can use it ***/
-"browser.uitour.enabled" = F;
-   # "browser.uitour.url" = E; # Defense-in-depth
-/* 2608: reset remote debugging to disabled
- * [1] https:#gitlab.torproject.org/tpo/applications/tor-browser/-/issues/16222 ***/
-"devtools.debugger.remote-enabled" = F; # [DEFAULT: false]
-/* 2615: disable websites overriding Firefox's keyboard shortcuts [FF58+]
- * 0 (default) or 1=allow, 2=block
- * [SETTING] to add site exceptions: Ctrl+I>Permissions>Override Keyboard Shortcuts ***/
-   # "permissions.default.shortcuts" = 2;
-/* 2616: remove special permissions for certain mozilla domains [FF35+]
- * [1] resource:#app/defaults/permissions ***/
-"permissions.manager.defaultsUrl" = E;
-/* 2617: remove webchannel whitelist ***/
-"webchannel.allowObject.urlWhitelist" = E;
-/* 2619: use Punycode in Internationalized Domain Names to eliminate possible spoofing
- * [SETUP-WEB] Might be undesirable for non-latin alphabet users since legitimate IDN's are also punycoded
- * [TEST] https:#www.xn--80ak6aa92e.com/ (www.apple.com)
- * [1] https:#wiki.mozilla.org/IDN_Display_Algorithm
- * [2] https:#en.wikipedia.org/wiki/IDN_homograph_attack
- * [3] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=punycode+firefox
- * [4] https:#www.xudongz.com/blog/2017/idn-phishing/ ***/
-"network.IDN_show_punycode" = T;
-/* 2620: enforce PDFJS, disable PDFJS scripting
- * This setting controls if the option "Display in Firefox" is available in the setting below
- *   and by effect controls whether PDFs are handled in-browser or externally ("Ask" or "Open With")
- * [WHY] pdfjs is lightweight, open source, and secure: the last exploit was June 2015 [1]
- *   It doesn't break "state separation" of browser content (by not sharing with OS, independent apps).
- *   It maintains disk avoidance and application data isolation. It's convenient. You can still save to disk.
- * [NOTE] JS can still force a pdf to open in-browser by bundling its own code
- * [SETUP-CHROME] You may prefer a different pdf reader for security/workflow reasons
- * [SETTING] General>Applications>Portable Document Format (PDF)
- * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=pdf.js+firefox ***/
-"pdfjs.disabled" = F; # [DEFAULT: false]
-"pdfjs.enableScripting" = F; # [FF86+]
-/* 2624: disable middle click on new tab button opening URLs or searches using clipboard [FF115+] */
-"browser.tabs.searchclipboardfor.middleclick" = F; # [DEFAULT: false NON-LINUX]
+          # [SECTION 2600]: MISCELLANEOUS
+          "browser.download.start_downloads_in_tmp_dir" = T;
+          "browser.helperApps.deleteTempFileOnExit" = T;
+          "browser.uitour.enabled" = F;
+          "browser.uitour.url" = E;
+          "devtools.debugger.remote-enabled" = F;
+          "permissions.default.shortcuts" = lock 2;
+          "permissions.manager.defaultsUrl" = E;
+          "webchannel.allowObject.urlWhitelist" = E;
+          "network.IDN_show_punycode" = T;
+          "pdfjs.disabled" = F;
+          "pdfjs.enableScripting" = F;
+          "browser.tabs.searchclipboardfor.middleclick" = F;
 /* 2630: disable content analysis by DLP (Data Loss Prevention) agents
  * DLP agents are background processes on managed computers that allow enterprises to monitor locally running
  * applications for data exfiltration events, which they can allow/block based on customer defined DLP policies.
@@ -1325,7 +1035,7 @@ doesn't even use cookies. (#Turn on browser.safebrowsing.debug to monitor this a
       };
       SearchSuggestEnabled = false; # Enable or disable search suggestions.
       ShowHomeButton = false; # Show the home button on the toolbar.
-      StartDownloadsInTempDirectory = false; # Force downloads to start off in a local, temporary location rather than the default download directory.
+      StartDownloadsInTempDirectory = true; # Force downloads to start off in a local, temporary location rather than the default download directory.
       WindowsSSO = false; # Allow Windows single sign-on for Microsoft, work, and school accounts.
     };
     profiles.bevicted = {
