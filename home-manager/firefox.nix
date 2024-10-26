@@ -33,7 +33,6 @@ in {
     languagePacks = [ "en-US" ];
     # about:policies#documentation
     policies = {
-      AllowedDomainsForApps = ""; # Define domains allowed to access Google Workspace.
       AllowFileSelectionDialogs = true; # Allow file selection dialogs.
       AppAutoUpdate = false; # Enable or disable automatic application update.
       AutofillAddressEnabled = false; # Enable autofill for addresses.
@@ -46,29 +45,14 @@ in {
       };
       DisableAccounts = false; # Disable account-based services, including sync.
       DisableAppUpdate = true; # Prevent the browser from updating.
-      DisableBuiltinPDFViewer = false; # Disable PDF.js, the built-in PDF viewer in Firefox.
       DisableDefaultBrowserAgent = true; # Prevent the default browser agent from taking any actions. Only applicable to Windows; other platforms don’t have the agent.
       DisableDeveloperTools = false; # Block access to the developer tools.
-      DisableEncryptedClientHello = false; # Disable use of the TLS feature Encrypted Client Hello (ECH).
       DisableFeedbackCommands = true; # Disable commands to send feedback from the Help menu (Submit Feedback and Report Deceptive Site).
       DisableFirefoxAccounts = false; # Disable account-based services, including sync.
-      DisableFirefoxScreenshots = true; # Disable the Firefox Screenshots feature.
       DisableFirefoxStudies = true; # Prevent Firefox from running studies.
-      DisableForgetButton = false; # Prevent access to the Forget button.
-      DisableFormHistory = false; # Don’t remember search and form history.
-      DisableMasterPasswordCreation = true; # If true, a Primary Password can’t be created.
       DisablePasswordReveal = true; # Do not allow passwords to be revealed in saved logins.
       DisablePocket = true; # Disable the feature to save webpages to Pocket.
-      DisablePrivateBrowsing = false; # Disable Private Browsing.
       DisableProfileImport = true; # Disable the menu command to Import data from another browser.
-      DisableProfileRefresh = false; # Disable the Refresh Firefox button in the about:support page.
-      # Disable the feature to restart in Safe Mode. Note: the Shift key to enter Safe Mode can only be disabled on Windows using Group Policy.
-      DisableSafeMode = {
-        InvalidCertificate = false;
-        SafeBrowsing = true;
-      };
-      DisableSecurityBypass = false; # Prevent the user from bypassing certain security warnings.
-      DisableSetDesktopBackground = true; # Disable the menu command Set as Desktop Background for images.
       DisableSystemAddonUpdate = true; # Prevent the browser from installing and updating system add-ons.
       DisableTelemetry = true; # Turn off Telemetry.
       DisableThirdPartyModuleBlocking = false; # Prevent the user from blocking third-party modules that get injected into the Firefox process.
@@ -100,31 +84,22 @@ in {
       FirefoxSuggest = {
         WebSuggestions = false;
         SponsoredSuggestions = false;
-        ImproveSuggest = true;
+        ImproveSuggest = false;
       };
       HardwareAcceleration = false; # If false, turn off hardware acceleration. NOTE: sites track you through hardware specs
       # Set and optionally lock the homepage.
-      Homepage = {
-        StartPage = "previous-session";
-      };
       HttpsOnlyMode = true; # Allow HTTPS-Only Mode to be enabled.
       # Allow certain websites to install add-ons.
       InstallAddonsPermission = {
         Default = false;
       };
       ManualAppUpdateOnly = true; # Allow manual updates only and do not notify the user about updates.
-      NewTabPage = false; # Enable or disable the New Tab page.
       NoDefaultBookmarks = true; # Disable creation of the default bookmarks bundled with Firefox, and the Smart Bookmarks (Most Visited, Recent Tags). Note: this policy is only effective if used before the first run of the profile.
       OfferToSaveLogins = false; # Enforce the setting to allow Firefox to offer to remember saved logins and passwords. Both true and false values are accepted.
       OfferToSaveLoginsDefault = false; # Set the default value for allowing Firefox to offer to remember saved logins and passwords. Both true and false values are accepted.
       OverrideFirstRunPage = ""; # Override the first run page. Set this policy to blank if you want to disable the first run page.
       OverridePostUpdatePage = ""; # Override the post-update “What’s New” page. Set this policy to blank if you want to disable the post-update page.
       PasswordManagerEnabled = false; # Enable saving passwords to the password manager.
-      # Disable or configure PDF.js, the built-in PDF viewer in Firefox.
-      PDFjs = {
-        Enabled = true;
-        EnablePermissions = false;
-      }; 
       # Configure permissions for camera, microphone, location, notifications, and autoplay.
       Permissions = {
         Camera = {
@@ -147,23 +122,8 @@ in {
       PopupBlocking = {
         Default = false;
       };
-      PostQuantumKeyAgreementEnabled = false; # Enable post-quantum key agreement for TLS.
-      PrimaryPassword = false; # Require or prevent using a Primary Password.
-      PrintingEnabled = false; # Enable or disable printing.
       PrivateBrowsingModeAvailability = 0; # Set availability of private browsing mode.
-      PromptForDownloadLocation = false; # Ask where to save files when downloading.
       SearchBar = "unified"; # Set the default location of the search bar. The user is still allowed to customize it.
-      SanitizeOnShutdown = {
-        Cache = true;
-        Cookies = false;
-        Downloads = true;
-        FormData = true;
-        History = false;
-        Sessions = false;
-        SiteSettings = false;
-        OfflineApps = true;
-        Locked = true;
-      };
       SearchEngines = {
         PreventInstalls = true;
         Add = [
@@ -352,151 +312,60 @@ in {
           "pdfjs.disabled" = F;
           "pdfjs.enableScripting" = F;
           "browser.tabs.searchclipboardfor.middleclick" = F;
-/* 2630: disable content analysis by DLP (Data Loss Prevention) agents
- * DLP agents are background processes on managed computers that allow enterprises to monitor locally running
- * applications for data exfiltration events, which they can allow/block based on customer defined DLP policies.
- * 0=Block all requests, 1=Warn on all requests (which lets the user decide), 2=Allow all requests
- * [1] https:#github.com/chromium/content_analysis_sdk */
-"browser.contentanalysis.enabled" = F; # [FF121+] [DEFAULT: false]
-"browser.contentanalysis.default_result" = 0; # [FF127+] [DEFAULT: 0]
+          "browser.contentanalysis.enabled" = F;
+          "browser.contentanalysis.default_result" = lock 0;
+          "browser.download.useDownloadDir" = F;
+          "browser.download.alwaysOpenPanel" = F;
+          "browser.download.manager.addToRecentDocs" = F;
+          "browser.download.always_ask_before_handling_new_types" = T;
+          "extensions.enabledScopes" = lock 5;
+          "extensions.autoDisableScopes" = lock 15;
+          "extensions.postDownloadThirdPartyPrompt" = F;
+          "extensions.webextensions.restrictedDomains" = E;
 
-/** DOWNLOADS ***/
-/* 2651: enable user interaction for security by always asking where to download
- * [SETUP-CHROME] On Android this blocks longtapping and saving images
- * [SETTING] General>Downloads>Always ask you where to save files ***/
-"browser.download.useDownloadDir" = F;
-/* 2652: disable downloads panel opening on every download [FF96+] ***/
-"browser.download.alwaysOpenPanel" = F;
-/* 2653: disable adding downloads to the system's "recent documents" list ***/
-"browser.download.manager.addToRecentDocs" = F;
-/* 2654: enable user interaction for security by always asking how to handle new mimetypes [FF101+]
- * [SETTING] General>Files and Applications>What should Firefox do with other files ***/
-"browser.download.always_ask_before_handling_new_types" = T;
+          # [SECTION 2700]: ETP (ENHANCED TRACKING PROTECTION)
+          "browser.contentblocking.category" = lock "strict";
+          # "privacy.antitracking.enableWebcompat" = F;
 
-/** EXTENSIONS ***/
-/* 2660: limit allowed extension directories
- * 1=profile, 2=user, 4=application, 8=system, 16=temporary, 31=all
- * The pref value represents the sum: e.g. 5 would be profile and application directories
- * [SETUP-CHROME] Breaks usage of files which are installed outside allowed directories
- * [1] https:#archive.is/DYjAM ***/
-"extensions.enabledScopes" = 5; # [HIDDEN PREF]
-   # "extensions.autoDisableScopes" = 15; # [DEFAULT: 15]
-/* 2661: disable bypassing 3rd party extension install prompts [FF82+]
- * [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=1659530,1681331 ***/
-"extensions.postDownloadThirdPartyPrompt" = F;
-/* 2662: disable webextension restrictions on certain mozilla domains (you also need 4503) [FF60+]
- * [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=1384330,1406795,1415644,1453988 ***/
-   # "extensions.webextensions.restrictedDomains" = E;
+          # [SECTION 2800]: SHUTDOWN & SANITIZING
+          "privacy.sanitize.sanitizeOnShutdown" = T;
+          "privacy.clearOnShutdown.cache" = T;
+          "privacy.clearOnShutdown_v2.cache" = T;
+          "privacy.clearOnShutdown.downloads" = T;
+          "privacy.clearOnShutdown.formdata" = T;
+          "privacy.clearOnShutdown.history" = F;
+          "privacy.clearOnShutdown_v2.historyFormDataAndDownloads" = T;
+          "privacy.clearOnShutdown.siteSettings" = F;
+          "privacy.clearOnShutdown_v2.siteSettings" = F;
+          "privacy.clearOnShutdown.openWindows" = F;
+          "privacy.clearOnShutdown.cookies" = T;
+          "privacy.clearOnShutdown.offlineApps" = T;
+          "privacy.clearOnShutdown.sessions" = T;
+          "privacy.clearOnShutdown_v2.cookiesAndStorage" = T;
+          "privacy.clearSiteData.cache" = T;
+          "privacy.clearSiteData.cookiesAndStorage" = F;
+          "privacy.clearSiteData.historyFormDataAndDownloads" = T;
+          "privacy.clearSiteData.siteSettings" = F;
+          "privacy.cpd.cache" = T;
+          "privacy.clearHistory.cache" = T;
+          "privacy.cpd.formdata" = T;
+          "privacy.cpd.history" = T;
+          "privacy.cpd.downloads" = T;
+          "privacy.clearHistory.historyFormDataAndDownloads" = T;
+          "privacy.cpd.cookies" = F;
+          "privacy.cpd.sessions" = T;
+          "privacy.cpd.offlineApps" = F;
+          "privacy.clearHistory.cookiesAndStorage" = F;
+          "privacy.cpd.openWindows" = F;
+          "privacy.cpd.passwords" = T;
+          "privacy.cpd.siteSettings" = F;
+          "privacy.clearHistory.siteSettings" = F;
+          "privacy.sanitize.timeSpan" = lock 0;
 
-# [SECTION 2700]: ETP (ENHANCED TRACKING PROTECTION)
-/* 2701: enable ETP Strict Mode [FF86+]
- * ETP Strict Mode enables Total Cookie Protection (TCP)
- * [NOTE] Adding site exceptions disables all ETP protections for that site and increases the risk of
- * cross-site state tracking e.g. exceptions for SiteA and SiteB means PartyC on both sites is shared
- * [1] https:#blog.mozilla.org/security/2021/02/23/total-cookie-protection/
- * [SETTING] to add site exceptions: Urlbar>ETP Shield
- * [SETTING] to manage site exceptions: Options>Privacy & Security>Enhanced Tracking Protection>Manage Exceptions ***/
-"browser.contentblocking.category" = "strict"; # [HIDDEN PREF]
-/* 2702: disable ETP web compat features [FF93+]
- * [SETUP-HARDEN] Includes skip lists, heuristics (SmartBlock) and automatic grants
- * Opener and redirect heuristics are granted for 30 days, see [3]
- * [1] https:#blog.mozilla.org/security/2021/07/13/smartblock-v2/
- * [2] https:#hg.mozilla.org/mozilla-central/rev/e5483fd469ab#l4.12
- * [3] https:#developer.mozilla.org/docs/Web/Privacy/State_Partitioning#storage_access_heuristics ***/
-   # "privacy.antitracking.enableWebcompat" = F;
-
-# [SECTION 2800]: SHUTDOWN & SANITIZING
-/* 2810: enable Firefox to clear items on shutdown
- * [NOTE] In FF129+ clearing "siteSettings" on shutdown (2811), or manually via site data (2820) and
- * via history (2830), will no longer remove sanitize on shutdown "cookie and site data" site exceptions (2815) 
- * [SETTING] Privacy & Security>History>Custom Settings>Clear history when Firefox closes | Settings ***/
-"privacy.sanitize.sanitizeOnShutdown" = T;
-
-/** SANITIZE ON SHUTDOWN: IGNORES "ALLOW" SITE EXCEPTIONS | v2 migration is FF128+ ***/
-/* 2811: set/enforce what items to clear on shutdown (if 2810 is true) [SETUP-CHROME]
- * [NOTE] If "history" is true, downloads will also be cleared ***/
-"privacy.clearOnShutdown.cache" = T;     # [DEFAULT: true]
-"privacy.clearOnShutdown_v2.cache" = T;  # [FF128+] [DEFAULT: true]
-"privacy.clearOnShutdown.downloads" = T; # [DEFAULT: true]
-"privacy.clearOnShutdown.formdata" = T;  # [DEFAULT: true]
-"privacy.clearOnShutdown.history" = T;   # [DEFAULT: true]
-"privacy.clearOnShutdown_v2.historyFormDataAndDownloads" = T; # [FF128+] [DEFAULT: true]
-   # "privacy.clearOnShutdown.siteSettings" = F; # [DEFAULT: false]
-   # "privacy.clearOnShutdown_v2.siteSettings" = F; # [FF128+] [DEFAULT: false]
-/* 2812: set Session Restore to clear on shutdown (if 2810 is true) [FF34+]
- * [NOTE] Not needed if Session Restore is not used (0102) or it is already cleared with history (2811)
- * [NOTE] If true, this prevents resuming from crashes (also see 5008) ***/
-   # "privacy.clearOnShutdown.openWindows" = T;
-
-/** SANITIZE ON SHUTDOWN: RESPECTS "ALLOW" SITE EXCEPTIONS FF103+ | v2 migration is FF128+ ***/
-/* 2815: set "Cookies" and "Site Data" to clear on shutdown (if 2810 is true) [SETUP-CHROME]
- * [NOTE] Exceptions: A "cookie" permission also controls "offlineApps" (see note below). For cross-domain logins,
- * add exceptions for both sites e.g. https:#www.youtube.com (site) + https:#accounts.google.com (single sign on)
- * [NOTE] "offlineApps": Offline Website Data: localStorage, service worker cache, QuotaManager (IndexedDB, asm-cache)
- * [NOTE] "sessions": Active Logins (has no site exceptions): refers to HTTP Basic Authentication [1], not logins via cookies
- * [WARNING] Be selective with what sites you "Allow", as they also disable partitioning (1767271)
- * [SETTING] to add site exceptions: Ctrl+I>Permissions>Cookies>Allow (when on the website in question)
- * [SETTING] to manage site exceptions: Options>Privacy & Security>Permissions>Settings
- * [1] https:#en.wikipedia.org/wiki/Basic_access_authentication ***/
-"privacy.clearOnShutdown.cookies" = T; # Cookies
-"privacy.clearOnShutdown.offlineApps" = T; # Site Data
-"privacy.clearOnShutdown.sessions" = T;  # Active Logins [DEFAULT: true]
-"privacy.clearOnShutdown_v2.cookiesAndStorage" = T; # Cookies, Site Data, Active Logins [FF128+]
-
-/** SANITIZE SITE DATA: IGNORES "ALLOW" SITE EXCEPTIONS ***/
-/* 2820: set manual "Clear Data" items [SETUP-CHROME] [FF128+]
- * Firefox remembers your last choices. This will reset them when you start Firefox
- * [SETTING] Privacy & Security>Browser Privacy>Cookies and Site Data>Clear Data ***/
-"privacy.clearSiteData.cache" = T;
-"privacy.clearSiteData.cookiesAndStorage" = F; # keep false until it respects "allow" site exceptions
-"privacy.clearSiteData.historyFormDataAndDownloads" = T;
-   # "privacy.clearSiteData.siteSettings" = F;
-
-/** SANITIZE HISTORY: IGNORES "ALLOW" SITE EXCEPTIONS | clearHistory migration is FF128+ ***/
-/* 2830: set manual "Clear History" items, also via Ctrl-Shift-Del [SETUP-CHROME]
- * Firefox remembers your last choices. This will reset them when you start Firefox
- * [NOTE] Regardless of what you set "downloads" to, as soon as the dialog
- * for "Clear Recent History" is opened, it is synced to the same as "history"
- * [SETTING] Privacy & Security>History>Custom Settings>Clear History ***/
-"privacy.cpd.cache" = T;    # [DEFAULT: true]
-"privacy.clearHistory.cache" = T;
-"privacy.cpd.formdata" = T; # [DEFAULT: true]
-"privacy.cpd.history" = T;  # [DEFAULT: true]
-   # "privacy.cpd.downloads" = T; # not used, see note above
-"privacy.clearHistory.historyFormDataAndDownloads" = T;
-"privacy.cpd.cookies" = F;
-"privacy.cpd.sessions" = T; # [DEFAULT: true]
-"privacy.cpd.offlineApps" = F; # [DEFAULT: false]
-"privacy.clearHistory.cookiesAndStorage" = F;
-   # "privacy.cpd.openWindows" = F; # Session Restore
-   # "privacy.cpd.passwords" = F;
-   # "privacy.cpd.siteSettings" = F;
-   # "privacy.clearHistory.siteSettings" = F;
-
-/** SANITIZE MANUAL: TIMERANGE ***/
-/* 2840: set "Time range to clear" for "Clear Data" (2820) and "Clear History" (2830)
- * Firefox remembers your last choice. This will reset the value when you start Firefox
- * 0=everything, 1=last hour, 2=last two hours, 3=last four hours, 4=today
- * [NOTE] Values 5 (last 5 minutes) and 6 (last 24 hours) are not listed in the dropdown,
- * which will display a blank value, and are not guaranteed to work ***/
-"privacy.sanitize.timeSpan" = 0;
-
-/*** [SECTION 4000]: FPP (fingerprintingProtection)
-   RFP (4501) overrides FPP
-
-   In FF118+ FPP is on by default in private windows (4001) and in FF119+ is controlled
-   by ETP (2701). FPP will also use Remote Services in future to relax FPP protections
-   on a per site basis for compatibility (4004).
-
-   https:#searchfox.org/mozilla-central/source/toolkit/components/resistfingerprinting/RFPTargetsDefault.inc
-
-   1826408 - restrict fonts to system (kBaseFonts + kLangPackFonts) (Windows, Mac, some Linux)
-      https:#searchfox.org/mozilla-central/search?path=StandardFonts*.inc
-   1858181 - subtly randomize canvas per eTLD+1, per session and per window-mode (FF120+)
-***/
+          # [SECTION 4000]: FPP (fingerprintingProtection)
 /* 4001: enable FPP in PB mode [FF114+]
  * [NOTE] In FF119+, FPP for all modes (7016) is enabled with ETP Strict (2701) ***/
-   # "privacy.fingerprintingProtection.pbmode" = T; # [DEFAULT: true FF118+]
+   # "privacy.fingerprintingProtection.pbmode" = T;
 /* 4002: set global FPP overrides [FF114+]
  * uses "RFPTargets" [1] which despite the name these are not used by RFP
  * e.g. "+AllTargets,-CSSPrefersColorScheme,-JSDateTimeUTC" = all targets but allow prefers-color-scheme and do not change timezone
@@ -575,8 +444,8 @@ in {
  * [NOTE] pbmode applies if true and the original pref is false
  * [SETUP-WEB] RFP can cause some website breakage: mainly canvas, use a canvas site exception via the urlbar.
  * RFP also has a few side effects: mainly that timezone is GMT, and websites will prefer light theme ***/
-   # "privacy.resistFingerprinting" = T; # [FF41+]
-   # "privacy.resistFingerprinting.pbmode" = T; # [FF114+]
+   # "privacy.resistFingerprinting" = T;
+   # "privacy.resistFingerprinting.pbmode" = T;
 /* 4502: set RFP new window size max rounded values [FF55+]
  * [SETUP-CHROME] sizes round down in hundreds: width to 200s and height to 100s, to fit your screen
  * [1] https:#bugzilla.mozilla.org/1330882 ***/
@@ -595,8 +464,8 @@ in {
  * [WARNING] DO NOT USE: the dimension pref is only meant for testing
  * [1] https:#bugzilla.mozilla.org/1407366
  * [2] https:#hg.mozilla.org/mozilla-central/rev/6d2d7856e468#l2.32 ***/
-   # "privacy.resistFingerprinting.letterboxing" = T; # [HIDDEN PREF]
-   # "privacy.resistFingerprinting.letterboxing.dimensions" = E; # [HIDDEN PREF]
+   # "privacy.resistFingerprinting.letterboxing" = T;
+   # "privacy.resistFingerprinting.letterboxing.dimensions" = E;
 /* 4505: disable RFP by domain [FF91+] ***/
    # "privacy.resistFingerprinting.exemptedDomains" = "*.example.invalid";
 /* 4506: disable RFP spoof english prompt [FF59+]
@@ -607,7 +476,7 @@ in {
 "privacy.spoof_english" = 1;
 /* 4510: disable using system colors
  * [SETTING] General>Language and Appearance>Fonts and Colors>Colors>Use system colors ***/
-"browser.display.use_system_colors" = F; # [DEFAULT: false NON-WINDOWS]
+"browser.display.use_system_colors" = F;
 /* 4512: enforce links targeting new windows to open in a new tab instead
  * 1=most recent window or tab, 2=new window, 3=new tab
  * Stops malicious window sizes and some screen resolution leaks.
@@ -615,7 +484,7 @@ in {
  * [SETTING] General>Tabs>Open links in tabs instead of new windows
  * [TEST] https:#arkenfox.github.io/TZP/tzp.html#screen
  * [1] https:#gitlab.torproject.org/tpo/applications/tor-browser/-/issues/9881 ***/
-"browser.link.open_newwindow" = 3; # [DEFAULT: 3]
+"browser.link.open_newwindow" = 3;
 /* 4513: set all open window methods to abide by "browser.link.open_newwindow" (4512)
  * [1] https:#searchfox.org/mozilla-central/source/dom/tests/browser/browser_test_new_window_from_content.js ***/
 "browser.link.open_newwindow.restriction" = 0;
@@ -647,7 +516,7 @@ in {
 /* 5004: disable permissions manager from writing to disk [FF41+] [RESTART]
  * [NOTE] This means any permission changes are session only
  * [1] https:#bugzilla.mozilla.org/967812 ***/
-   # "permissions.memory_only" = T; # [HIDDEN PREF]
+   # "permissions.memory_only" = T;
 /* 5005: disable intermediate certificate caching [FF41+] [RESTART]
  * [NOTE] This affects login/cert/key dbs. The effect is all credentials are session-only.
  * Saved logins and passwords are not available. Reset the pref and restart to return them ***/
@@ -672,7 +541,7 @@ in {
    # "browser.urlbar.suggest.history" = F;
    # "browser.urlbar.suggest.bookmark" = F;
    # "browser.urlbar.suggest.openpage" = F;
-   # "browser.urlbar.suggest.topsites" = F; # [FF78+]
+   # "browser.urlbar.suggest.topsites" = F;
 /* 5011: disable location bar dropdown
  * This value controls the total number of entries to appear in the location bar dropdown ***/
    # "browser.urlbar.maxRichResults" = 0;
@@ -697,12 +566,12 @@ in {
  * is "detect" (default), then the UI will show. Stored data is not secure, uses JSON
  * [SETTING] Privacy & Security>Forms and Autofill>Autofill addresses
  * [1] https:#wiki.mozilla.org/Firefox/Features/Form_Autofill ***/
-   # "extensions.formautofill.addresses.enabled" = F; # [FF55+]
-   # "extensions.formautofill.creditCards.enabled" = F; # [FF56+]
+   # "extensions.formautofill.addresses.enabled" = F;
+   # "extensions.formautofill.creditCards.enabled" = F;
 /* 5018: limit events that can cause a pop-up ***/
    # "dom.popup_allowed_events" = "click dblclick mousedown pointerdown";
 /* 5019: disable page thumbnail collection ***/
-   # "browser.pagethumbnails.capturing_disabled" = T; # [HIDDEN PREF]
+   # "browser.pagethumbnails.capturing_disabled" = T;
 /* 5020: disable Windows native notifications and use app notications instead [FF111+] [WINDOWS] ***/
    # "alerts.useSystemBackend.windows.notificationserver.enabled" = F;
 /* 5021: disable location bar using search
@@ -718,10 +587,10 @@ in {
 ***/
 /* 5501: disable MathML (Mathematical Markup Language) [FF51+]
  * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=mathml ***/
-   # "mathml.disabled" = T; # 1173199
+   # "mathml.disabled" = T;
 /* 5502: disable in-content SVG (Scalable Vector Graphics) [FF53+]
  * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=firefox+svg ***/
-   # "svg.disabled" = T; # 1216893
+   # "svg.disabled" = T;
 /* 5503: disable graphite
  * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=firefox+graphite
  * [2] https:#en.wikipedia.org/wiki/Graphite_(SIL) ***/
@@ -738,7 +607,7 @@ in {
  * [2] https:#microsoftedge.github.io/edgevr/posts/Super-Duper-Secure-Mode/ ***/
    # "javascript.options.ion" = F;
    # "javascript.options.baselinejit" = F;
-   # "javascript.options.jit_trustedprincipals" = T; # [FF75+] [HIDDEN PREF]
+   # "javascript.options.jit_trustedprincipals" = T;
 /* 5506: disable WebAssembly [FF52+]
  * Vulnerabilities [1] have increasingly been found, including those known and fixed
  * in native programs years ago [2]. WASM has powerful low-level access, making
@@ -773,36 +642,36 @@ in {
  * Firefox uses the system DNS to initially resolve the IP address of your DoH server.
  * When set to a valid, working value that matches your "network.trr.uri" (0712) Firefox
  * won't use the system DNS. If the IP doesn't match then DoH won't work ***/
-   # "network.trr.bootstrapAddr" = "10.0.0.1"; # [HIDDEN PREF]
+   # "network.trr.bootstrapAddr" = "10.0.0.1";
 
 # [SECTION 6000]: DON'T TOUCH
 /* 6001: enforce Firefox blocklist
  * [WHY] It includes updates for "revoked certificates"
  * [1] https:#blog.mozilla.org/security/2015/03/03/revoking-intermediate-certificates-introducing-onecrl/ ***/
-"extensions.blocklist.enabled" = T; # [DEFAULT: true]
+"extensions.blocklist.enabled" = T;
 /* 6002: enforce no referer spoofing
  * [WHY] Spoofing can affect CSRF (Cross-Site Request Forgery) protections ***/
-"network.http.referer.spoofSource" = F; # [DEFAULT: false]
+"network.http.referer.spoofSource" = F;
 /* 6004: enforce a security delay on some confirmation dialogs such as install, open/save
  * [1] https:#www.squarefree.com/2004/07/01/race-conditions-in-security-dialogs/ ***/
-"security.dialog_enable_delay" = 1000; # [DEFAULT: 1000]
+"security.dialog_enable_delay" = 1000;
 /* 6008: enforce no First Party Isolation [FF51+]
  * [WARNING] Replaced with network partitioning (FF85+) and TCP (2701), and enabling FPI
  * disables those. FPI is no longer maintained except at Tor Project for Tor Browser's config ***/
-"privacy.firstparty.isolate" = F; # [DEFAULT: false]
+"privacy.firstparty.isolate" = F;
 /* 6009: enforce SmartBlock shims (about:compat) [FF81+]
  * [1] https:#blog.mozilla.org/security/2021/03/23/introducing-smartblock/ ***/
-"extensions.webcompat.enable_shims" = T; # [HIDDEN PREF] [DEFAULT: true]
+"extensions.webcompat.enable_shims" = T;
 /* 6010: enforce no TLS 1.0/1.1 downgrades
  * [TEST] https:#tls-v1-1.badssl.com:1010/ ***/
-"security.tls.version.enable-deprecated" = F; # [DEFAULT: false]
+"security.tls.version.enable-deprecated" = F;
 /* 6011: enforce disabling of Web Compatibility Reporter [FF56+]
  * Web Compatibility Reporter adds a "Report Site Issue" button to send data to Mozilla
  * [WHY] To prevent wasting Mozilla's time with a custom setup ***/
-"extensions.webcompat-reporter.enabled" = F; # [DEFAULT: false]
+"extensions.webcompat-reporter.enabled" = F;
 /* 6012: enforce Quarantined Domains [FF115+]
  * [WHY] https:#support.mozilla.org/kb/quarantined-domains */
-"extensions.quarantinedDomains.enabled" = T; # [DEFAULT: true]
+"extensions.quarantinedDomains.enabled" = T;
 /* 6050: prefsCleaner: previously active items removed from arkenfox 115-127 ***/
    # "accessibility.force_disabled" = E;
    # "browser.urlbar.dnsResolveSingleWordsAfterSearch" = E;
@@ -832,7 +701,7 @@ in {
    # "permissions.default.camera" = 0;
    # "permissions.default.microphone" = 0;
    # "permissions.default.desktop-notification" = 0;
-   # "permissions.default.xr" = 0; # Virtual Reality
+   # "permissions.default.xr" = 0;
 /* 7003: disable non-modern cipher suites [1]
  * [WHY] Passive fingerprinting. Minimal/non-existent threat of downgrade attacks
  * [1] https:#browserleaks.com/ssl ***/
@@ -840,13 +709,13 @@ in {
    # "security.ssl3.ecdhe_ecdsa_aes_256_sha" = F;
    # "security.ssl3.ecdhe_rsa_aes_128_sha" = F;
    # "security.ssl3.ecdhe_rsa_aes_256_sha" = F;
-   # "security.ssl3.rsa_aes_128_gcm_sha256" = F; # no PFS
-   # "security.ssl3.rsa_aes_256_gcm_sha384" = F; # no PFS
-   # "security.ssl3.rsa_aes_128_sha" = F; # no PFS
-   # "security.ssl3.rsa_aes_256_sha" = F; # no PFS
+   # "security.ssl3.rsa_aes_128_gcm_sha256" = F;
+   # "security.ssl3.rsa_aes_256_gcm_sha384" = F;
+   # "security.ssl3.rsa_aes_128_sha" = F;
+   # "security.ssl3.rsa_aes_256_sha" = F;
 /* 7004: control TLS versions
  * [WHY] Passive fingerprinting and security ***/
-   # "security.tls.version.min" = 3; # [DEFAULT: 3]
+   # "security.tls.version.min" = 3;
    # "security.tls.version.max" = 4;
 /* 7005: disable SSL session IDs [FF36+]
  * [WHY] Passive fingerprinting and perf costs. These are session-only
@@ -854,8 +723,8 @@ in {
    # "security.ssl.disable_session_identifiers" = T;
 /* 7006: onions
  * [WHY] Firefox doesn't support hidden services. Use Tor Browser ***/
-   # "dom.securecontext.allowlist_onions" = T; # [FF97+] 1382359/1744006
-   # "network.http.referer.hideOnionSource" = T; # 1305144
+   # "dom.securecontext.allowlist_onions" = T;
+   # "network.http.referer.hideOnionSource" = T;
 /* 7007: referers
  * [WHY] Only cross-origin referers (1602, 5510) matter ***/
    # "network.http.sendRefererHeader" = 2;
@@ -863,8 +732,8 @@ in {
 /* 7008: set the default Referrer Policy [FF59+]
  * 0=no-referer, 1=same-origin, 2=strict-origin-when-cross-origin, 3=no-referrer-when-downgrade
  * [WHY] Defaults are fine. They can be overridden by a site-controlled Referrer Policy ***/
-   # "network.http.referer.defaultPolicy" = 2; # [DEFAULT: 2]
-   # "network.http.referer.defaultPolicy.pbmode" = 2; # [DEFAULT: 2]
+   # "network.http.referer.defaultPolicy" = 2;
+   # "network.http.referer.defaultPolicy.pbmode" = 2;
 /* 7010: disable HTTP Alternative Services [FF37+]
  * [WHY] Already isolated with network partitioning (FF85+) ***/
    # "network.http.altsvc.enabled" = F;
@@ -875,7 +744,7 @@ in {
  * [WHY] Breakage, font fallback is equivalency, also RFP
  * [1] https:#bugzilla.mozilla.org/789788
  * [2] https:#gitlab.torproject.org/legacy/trac/-/issues/8455 ***/
-   # "gfx.downloadable_fonts.enabled" = F; # [FF41+]
+   # "gfx.downloadable_fonts.enabled" = F;
    # "gfx.downloadable_fonts.fallback_delay" = -1;
 /* 7013: disable Clipboard API
  * [WHY] Fingerprintable. Breakage. Cut/copy/paste require user
@@ -883,24 +752,24 @@ in {
    # "dom.event.clipboardevents.enabled" = F;
 /* 7014: disable System Add-on updates
  * [WHY] It can compromise security. System addons ship with prefs, use those ***/
-   # "extensions.systemAddon.update.enabled" = F; # [FF62+]
-   # "extensions.systemAddon.update.url" = E; # [FF44+]
+   # "extensions.systemAddon.update.enabled" = F;
+   # "extensions.systemAddon.update.url" = E;
 /* 7015: enable the DNT (Do Not Track) HTTP header
  * [WHY] DNT is enforced with Tracking Protection which is used in ETP Strict (2701) ***/
    # "privacy.donottrackheader.enabled" = T;
 /* 7016: customize ETP settings
  * [NOTE] FPP (fingerprintingProtection) is ignored when RFP (4501) is enabled
  * [WHY] Arkenfox only supports strict (2701) which sets these at runtime ***/
-   # "network.cookie.cookieBehavior" = 5; # [DEFAULT: 5]
-   # "privacy.fingerprintingProtection" = T; # [FF114+] [ETP FF119+]
+   # "network.cookie.cookieBehavior" = 5;
+   # "privacy.fingerprintingProtection" = T;
    # "network.http.referer.disallowCrossSiteRelaxingDefault" = T;
-   # "network.http.referer.disallowCrossSiteRelaxingDefault.top_navigation" = T; # [FF100+]
-   # "privacy.partition.network_state.ocsp_cache" = T; # [DEFAULT: true FF123+]
-   # "privacy.query_stripping.enabled" = T; # [FF101+]
+   # "network.http.referer.disallowCrossSiteRelaxingDefault.top_navigation" = T;
+   # "privacy.partition.network_state.ocsp_cache" = T;
+   # "privacy.query_stripping.enabled" = T;
    # "privacy.trackingprotection.enabled" = T;
    # "privacy.trackingprotection.socialtracking.enabled" = T;
-   # "privacy.trackingprotection.cryptomining.enabled" = T; # [DEFAULT: true]
-   # "privacy.trackingprotection.fingerprinting.enabled" = T; # [DEFAULT: true]
+   # "privacy.trackingprotection.cryptomining.enabled" = T;
+   # "privacy.trackingprotection.fingerprinting.enabled" = T;
 /* 7017: disable service workers
  * [WHY] Already isolated with TCP (2701) behind a pref (2710) ***/
    # "dom.serviceWorkers.enabled" = F;
@@ -955,7 +824,7 @@ in {
 
 # [SECTION 9000]: NON-PROJECT RELATED
 /* 9001: disable welcome notices ***/
-"browser.startup.homepage_override.mstone" = "ignore"; # [HIDDEN PREF]
+"browser.startup.homepage_override.mstone" = "ignore";
 /* 9002: disable General>Browsing>Recommend extensions/features as you browse [FF67+] ***/
 "browser.newtabpage.activity-stream.asrouter.userprefs.cfr.addons" = F;
 "browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features" = F;
@@ -969,7 +838,7 @@ in {
 # FF116
 # 4506: set RFP's font visibility level (1402) [FF94+]
    # [-] https:#bugzilla.mozilla.org/1838415
-   # "layout.css.font-visibility.resistFingerprinting" = 1; # [DEFAULT: 1]
+   # "layout.css.font-visibility.resistFingerprinting" = 1;
 # FF117
 # 1221: disable Windows Microsoft Family Safety cert [FF50+] [WINDOWS]
    # 0=disable detecting Family Safety mode and importing the root
@@ -1006,7 +875,7 @@ in {
    # [SETUP-WEB] May break some input methods e.g xim/ibus for CJK languages [1]
    # [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=867501,1629630
    # [-] https:#bugzilla.mozilla.org/1846224
-   # "javascript.use_us_english_locale" = T; # [HIDDEN PREF]
+   # "javascript.use_us_english_locale" = T;
 # 0711: disable skipping DoH when parental controls are enabled [FF70+]
    # [-] https:#bugzilla.mozilla.org/1586941
 "network.dns.skipTRR-when-parental-control-enabled" = F;
@@ -1029,7 +898,7 @@ in {
    # [1] https:#bugzilla.mozilla.org/1381938
    # [2] https:#bugzilla.mozilla.org/1411425
    # [-] https:#bugzilla.mozilla.org/1848899
-"widget.non-native-theme.enabled" = T; # [DEFAULT: true]
+"widget.non-native-theme.enabled" = T;
 # ***/
         };
       };
