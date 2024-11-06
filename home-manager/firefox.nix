@@ -363,148 +363,25 @@ in {
           "privacy.sanitize.timeSpan" = lock 0;
 
           # [SECTION 4000]: FPP (fingerprintingProtection)
-/* 4001: enable FPP in PB mode [FF114+]
- * [NOTE] In FF119+, FPP for all modes (7016) is enabled with ETP Strict (2701) ***/
-   # "privacy.fingerprintingProtection.pbmode" = T;
-/* 4002: set global FPP overrides [FF114+]
- * uses "RFPTargets" [1] which despite the name these are not used by RFP
- * e.g. "+AllTargets,-CSSPrefersColorScheme,-JSDateTimeUTC" = all targets but allow prefers-color-scheme and do not change timezone
- * e.g. "-AllTargets,+CanvasRandomization,+JSDateTimeUTC" = no targets but do use FPP canvas and change timezone
- * [NOTE] Not supported by arkenfox. Either use RFP or FPP at defaults
- * [1] https:#searchfox.org/mozilla-central/source/toolkit/components/resistfingerprinting/RFPTargets.inc ***/
-   # "privacy.fingerprintingProtection.overrides" = E;
-/* 4003: set granular FPP overrides
- * JSON format: e.g."[{\"firstPartyDomain\": \"netflix.com\", \"overrides\": \"-CanvasRandomization,-FrameRate,\"}]"
- * [NOTE] Not supported by arkenfox. Either use RFP or FPP at defaults ***/
-   # "privacy.fingerprintingProtection.granularOverrides" = E;
-/* 4004: disable remote FPP overrides [FF127+] ***/
-   # "privacy.fingerprintingProtection.remoteOverrides.enabled" = F;
+          "privacy.fingerprintingProtection.pbmode" = T;
 
-/*** [SECTION 4500]: OPTIONAL RFP (resistFingerprinting)
-   RFP overrides FPP (4000)
+          # [SECTION 4500]: OPTIONAL RFP (resistFingerprinting)
+          "privacy.resistFingerprinting" = T; # WARN: this might be overkill / too agressive for everyday use
+          "privacy.resistFingerprinting.pbmode" = T;
+          "privacy.window.maxInnerWidth" = 1600;
+          "privacy.window.maxInnerHeight" = 900;
+          "privacy.resistFingerprinting.block_mozAddonManager" = T; # NOTE: To allow extensions to work on AMO, you also need 2662
+          "privacy.resistFingerprinting.letterboxing" = T;
+          "privacy.resistFingerprinting.letterboxing.dimensions" = E; # TODO: might need to set some dimensions
+          # "privacy.resistFingerprinting.exemptedDomains" = "*.example.invalid";
+          "privacy.spoof_english" = 2;
+          "browser.display.use_system_colors" = F;
+          "browser.link.open_newwindow" = 3;
+          "browser.link.open_newwindow.restriction" = 0;
+          # "webgl.disabled" = T;
 
-   FF128+ Arkenfox by default uses FPP (automatically enabled with ETP Strict). For most people
-   this is all you need. To use RFP instead, add RFP (4501) to your overrides, and optionally
-   add letterboxing (4504), spoof_english (4506), and webgl (4520).
-
-   RFP is an all-or-nothing buy in: you cannot pick and choose what parts you want
-   [TEST] https:#arkenfox.github.io/TZP/tzp.html
-
-   [WARNING] DO NOT USE extensions to alter RFP protected metrics
-
-    418986 - limit window.screen & CSS media queries (FF41)
-   1281949 - spoof screen orientation (FF50)
-   1360039 - spoof navigator.hardwareConcurrency as 2 (FF55)
- FF56
-   1333651 - spoof User Agent & Navigator API
-      version: android version spoofed as ESR (FF119 or lower)
-      OS: JS spoofed as Windows 10, OS 10.15, Android 10, or Linux | HTTP Headers spoofed as Windows or Android
-   1369319 - disable device sensor API
-   1369357 - disable site specific zoom
-   1337161 - hide gamepads from content
-   1372072 - spoof network information API as "unknown" when dom.netinfo.enabled = true
-   1333641 - reduce fingerprinting in WebSpeech API
- FF57
-   1369309 - spoof media statistics
-   1382499 - reduce screen co-ordinate fingerprinting in Touch API
-   1217290 & 1409677 - enable some fingerprinting resistance for WebGL
-   1354633 - limit MediaError.message to a whitelist
- FF58+
-   1372073 - spoof/block fingerprinting in MediaDevices API (FF59)
-      Spoof: enumerate devices as one "Internal Camera" and one "Internal Microphone"
-      Block: suppresses the ondevicechange event
-   1039069 - warn when language prefs are not set to "en*" (FF59)
-   1222285 & 1433592 - spoof keyboard events and suppress keyboard modifier events (FF59)
-      Spoofing mimics the content language of the document. Currently it only supports en-US.
-      Modifier events suppressed are SHIFT and both ALT keys. Chrome is not affected.
-   1337157 - disable WebGL debug renderer info (FF60)
-   1459089 - disable OS locale in HTTP Accept-Language headers (ANDROID) (FF62)
-   1479239 - return "no-preference" with prefers-reduced-motion (FF63)
-   1363508 - spoof/suppress Pointer Events (FF64)
-   1492766 - spoof pointerEvent.pointerid (FF65)
-   1485266 - disable exposure of system colors to CSS or canvas (FF67)
-   1494034 - return "light" with prefers-color-scheme (FF67)
-   1564422 - spoof audioContext outputLatency (FF70)
-   1595823 - return audioContext sampleRate as 44100 (FF72)
-   1607316 - spoof pointer as coarse and hover as none (ANDROID) (FF74)
-   1621433 - randomize canvas (previously FF58+ returned an all-white canvas) (FF78)
-   1506364 - return "no-preference" with prefers-contrast (FF80)
-   1653987 - limit font visibility to bundled and "Base Fonts" (Windows, Mac, some Linux) (FF80)
-   1461454 - spoof smooth=true and powerEfficient=false for supported media in MediaCapabilities (FF82)
-    531915 - use fdlibm's sin, cos and tan in jsmath (FF93, ESR91.1)
-   1756280 - enforce navigator.pdfViewerEnabled as true and plugins/mimeTypes as hard-coded values (FF100-115)
-   1692609 - reduce JS timing precision to 16.67ms (previously FF55+ was 100ms) (FF102)
-   1422237 - return "srgb" with color-gamut (FF110)
-   1794628 - return "none" with inverted-colors (FF114)
-   1554751 - return devicePixelRatio as 2 (previously FF41+ was 1) (FF127)
-   1787790 - normalize system fonts (FF128)
-   1835987 - spoof timezone as Atlantic/Reykjavik (previously FF55+ was UTC) (FF128)
-***/
-/* 4501: enable RFP
- * [NOTE] pbmode applies if true and the original pref is false
- * [SETUP-WEB] RFP can cause some website breakage: mainly canvas, use a canvas site exception via the urlbar.
- * RFP also has a few side effects: mainly that timezone is GMT, and websites will prefer light theme ***/
-   # "privacy.resistFingerprinting" = T;
-   # "privacy.resistFingerprinting.pbmode" = T;
-/* 4502: set RFP new window size max rounded values [FF55+]
- * [SETUP-CHROME] sizes round down in hundreds: width to 200s and height to 100s, to fit your screen
- * [1] https:#bugzilla.mozilla.org/1330882 ***/
-"privacy.window.maxInnerWidth" = 1600;
-"privacy.window.maxInnerHeight" = 900;
-/* 4503: disable mozAddonManager Web API [FF57+]
- * [NOTE] To allow extensions to work on AMO, you also need 2662
- * [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=1384330,1406795,1415644,1453988 ***/
-"privacy.resistFingerprinting.block_mozAddonManager" = T;
-/* 4504: enable letterboxing [FF67+]
- * Dynamically resizes the inner window by applying margins in stepped ranges [2]
- * If you use the dimension pref, then it will only apply those resolutions.
- * The format is "width1xheight1, width2xheight2, ..." (e.g. "800x600, 1000x1000")
- * [SETUP-WEB] This is independent of RFP (4501). If you're not using RFP, or you are but
- * dislike the margins, then flip this pref, keeping in mind that it is effectively fingerprintable
- * [WARNING] DO NOT USE: the dimension pref is only meant for testing
- * [1] https:#bugzilla.mozilla.org/1407366
- * [2] https:#hg.mozilla.org/mozilla-central/rev/6d2d7856e468#l2.32 ***/
-   # "privacy.resistFingerprinting.letterboxing" = T;
-   # "privacy.resistFingerprinting.letterboxing.dimensions" = E;
-/* 4505: disable RFP by domain [FF91+] ***/
-   # "privacy.resistFingerprinting.exemptedDomains" = "*.example.invalid";
-/* 4506: disable RFP spoof english prompt [FF59+]
- * 0=prompt, 1=disabled, 2=enabled
- * [NOTE] When changing from value 2, preferred languages ('intl.accept_languages') is not reset.
- * [SETUP-WEB] when enabled, sets 'en-US, en' for displaying pages and 'en-US' as locale.
- * [SETTING] General>Language>Choose your preferred language for displaying pages>Choose>Request English... ***/
-"privacy.spoof_english" = 1;
-/* 4510: disable using system colors
- * [SETTING] General>Language and Appearance>Fonts and Colors>Colors>Use system colors ***/
-"browser.display.use_system_colors" = F;
-/* 4512: enforce links targeting new windows to open in a new tab instead
- * 1=most recent window or tab, 2=new window, 3=new tab
- * Stops malicious window sizes and some screen resolution leaks.
- * You can still right-click a link and open in a new window
- * [SETTING] General>Tabs>Open links in tabs instead of new windows
- * [TEST] https:#arkenfox.github.io/TZP/tzp.html#screen
- * [1] https:#gitlab.torproject.org/tpo/applications/tor-browser/-/issues/9881 ***/
-"browser.link.open_newwindow" = 3;
-/* 4513: set all open window methods to abide by "browser.link.open_newwindow" (4512)
- * [1] https:#searchfox.org/mozilla-central/source/dom/tests/browser/browser_test_new_window_from_content.js ***/
-"browser.link.open_newwindow.restriction" = 0;
-/* 4520: disable WebGL (Web Graphics Library) ***/
-   # "webgl.disabled" = T;
-
-/*** [SECTION 5000]: OPTIONAL OPSEC
-   Disk avoidance, application data isolation, eyeballs...
-***/
-/* 5001: start Firefox in PB (Private Browsing) mode
- * [NOTE] In this mode all windows are "private windows" and the PB mode icon is not displayed
- * [NOTE] The P in PB mode can be misleading: it means no "persistent" disk state such as history,
- * caches, searches, cookies, localStorage, IndexedDB etc (which you can achieve in normal mode).
- * In fact, PB mode limits or removes the ability to control some of these, and you need to quit
- * Firefox to clear them. PB is best used as a one off window (Menu>New Private Window) to provide
- * a temporary self-contained new session. Close all private windows to clear the PB session.
- * [SETTING] Privacy & Security>History>Custom Settings>Always use private browsing mode
- * [1] https:#wiki.mozilla.org/Private_Browsing
- * [2] https:#support.mozilla.org/kb/common-myths-about-private-browsing ***/
-   # "browser.privatebrowsing.autostart" = T;
+          # [SECTION 5000]: OPTIONAL OPSEC
+          "browser.privatebrowsing.autostart" = F;
 /* 5002: disable memory cache
  * capacity: -1=determine dynamically (default), 0=none, n=memory capacity in kibibytes ***/
    # "browser.cache.memory.enable" = F;
