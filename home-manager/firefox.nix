@@ -382,401 +382,49 @@ in {
 
           # [SECTION 5000]: OPTIONAL OPSEC
           "browser.privatebrowsing.autostart" = F;
-/* 5002: disable memory cache
- * capacity: -1=determine dynamically (default), 0=none, n=memory capacity in kibibytes ***/
-   # "browser.cache.memory.enable" = F;
-   # "browser.cache.memory.capacity" = 0;
-/* 5003: disable saving passwords
- * [NOTE] This does not clear any passwords already saved
- * [SETTING] Privacy & Security>Logins and Passwords>Ask to save logins and passwords for websites ***/
-   # "signon.rememberSignons" = F;
-/* 5004: disable permissions manager from writing to disk [FF41+] [RESTART]
- * [NOTE] This means any permission changes are session only
- * [1] https:#bugzilla.mozilla.org/967812 ***/
-   # "permissions.memory_only" = T;
-/* 5005: disable intermediate certificate caching [FF41+] [RESTART]
- * [NOTE] This affects login/cert/key dbs. The effect is all credentials are session-only.
- * Saved logins and passwords are not available. Reset the pref and restart to return them ***/
-   # "security.nocertdb" = T;
-/* 5006: disable favicons in history and bookmarks
- * [NOTE] Stored as data blobs in favicons.sqlite, these don't reveal anything that your
- * actual history (and bookmarks) already do. Your history is more detailed, so
- * control that instead; e.g. disable history, clear history on exit, use PB mode
- * [NOTE] favicons.sqlite is sanitized on Firefox close ***/
-   # "browser.chrome.site_icons" = F;
-/* 5007: exclude "Undo Closed Tabs" in Session Restore ***/
-   # "browser.sessionstore.max_tabs_undo" = 0;
-/* 5008: disable resuming session from crash
- * [TEST] about:crashparent ***/
-   # "browser.sessionstore.resume_from_crash" = F;
-/* 5009: disable "open with" in download dialog [FF50+]
- * Application data isolation [1]
- * [1] https:#bugzilla.mozilla.org/1281959 ***/
-   # "browser.download.forbid_open_with" = T;
-/* 5010: disable location bar suggestion types
- * [SETTING] Search>Address Bar>When using the address bar, suggest ***/
-   # "browser.urlbar.suggest.history" = F;
-   # "browser.urlbar.suggest.bookmark" = F;
-   # "browser.urlbar.suggest.openpage" = F;
-   # "browser.urlbar.suggest.topsites" = F;
-/* 5011: disable location bar dropdown
- * This value controls the total number of entries to appear in the location bar dropdown ***/
-   # "browser.urlbar.maxRichResults" = 0;
-/* 5012: disable location bar autofill
- * [1] https:#support.mozilla.org/kb/address-bar-autocomplete-firefox#w_url-autocomplete ***/
-   # "browser.urlbar.autoFill" = F;
-/* 5013: disable browsing and download history
- * [NOTE] We also clear history and downloads on exit (2811)
- * [SETTING] Privacy & Security>History>Custom Settings>Remember browsing and download history ***/
-   # "places.history.enabled" = F;
-/* 5014: disable Windows jumplist [WINDOWS] ***/
-   # "browser.taskbar.lists.enabled" = F;
-   # "browser.taskbar.lists.frequent.enabled" = F;
-   # "browser.taskbar.lists.recent.enabled" = F;
-   # "browser.taskbar.lists.tasks.enabled" = F;
-/* 5016: discourage downloading to desktop
- * 0=desktop, 1=downloads (default), 2=custom
- * [SETTING] To set your custom default "downloads": General>Downloads>Save files to ***/
-   # "browser.download.folderList" = 2;
-/* 5017: disable Form Autofill
- * If .supportedCountries includes your region (browser.search.region) and .supported
- * is "detect" (default), then the UI will show. Stored data is not secure, uses JSON
- * [SETTING] Privacy & Security>Forms and Autofill>Autofill addresses
- * [1] https:#wiki.mozilla.org/Firefox/Features/Form_Autofill ***/
-   # "extensions.formautofill.addresses.enabled" = F;
-   # "extensions.formautofill.creditCards.enabled" = F;
-/* 5018: limit events that can cause a pop-up ***/
-   # "dom.popup_allowed_events" = "click dblclick mousedown pointerdown";
-/* 5019: disable page thumbnail collection ***/
-   # "browser.pagethumbnails.capturing_disabled" = T;
-/* 5020: disable Windows native notifications and use app notications instead [FF111+] [WINDOWS] ***/
-   # "alerts.useSystemBackend.windows.notificationserver.enabled" = F;
-/* 5021: disable location bar using search
- * Don't leak URL typos to a search engine, give an error message instead
- * Examples: "secretplace,com", "secretplace/com", "secretplace com", "secret place.com"
- * [NOTE] This does not affect explicit user action such as using search buttons in the
- * dropdown, or using keyword search shortcuts you configure in options (e.g. "d" for DuckDuckGo) ***/
-   # "keyword.enabled" = F;
+          # "browser.cache.memory.enable" = F;
+          # "browser.cache.memory.capacity" = 0;
+          "signon.rememberSignons" = F;
+          "permissions.memory_only" = F;
+          # "security.nocertdb" = T;
+          # "browser.chrome.site_icons" = F;
+          # "browser.sessionstore.max_tabs_undo" = 0;
+          "browser.sessionstore.resume_from_crash" = T;
+          "browser.download.forbid_open_with" = T;
+          "browser.urlbar.suggest.history" = F;
+          "browser.urlbar.suggest.bookmark" = T;
+          "browser.urlbar.suggest.openpage" = T;
+          "browser.urlbar.suggest.topsites" = F;
+          "browser.urlbar.maxRichResults" = 5;
+          # "browser.urlbar.autoFill" = F; # NOTE: unsure
+          # "places.history.enabled" = F;
+          "browser.taskbar.lists.enabled" = F;
+          "browser.taskbar.lists.frequent.enabled" = F;
+          "browser.taskbar.lists.recent.enabled" = F;
+          "browser.taskbar.lists.tasks.enabled" = F;
+          "browser.download.folderList" = 2;
+          "extensions.formautofill.addresses.enabled" = F;
+          "extensions.formautofill.creditCards.enabled" = F;
+          "dom.popup_allowed_events" = "click dblclick mousedown pointerdown";
+          "browser.pagethumbnails.capturing_disabled" = T; # TODO: decide
+          "alerts.useSystemBackend.windows.notificationserver.enabled" = F;
+          "keyword.enabled" = F;
 
-/*** [SECTION 5500]: OPTIONAL HARDENING
-   Not recommended. Overriding these can cause breakage and performance issues,
-   they are mostly fingerprintable, and the threat model is practically nonexistent
-***/
-/* 5501: disable MathML (Mathematical Markup Language) [FF51+]
- * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=mathml ***/
-   # "mathml.disabled" = T;
-/* 5502: disable in-content SVG (Scalable Vector Graphics) [FF53+]
- * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=firefox+svg ***/
-   # "svg.disabled" = T;
-/* 5503: disable graphite
- * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=firefox+graphite
- * [2] https:#en.wikipedia.org/wiki/Graphite_(SIL) ***/
-   # "gfx.font_rendering.graphite.enabled" = F;
-/* 5504: disable asm.js [FF22+]
- * [1] http:#asmjs.org/
- * [2] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=asm.js
- * [3] https:#rh0dev.github.io/blog/2017/the-return-of-the-jit/ ***/
-   # "javascript.options.asmjs" = F;
-/* 5505: disable Ion and baseline JIT to harden against JS exploits [RESTART]
- * [NOTE] When both Ion and JIT are disabled, and trustedprincipals
- * is enabled, then Ion can still be used by extensions (1599226)
- * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=firefox+jit
- * [2] https:#microsoftedge.github.io/edgevr/posts/Super-Duper-Secure-Mode/ ***/
-   # "javascript.options.ion" = F;
-   # "javascript.options.baselinejit" = F;
-   # "javascript.options.jit_trustedprincipals" = T;
-/* 5506: disable WebAssembly [FF52+]
- * Vulnerabilities [1] have increasingly been found, including those known and fixed
- * in native programs years ago [2]. WASM has powerful low-level access, making
- * certain attacks (brute-force) and vulnerabilities more possible
- * [STATS] ~0.2% of websites, about half of which are for cryptomining / malvertising [2][3]
- * [1] https:#cve.mitre.org/cgi-bin/cvekey.cgi?keyword=wasm
- * [2] https:#spectrum.ieee.org/tech-talk/telecom/security/more-worries-over-the-security-of-web-assembly
- * [3] https:#www.zdnet.com/article/half-of-the-websites-using-webassembly-use-it-for-malicious-purposes ***/
-   # "javascript.options.wasm" = F;
-/* 5507: disable rendering of SVG OpenType fonts ***/
-   # "gfx.font_rendering.opentype_svg.enabled" = F;
-/* 5508: disable all DRM content (EME: Encryption Media Extension)
- * Optionally hide the UI setting which also disables the DRM prompt
- * [SETTING] General>DRM Content>Play DRM-controlled content
- * [TEST] https:#bitmovin.com/demos/drm
- * [1] https:#www.eff.org/deeplinks/2017/10/drms-dead-canary-how-we-just-lost-web-what-we-learned-it-and-what-we-need-do-next ***/
-   # "media.eme.enabled" = F;
-   # "browser.eme.ui.enabled" = F;
-/* 5509: disable IPv6 if using a VPN
- * This is an application level fallback. Disabling IPv6 is best done at an OS/network
- * level, and/or configured properly in system wide VPN setups.
- * [NOTE] PHP defaults to IPv6 with "localhost". Use "php -S 127.0.0.1:PORT"
- * [SETUP-WEB] PR_CONNECT_RESET_ERROR
- * [TEST] https:#ipleak.org/
- * [1] https:#www.internetsociety.org/tag/ipv6-security/ (Myths 2,4,5,6) ***/
-   # "network.dns.disableIPv6" = T;
-/* 5510: control when to send a cross-origin referer
- * 0=always (default), 1=only if base domains match, 2=only if hosts match
- * [NOTE] Will cause breakage: older modems/routers and some sites e.g banks, vimeo, icloud, instagram ***/
-   # "network.http.referer.XOriginPolicy" = 2;
-/* 5511: set DoH bootstrap address [FF89+]
- * Firefox uses the system DNS to initially resolve the IP address of your DoH server.
- * When set to a valid, working value that matches your "network.trr.uri" (0712) Firefox
- * won't use the system DNS. If the IP doesn't match then DoH won't work ***/
-   # "network.trr.bootstrapAddr" = "10.0.0.1";
+          # [SECTION 6000]: DON'T TOUCH
+          "extensions.blocklist.enabled" = T;
+          "network.http.referer.spoofSource" = F;
+          "security.dialog_enable_delay" = 1000;
+          "privacy.firstparty.isolate" = F;
+          "extensions.webcompat.enable_shims" = T;
+          "security.tls.version.enable-deprecated" = F;
+          "extensions.webcompat-reporter.enabled" = F;
+          "extensions.quarantinedDomains.enabled" = T;
 
-# [SECTION 6000]: DON'T TOUCH
-/* 6001: enforce Firefox blocklist
- * [WHY] It includes updates for "revoked certificates"
- * [1] https:#blog.mozilla.org/security/2015/03/03/revoking-intermediate-certificates-introducing-onecrl/ ***/
-"extensions.blocklist.enabled" = T;
-/* 6002: enforce no referer spoofing
- * [WHY] Spoofing can affect CSRF (Cross-Site Request Forgery) protections ***/
-"network.http.referer.spoofSource" = F;
-/* 6004: enforce a security delay on some confirmation dialogs such as install, open/save
- * [1] https:#www.squarefree.com/2004/07/01/race-conditions-in-security-dialogs/ ***/
-"security.dialog_enable_delay" = 1000;
-/* 6008: enforce no First Party Isolation [FF51+]
- * [WARNING] Replaced with network partitioning (FF85+) and TCP (2701), and enabling FPI
- * disables those. FPI is no longer maintained except at Tor Project for Tor Browser's config ***/
-"privacy.firstparty.isolate" = F;
-/* 6009: enforce SmartBlock shims (about:compat) [FF81+]
- * [1] https:#blog.mozilla.org/security/2021/03/23/introducing-smartblock/ ***/
-"extensions.webcompat.enable_shims" = T;
-/* 6010: enforce no TLS 1.0/1.1 downgrades
- * [TEST] https:#tls-v1-1.badssl.com:1010/ ***/
-"security.tls.version.enable-deprecated" = F;
-/* 6011: enforce disabling of Web Compatibility Reporter [FF56+]
- * Web Compatibility Reporter adds a "Report Site Issue" button to send data to Mozilla
- * [WHY] To prevent wasting Mozilla's time with a custom setup ***/
-"extensions.webcompat-reporter.enabled" = F;
-/* 6012: enforce Quarantined Domains [FF115+]
- * [WHY] https:#support.mozilla.org/kb/quarantined-domains */
-"extensions.quarantinedDomains.enabled" = T;
-/* 6050: prefsCleaner: previously active items removed from arkenfox 115-127 ***/
-   # "accessibility.force_disabled" = E;
-   # "browser.urlbar.dnsResolveSingleWordsAfterSearch" = E;
-   # "geo.provider.network.url" = E;
-   # "geo.provider.network.logging.enabled" = E;
-   # "geo.provider.use_gpsd" = E;
-   # "network.protocol-handler.external.ms-windows-store" = E;
-   # "privacy.partition.always_partition_third_party_non_cookie_storage" = E;
-   # "privacy.partition.always_partition_third_party_non_cookie_storage.exempt_sessionstorage" = E;
-   # "privacy.partition.serviceWorkers" = E;
-
-# [SECTION 7000]: DON'T BOTHER
-/* 7001: disable APIs
- * Location-Aware Browsing, Full Screen
- * [WHY] The API state is easily fingerprintable.
- * Geo is behind a prompt (7002). Full screen requires user interaction ***/
-   # "geo.enabled" = F;
-   # "full-screen-api.enabled" = F;
-/* 7002: set default permissions
- * Location, Camera, Microphone, Notifications [FF58+] Virtual Reality [FF73+]
- * 0=always ask (default), 1=allow, 2=block
- * [WHY] These are fingerprintable via Permissions API, except VR. Just add site
- * exceptions as allow/block for frequently visited/annoying sites: i.e. not global
- * [SETTING] to add site exceptions: Ctrl+I>Permissions>
- * [SETTING] to manage site exceptions: Options>Privacy & Security>Permissions>Settings ***/
-   # "permissions.default.geo" = 0;
-   # "permissions.default.camera" = 0;
-   # "permissions.default.microphone" = 0;
-   # "permissions.default.desktop-notification" = 0;
-   # "permissions.default.xr" = 0;
-/* 7003: disable non-modern cipher suites [1]
- * [WHY] Passive fingerprinting. Minimal/non-existent threat of downgrade attacks
- * [1] https:#browserleaks.com/ssl ***/
-   # "security.ssl3.ecdhe_ecdsa_aes_128_sha" = F;
-   # "security.ssl3.ecdhe_ecdsa_aes_256_sha" = F;
-   # "security.ssl3.ecdhe_rsa_aes_128_sha" = F;
-   # "security.ssl3.ecdhe_rsa_aes_256_sha" = F;
-   # "security.ssl3.rsa_aes_128_gcm_sha256" = F;
-   # "security.ssl3.rsa_aes_256_gcm_sha384" = F;
-   # "security.ssl3.rsa_aes_128_sha" = F;
-   # "security.ssl3.rsa_aes_256_sha" = F;
-/* 7004: control TLS versions
- * [WHY] Passive fingerprinting and security ***/
-   # "security.tls.version.min" = 3;
-   # "security.tls.version.max" = 4;
-/* 7005: disable SSL session IDs [FF36+]
- * [WHY] Passive fingerprinting and perf costs. These are session-only
- * and isolated with network partitioning (FF85+) and/or containers ***/
-   # "security.ssl.disable_session_identifiers" = T;
-/* 7006: onions
- * [WHY] Firefox doesn't support hidden services. Use Tor Browser ***/
-   # "dom.securecontext.allowlist_onions" = T;
-   # "network.http.referer.hideOnionSource" = T;
-/* 7007: referers
- * [WHY] Only cross-origin referers (1602, 5510) matter ***/
-   # "network.http.sendRefererHeader" = 2;
-   # "network.http.referer.trimmingPolicy" = 0;
-/* 7008: set the default Referrer Policy [FF59+]
- * 0=no-referer, 1=same-origin, 2=strict-origin-when-cross-origin, 3=no-referrer-when-downgrade
- * [WHY] Defaults are fine. They can be overridden by a site-controlled Referrer Policy ***/
-   # "network.http.referer.defaultPolicy" = 2;
-   # "network.http.referer.defaultPolicy.pbmode" = 2;
-/* 7010: disable HTTP Alternative Services [FF37+]
- * [WHY] Already isolated with network partitioning (FF85+) ***/
-   # "network.http.altsvc.enabled" = F;
-/* 7011: disable website control over browser right-click context menu
- * [WHY] Just use Shift-Right-Click ***/
-   # "dom.event.contextmenu.enabled" = F;
-/* 7012: disable icon fonts (glyphs) and local fallback rendering
- * [WHY] Breakage, font fallback is equivalency, also RFP
- * [1] https:#bugzilla.mozilla.org/789788
- * [2] https:#gitlab.torproject.org/legacy/trac/-/issues/8455 ***/
-   # "gfx.downloadable_fonts.enabled" = F;
-   # "gfx.downloadable_fonts.fallback_delay" = -1;
-/* 7013: disable Clipboard API
- * [WHY] Fingerprintable. Breakage. Cut/copy/paste require user
- * interaction, and paste is limited to focused editable fields ***/
-   # "dom.event.clipboardevents.enabled" = F;
-/* 7014: disable System Add-on updates
- * [WHY] It can compromise security. System addons ship with prefs, use those ***/
-   # "extensions.systemAddon.update.enabled" = F;
-   # "extensions.systemAddon.update.url" = E;
-/* 7015: enable the DNT (Do Not Track) HTTP header
- * [WHY] DNT is enforced with Tracking Protection which is used in ETP Strict (2701) ***/
-   # "privacy.donottrackheader.enabled" = T;
-/* 7016: customize ETP settings
- * [NOTE] FPP (fingerprintingProtection) is ignored when RFP (4501) is enabled
- * [WHY] Arkenfox only supports strict (2701) which sets these at runtime ***/
-   # "network.cookie.cookieBehavior" = 5;
-   # "privacy.fingerprintingProtection" = T;
-   # "network.http.referer.disallowCrossSiteRelaxingDefault" = T;
-   # "network.http.referer.disallowCrossSiteRelaxingDefault.top_navigation" = T;
-   # "privacy.partition.network_state.ocsp_cache" = T;
-   # "privacy.query_stripping.enabled" = T;
-   # "privacy.trackingprotection.enabled" = T;
-   # "privacy.trackingprotection.socialtracking.enabled" = T;
-   # "privacy.trackingprotection.cryptomining.enabled" = T;
-   # "privacy.trackingprotection.fingerprinting.enabled" = T;
-/* 7017: disable service workers
- * [WHY] Already isolated with TCP (2701) behind a pref (2710) ***/
-   # "dom.serviceWorkers.enabled" = F;
-/* 7018: disable Web Notifications [FF22+]
- * [WHY] Web Notifications are behind a prompt (7002)
- * [1] https:#blog.mozilla.org/en/products/firefox/block-notification-requests/ ***/
-   # "dom.webnotifications.enabled" = F;
-/* 7019: disable Push Notifications [FF44+]
- * [WHY] Website "push" requires subscription, and the API is required for CRLite (1224)
- * [NOTE] To remove all subscriptions, reset "dom.push.userAgentID"
- * [1] https:#support.mozilla.org/kb/push-notifications-firefox ***/
-   # "dom.push.enabled" = F;
-/* 7020: disable WebRTC (Web Real-Time Communication)
- * [WHY] Firefox desktop uses mDNS hostname obfuscation and the private IP is never exposed until
- * required in TRUSTED scenarios; i.e. after you grant device (microphone or camera) access
- * [TEST] https:#browserleaks.com/webrtc
- * [1] https:#groups.google.com/g/discuss-webrtc/c/6stQXi72BEU/m/2FwZd24UAQAJ
- * [2] https:#datatracker.ietf.org/doc/html/draft-ietf-mmusic-mdns-ice-candidates#section-3.1.1 ***/
-   # "media.peerconnection.enabled" = F;
-/* 7021: enable GPC (Global Privacy Control) in non-PB windows
- * [WHY] Passive and active fingerprinting. Mostly redundant with Tracking Protection
- * in ETP Strict (2701) and sanitizing on close (2800s) ***/
-   # "privacy.globalprivacycontrol.enabled" = T;
-
-/*** [SECTION 8000]: DON'T BOTHER: FINGERPRINTING
-   [WHY] They are insufficient to help anti-fingerprinting and do more harm than good
-   [WARNING] DO NOT USE with RFP. RFP already covers these and they can interfere
-***/
-/* 8001: prefsCleaner: reset items useless for anti-fingerprinting ***/
-   # "browser.display.use_document_fonts" = E;
-   # "browser.zoom.siteSpecific" = E;
-   # "device.sensors.enabled" = E;
-   # "dom.enable_performance" = E;
-   # "dom.enable_resource_timing" = E;
-   # "dom.gamepad.enabled" = E;
-   # "dom.maxHardwareConcurrency" = E;
-   # "dom.w3c_touch_events.enabled" = E;
-   # "dom.webaudio.enabled" = E;
-   # "font.system.whitelist" = E;
-   # "general.appname.override" = E;
-   # "general.appversion.override" = E;
-   # "general.buildID.override" = E;
-   # "general.oscpu.override" = E;
-   # "general.platform.override" = E;
-   # "general.useragent.override" = E;
-   # "media.navigator.enabled" = E;
-   # "media.ondevicechange.enabled" = E;
-   # "media.video_stats.enabled" = E;
-   # "media.webspeech.synth.enabled" = E;
-   # "ui.use_standins_for_native_colors" = E;
-   # "webgl.enable-debug-renderer-info" = E;
-
-# [SECTION 9000]: NON-PROJECT RELATED
-/* 9001: disable welcome notices ***/
-"browser.startup.homepage_override.mstone" = "ignore";
-/* 9002: disable General>Browsing>Recommend extensions/features as you browse [FF67+] ***/
-"browser.newtabpage.activity-stream.asrouter.userprefs.cfr.addons" = F;
-"browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features" = F;
-/* 9004: disable search terms [FF110+]
- * [SETTING] Search>Search Bar>Use the address bar for search and navigation>Show search terms instead of URL... ***/
-"browser.urlbar.showSearchTerms.enabled" = F;
-
-# [SECTION 9999]: DEPRECATED / RENAMED
-/* ESR115.x still uses all the following prefs
-# [NOTE] replace the * with a slash in the line above to re-enable active ones
-# FF116
-# 4506: set RFP's font visibility level (1402) [FF94+]
-   # [-] https:#bugzilla.mozilla.org/1838415
-   # "layout.css.font-visibility.resistFingerprinting" = 1;
-# FF117
-# 1221: disable Windows Microsoft Family Safety cert [FF50+] [WINDOWS]
-   # 0=disable detecting Family Safety mode and importing the root
-   # 1=only attempt to detect Family Safety mode (don't import the root)
-   # 2=detect Family Safety mode and import the root
-   # [1] https:#gitlab.torproject.org/tpo/applications/tor-browser/-/issues/21686
-   # [-] https:#bugzilla.mozilla.org/1844908
-"security.family_safety.mode" = 0;
-# 7018: disable service worker Web Notifications [FF44+]
-   # [WHY] Web Notifications are behind a prompt (7002)
-   # [1] https:#blog.mozilla.org/en/products/firefox/block-notification-requests/
-   # [-] https:#bugzilla.mozilla.org/1842457
-   # "dom.webnotifications.serviceworker.enabled" = F;
-# FF118
-# 1402: limit font visibility (Windows, Mac, some Linux) [FF94+]
-   # Uses hardcoded lists with two parts: kBaseFonts + kLangPackFonts [1], bundled fonts are auto-allowed
-   # In normal windows: uses the first applicable: RFP over TP over Standard
-   # In Private Browsing windows: uses the most restrictive between normal and private
-   # 1=only base system fonts, 2=also fonts from optional language packs, 3=also user-installed fonts
-   # [1] https:#searchfox.org/mozilla-central/search?path=StandardFonts*.inc
-   # [-] https:#bugzilla.mozilla.org/1847599
-   # "layout.css.font-visibility.private" = 1;
-   # "layout.css.font-visibility.standard" = 1;
-   # "layout.css.font-visibility.trackingprotection" = 1;
-# 2623: disable permissions delegation [FF73+]
-   # Currently applies to cross-origin geolocation, camera, mic and screen-sharing
-   # permissions, and fullscreen requests. Disabling delegation means any prompts
-   # for these will show/use their correct 3rd party origin
-   # [1] https:#groups.google.com/forum/#!topic/mozilla.dev.platform/BdFOMAuCGW8/discussion
-   # [-] https:#bugzilla.mozilla.org/1697151
-   # "permissions.delegation.enabled" = F;
-# FF119
-# 0211: use en-US locale regardless of the system or region locale
-   # [SETUP-WEB] May break some input methods e.g xim/ibus for CJK languages [1]
-   # [1] https:#bugzilla.mozilla.org/buglist.cgi?bug_id=867501,1629630
-   # [-] https:#bugzilla.mozilla.org/1846224
-   # "javascript.use_us_english_locale" = T;
-# 0711: disable skipping DoH when parental controls are enabled [FF70+]
-   # [-] https:#bugzilla.mozilla.org/1586941
-"network.dns.skipTRR-when-parental-control-enabled" = F;
-# FF123
-# 0334: disable PingCentre telemetry (used in several System Add-ons) [FF57+]
-   # Defense-in-depth: currently covered by 0331
-   # [-] https:#bugzilla.mozilla.org/1868988
-"browser.ping-centre.telemetry" = F;
-# FF126
-# 9003: disable What's New toolbar icon [FF69+]
-   # [-] https:#bugzilla.mozilla.org/1724300
-"browser.messaging-system.whatsNewPanel.enabled" = F;
-# FF127
-  # 2630: disable content analysis by DLP (Data Loss Prevention) agents - replaced by default_result
-  # [-] https:#bugzilla.mozilla.org/1880314
-"browser.contentanalysis.default_allow" = F;
-# 4511: enforce non-native widget theme
-   # Security: removes/reduces system API calls, e.g. win32k API [1]
-   # Fingerprinting: provides a uniform look and feel across platforms [2]
-   # [1] https:#bugzilla.mozilla.org/1381938
-   # [2] https:#bugzilla.mozilla.org/1411425
-   # [-] https:#bugzilla.mozilla.org/1848899
-"widget.non-native-theme.enabled" = T;
-# ***/
+          # [SECTION 9000]: NON-PROJECT RELATED
+          "browser.startup.homepage_override.mstone" = "ignore";
+          "browser.newtabpage.activity-stream.asrouter.userprefs.cfr.addons" = F;
+          "browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features" = F;
+          "browser.urlbar.showSearchTerms.enabled" = F;
         };
       };
       SearchSuggestEnabled = false; # Enable or disable search suggestions.
