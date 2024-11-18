@@ -5,7 +5,6 @@ alias k='kubectl'
 alias t='terraform'
 alias v='nvim .'
 alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
-alias ns='nix-shell'
 
 # git
 
