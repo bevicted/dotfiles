@@ -92,7 +92,11 @@ common:
 
 .PHONY: link
 link:
-	stow -t "${HOME}" .
+	stow --verbose --target=$$HOME --restow .
 	sudo stow -d ./bin -t /usr/local/bin .
 	sudo stow -d ./etc/X11/xorg.conf.d -t /etc/X11/xorg.conf.d .
+
+.PHONY: link-delete
+link-delete:
+	stow --verbose --target=$$HOME --delete .
 
