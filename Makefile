@@ -1,40 +1,41 @@
 .PHONY: arch-packages
 arch-packages:
 	sudo pacman -S \
-		zsh \
-		git \
-		xorg-xrandr \
+		alacritty \
 		base-devel \
 		coreutils \
-		xsel \
-		man \
-		stow \
-		vim \
-		neovim \
-		tmux \
-		ripgrep \
-		fzf \
-		fd \
-		sad \
 		entr \
-		parallel \
-		jq \
-		yq \
-		timeshift \
-		alacritty \
-		ttf-jetbrains-mono-nerd \
+		fd \
+		fzf \
+		git \
 		git-delta \
-		podman \
+		go \
+		jq \
 		kubectl \
+		man \
 		minikube \
+		neovim \
 		nodejs \ # needed for some Mason LSPs
 		npm \ # needed for some Mason LSPs
+		obisidian \
+		parallel \
+		podman \
 		python \
-		go
+		ripgrep \
+		sad \
+		stow \
+		timeshift \
+		tmux \
+		ttf-jetbrains-mono-nerd \
+		vim \
+		xorg-xrandr \
+		xsel \
+		yq \
+		zsh
 
 .PHONY: arch-aur-packages
 ifeq (, $(shell command -v yay 2> /dev/null))
-arch-aur-packages: yay
+arch-aur-packages: arch-yay
 else
 arch-aur-packages:
 endif
