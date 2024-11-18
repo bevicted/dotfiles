@@ -1,40 +1,41 @@
 .PHONY: arch-packages
 arch-packages:
 	sudo pacman -S \
-		zsh \
-		git \
-		xorg-xrandr \
+		alacritty \
 		base-devel \
 		coreutils \
-		xsel \
-		man \
-		stow \
-		vim \
-		neovim \
-		tmux \
-		ripgrep \
-		fzf \
-		fd \
-		sad \
 		entr \
-		parallel \
-		jq \
-		yq \
-		timeshift \
-		alacritty \
-		ttf-jetbrains-mono-nerd \
+		fd \
+		fzf \
+		git \
 		git-delta \
-		podman \
+		go \
+		jq \
 		kubectl \
+		man \
 		minikube \
+		neovim \
 		nodejs \ # needed for some Mason LSPs
 		npm \ # needed for some Mason LSPs
+		obisidian \
+		parallel \
+		podman \
 		python \
-		go
+		ripgrep \
+		sad \
+		stow \
+		timeshift \
+		tmux \
+		ttf-jetbrains-mono-nerd \
+		vim \
+		xorg-xrandr \
+		xsel \
+		yq \
+		zsh
 
 .PHONY: arch-aur-packages
 ifeq (, $(shell command -v yay 2> /dev/null))
-arch-aur-packages: yay
+arch-aur-packages: arch-yay
 else
 arch-aur-packages:
 endif
@@ -52,27 +53,26 @@ arch-yay:
 .PHONY: osx-packages
 osx-packages:
 	brew install \
-		coreutils \
 		bash \
-		stow \
-		vim \
-		neovim \
-		tmux \
-		ripgrep \
-		fzf \
-		fd \
-		sad \
+		coreutils \
 		entr \
-		parallel \
+		fd \
+		fzf \
+		go
 		jq \
-		yq \
-		git-delta \
-		podman \
 		kubectl \
+		neovim \
 		nodejs \ # needed for some Mason LSPs
 		npm \ # needed for some Mason LSPs
+		parallel \
+		podman \
 		python \
-		go
+		ripgrep \
+		sad \
+		stow \
+		tmux \
+		vim \
+		yq \
 	brew install --cask \
 		alacritty \
 		font-jetbrains-mono-nerd-font
@@ -92,7 +92,11 @@ common:
 
 .PHONY: link
 link:
-	stow -t "${HOME}" .
-	sudo stow -d ./bin -t /usr/local/bin .
-	sudo stow -d ./etc/X11/xorg.conf.d -t /etc/X11/xorg.conf.d .
+	stow --verbose --restow --target=$$HOME .
+	sudo stow --verbose --restow --dir ./bin --target /usr/local/bin .
+	sudo stow --verbose --restow --dir ./etc/X11/xorg.conf.d --target /etc/X11/xorg.conf.d .
+
+.PHONY: link-delete
+link-delete:
+	stow --verbose --target=$$HOME --delete .
 

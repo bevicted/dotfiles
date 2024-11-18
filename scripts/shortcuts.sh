@@ -5,11 +5,6 @@ alias k='kubectl'
 alias t='terraform'
 alias v='nvim .'
 alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
-alias n='nix --extra-experimental-features "nix-command flakes"'
-alias ns='nix-shell --extra-experimental-features "nix-command flakes"'
-alias hm='home-manager --extra-experimental-features "nix-command flakes"'
-alias hms='hm switch'
-alias gui='gitui'
 
 # git
 
