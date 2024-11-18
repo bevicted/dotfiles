@@ -25,24 +25,32 @@ links to docs I find myself revisiting
 - [archwiki](https://archlinux.org)
   - [Display Power Management Signaling](https://wiki.archlinux.org/title/Display_Power_Management_Signaling)
 
-## cli
+## tools
 
-- https://github.com/romkatv/powerlevel10k
-
-### tools
-
-- https://github.com/BurntSushi/ripgrep
-- https://github.com/sharkdp/fd
-- https://github.com/junegunn/fzf
-- https://github.com/sharkdp/bat
-- https://github.com/flightlessmango/MangoHud
-- https://github.com/linuxmint/timeshift
+- [fd](https://github.com/sharkdp/fd)
+- [fzf](https://github.com/junegunn/fzf)
+- [mangohud](https://github.com/flightlessmango/MangoHud)
+- [p10k](https://github.com/romkatv/powerlevel10k)
+- [rg](https://github.com/BurntSushi/ripgrep)
+- [timeshift](https://github.com/linuxmint/timeshift)
 
 ## browser
 
-- https://github.com/arkenfox/user.js/
-- https://addons.mozilla.org/en-US/firefox/addon/ublock-origin/
-- https://addons.mozilla.org/en-US/firefox/addon/skip-redirect/
+- [arkenfox](https://github.com/arkenfox/user.js/)
+
+### Addons
+
+- [1password](https://addons.mozilla.org/en-US/firefox/addon/1password-x-password-manager/)
+- [sidebery](https://addons.mozilla.org/en-US/firefox/addon/sidebery/)
+- [skip redirect](https://addons.mozilla.org/en-US/firefox/addon/skip-redirect/)
+- [ublacklist](https://addons.mozilla.org/en-US/firefox/addon/ublacklist/)
+- [ublock origin](https://addons.mozilla.org/en-US/firefox/addon/ublock-origin/)
+- [unpaywall](https://addons.mozilla.org/en-US/firefox/addon/unpaywall/)
+
+#### YT
+
+- [return dislikes](https://addons.mozilla.org/en-US/firefox/addon/return-youtube-dislikes/)
+- [sponsorblock](https://addons.mozilla.org/en-US/firefox/addon/sponsorblock/)
 
 ## general
 
