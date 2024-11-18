@@ -53,27 +53,26 @@ arch-yay:
 .PHONY: osx-packages
 osx-packages:
 	brew install \
-		coreutils \
 		bash \
-		stow \
-		vim \
-		neovim \
-		tmux \
-		ripgrep \
-		fzf \
-		fd \
-		sad \
+		coreutils \
 		entr \
-		parallel \
+		fd \
+		fzf \
+		go
 		jq \
-		yq \
-		git-delta \
-		podman \
 		kubectl \
+		neovim \
 		nodejs \ # needed for some Mason LSPs
 		npm \ # needed for some Mason LSPs
+		parallel \
+		podman \
 		python \
-		go
+		ripgrep \
+		sad \
+		stow \
+		tmux \
+		vim \
+		yq \
 	brew install --cask \
 		alacritty \
 		font-jetbrains-mono-nerd-font
