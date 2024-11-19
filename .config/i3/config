@@ -53,7 +53,7 @@ bindsym $mod+Return exec alacritty
 bindsym $mod+Shift+q kill
 
 bindsym $mod+d exec "rofi-launcher"
-bindsym $mod+s exec "rofi-screenshot"
+bindsym $mod+Shift+s exec "rofi-screenshot"
 
 # change focus
 bindsym $mod+h focus left

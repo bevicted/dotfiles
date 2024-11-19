@@ -8,4 +8,4 @@ rofi \
 	-no-drun-show-actions \
 	-terminal alacritty \
 	-kb-cancel Alt-F1 \
-	-theme "$HOME"/.config/rofi/config/launcher.rasi
+	-theme "$HOME"/.config/rofi/launcher.rasi
