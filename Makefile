@@ -34,11 +34,30 @@ yq \
 zsh
 endef
 
-.PHONY: arch-packages
+.PHONY: tpm
+tpm:
+	git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+
+.PHONY: link
+link:
+	stow --verbose --restow --target=$$HOME .
+	sudo stow --verbose --restow --dir ./bin --target /usr/local/bin .
+	sudo stow --verbose --restow --dir ./etc/X11/xorg.conf.d --target /etc/X11/xorg.conf.d .
+
+.PHONY: link-delete
+link-delete:
+	stow --verbose --target=$$HOME --delete  sf.
+
+.PHONY: arkenfox
+arkenfox:
+	$$HOME/.mozilla/firefox/user.arkenfox/updater.sh
+	$$HOME/.mozilla/firefox/user.arkenfox/prefsCleaner.sh
+
+.PHONY: arch-pkgs
 arch-packages:
 	sudo pacman --needed -S ${packages}
 
-.PHONY: arch-aur-packages
+.PHONY: arch-aur-pkgs
 ifeq (, $(shell command -v yay 2> /dev/null))
 arch-aur-packages: arch-yay
 else
@@ -90,18 +109,3 @@ osx-shims:
 	/usr/bin/tic -xe tmux-256color terminfo.src
 	rm terminfo.src
 	sudo sh -c 'echo /usr/local/opt/bash/bin/bash >> /etc/shells'
-
-.PHONY: tpm
-tpm:
-	git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
-
-.PHONY: link
-link:
-	stow --verbose --restow --target=$$HOME .
-	sudo stow --verbose --restow --dir ./bin --target /usr/local/bin .
-	sudo stow --verbose --restow --dir ./etc/X11/xorg.conf.d --target /etc/X11/xorg.conf.d .
-
-.PHONY: link-delete
-link-delete:
-	stow --verbose --target=$$HOME --delete .
-
