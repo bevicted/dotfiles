@@ -1,37 +1,42 @@
+UNAME_S := $(shell uname -s)
+
+define packages
+alacritty \
+base-devel \
+coreutils \
+entr \
+fd \
+fzf \
+git \
+git-delta \
+go \
+jq \
+kubectl \
+man \
+minikube \
+neovim \
+nodejs \
+npm \
+obsidian \
+parallel \
+podman \
+python \
+ripgrep \
+sad \
+stow \
+timeshift \
+tmux \
+ttf-jetbrains-mono-nerd \
+vim \
+xorg-xrandr \
+xsel \
+yq \
+zsh
+endef
+
 .PHONY: arch-packages
 arch-packages:
-	sudo pacman -S \
-		alacritty \
-		base-devel \
-		coreutils \
-		entr \
-		fd \
-		fzf \
-		git \
-		git-delta \
-		go \
-		jq \
-		kubectl \
-		man \
-		minikube \
-		neovim \
-		nodejs \ # needed for some Mason LSPs
-		npm \ # needed for some Mason LSPs
-		obisidian \
-		parallel \
-		podman \
-		python \
-		ripgrep \
-		sad \
-		stow \
-		timeshift \
-		tmux \
-		ttf-jetbrains-mono-nerd \
-		vim \
-		xorg-xrandr \
-		xsel \
-		yq \
-		zsh
+	sudo pacman --needed -S ${packages}
 
 .PHONY: arch-aur-packages
 ifeq (, $(shell command -v yay 2> /dev/null))
