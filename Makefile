@@ -86,8 +86,8 @@ osx-shims:
 	rm terminfo.src
 	sudo sh -c 'echo /usr/local/opt/bash/bin/bash >> /etc/shells'
 
-.PHONY: common
-common:
+.PHONY: tpm
+tpm:
 	git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 .PHONY: link
