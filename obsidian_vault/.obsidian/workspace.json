@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Browsers/Librefox.md",
+                "file": "Browsers/LibreWolf.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Librefox"
+              "title": "LibreWolf"
             }
           },
           {
@@ -69,12 +69,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Browsers/Firefox.md",
+                "file": "Browsers/Brave.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Firefox"
+              "title": "Brave"
             }
           }
         ],
@@ -150,7 +150,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Browsers/Firefox.md",
+                "file": "Browsers/Brave.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -160,7 +160,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for Firefox"
+              "title": "Backlinks for Brave"
             }
           },
           {
@@ -169,12 +169,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "Browsers/Firefox.md",
+                "file": "Browsers/Brave.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from Firefox"
+              "title": "Outgoing links from Brave"
             }
           },
           {
@@ -196,10 +196,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Browsers/Firefox.md"
+                "file": "Browsers/Brave.md"
               },
               "icon": "lucide-list",
-              "title": "Outline of Firefox"
+              "title": "Outline of Brave"
             }
           },
           {
@@ -234,15 +234,15 @@
       "obsidian-excalidraw-plugin:Create new drawing": false
     }
   },
-  "active": "26676d980014a01c",
+  "active": "b80e43a1343dfcad",
   "lastOpenFiles": [
+    "Browsers/LibreWolf.md",
+    "Browsers/Mullvad Browser.md",
+    "Browsers/Firefox.md",
     "Linux/Tools",
     "Browsers/Extensions.md",
     "Browsers/Brave.md",
     "Extensions",
-    "Browsers/Mullvad Browser.md",
-    "Browsers/Librefox.md",
-    "Browsers/Firefox.md",
     "Programming",
     "Browsers",
     "Linux",
