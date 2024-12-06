@@ -12,6 +12,10 @@
 .config/nvim/data
 .config/nvim/lazy-lock.json
 
+# obsidian
+obsidian_vault/.obsidian/workspace.json
+obsidian_vault/.obsidian/workspace-mobile.json
+
 # work
 work.sh
 
