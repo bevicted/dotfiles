@@ -174,7 +174,7 @@ user_pref("browser.contentblocking.category", "strict");
 // "privacy.antitracking.enableWebcompat" = F;
 
 // [SECTION 2800]: SHUTDOWN & SANITIZING
-user_pref("privacy.sanitize.sanitizeOnShutdown", true);
+user_pref("privacy.sanitize.sanitizeOnShutdown", false);
 user_pref("privacy.clearOnShutdown.cache", true);
 user_pref("privacy.clearOnShutdown_v2.cache", true);
 user_pref("privacy.clearOnShutdown.downloads", true);
