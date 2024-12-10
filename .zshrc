@@ -24,6 +24,10 @@ zstyle ':completion.*' matcher-list 'm:{a-z}={A-Za-z}'
 zstyle ':completion.*' list-colors "${(s.:.)LS_COLORS}"
 zinit cdreplay -q
 
+# vi mode
+zinit ice depth=1
+zinit light jeffreytse/zsh-vi-mode
+
 # Funcs
 source "${HOME}/scripts/funcs.sh"
 
