@@ -63,7 +63,7 @@ arch-aur-packages: arch-yay
 else
 arch-aur-packages:
 endif
-	yay -S golangci-lint
+	yay -S golangci-lint ncspot
 
 .PHONY: arch-yay
 arch-yay:
