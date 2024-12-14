@@ -1,0 +1,7 @@
+- https://github.com/EbookFoundation/free-programming-books
+- https://github.com/jwasham/coding-interview-university
+- https://github.com/codecrafters-io/build-your-own-x
+- https://github.com/practical-tutorials/project-based-learning
+- https://github.com/jlevy/the-art-of-command-line
+- https://github.com/avelino/awesome-go
+- https://github.com/labuladong/fucking-algorithm
