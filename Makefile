@@ -109,3 +109,7 @@ osx-shims:
 	/usr/bin/tic -xe tmux-256color terminfo.src
 	rm terminfo.src
 	sudo sh -c 'echo /usr/local/opt/bash/bin/bash >> /etc/shells'
+
+.PHONY: gopkgs
+gopkgs:
+	go install github.com/charmbracelet/mods@latest
