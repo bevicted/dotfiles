@@ -2,6 +2,12 @@
 -- NOTE: For more options, you can see `:help option-list`
 --  see also: `:help vim.opt / vim.o / vim.wo / vim.g / ...`
 
+-- [ leader ]
+--  WARN: Must happen before plugins are loaded (otherwise wrong leader will be used)
+
+vim.g.mapleader = ' '
+vim.g.maplocalleader = ' '
+
 -- [ cursor ]
 
 vim.opt.cursorline = true
@@ -10,7 +16,6 @@ vim.opt.guicursor = ''
 
 -- [ line numbers ]
 
-vim.wo.number = true
 vim.opt.number = true
 vim.opt.relativenumber = true
 
@@ -54,6 +59,7 @@ vim.g.netrw_winsize = 25
 
 -- [ display ]
 
+vim.g.have_nerd_font = true
 vim.opt.termguicolors = true
 vim.opt.isfname:append '@-@'
 -- vim.opt.colorcolumn = { "80", "100" }
@@ -61,8 +67,8 @@ vim.opt.showmode = false
 vim.opt.signcolumn = 'yes'
 vim.opt.updatetime = 250
 vim.opt.list = true
-vim.opt.listchars = { tab = '» ', trail = '·', nbsp = '␣' }
-vim.opt.scrolloff = 10
+vim.opt.listchars = 'tab:» ,trail:·,nbsp:␣'
+vim.o.scrolloff = 10
 
 -- [ splits ]
 
@@ -71,7 +77,8 @@ vim.opt.splitbelow = true
 
 -- [ autocomplete ]
 
-vim.opt.completeopt = { 'menu', 'menuone', 'noselect' }
+vim.opt.completeopt = vim.opt.completeopt:get()
+-- vim.opt.completeopt = 'menuone,noselect,preview'
 
 -- [ interaction ]
 
