@@ -62,6 +62,7 @@ return {
             'node_modules/',
             '.venv/',
             '.godot/',
+            '.obsidian/',
           },
           -- layout_strategy = "vertical",
           -- layout_config = {
