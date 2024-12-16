@@ -97,7 +97,7 @@ return {
       set('<leader>f.', without_previewer(builtin.oldfiles), '[f]ind [.] recent file')
       set('<leader>fb', with_previewer(builtin.buffers), '[f]ind [b]uffer')
       set('<leader>/', without_previewer(builtin.current_buffer_fuzzy_find), '[/] fuzzy find')
-      set('<leader>f/', with_previewer(builtin.live_grep, { grep_open_files = true }), '[f]ind by [g]rep in open files')
+      set('<leader>f/', with_previewer(builtin.live_grep, { grep_open_files = true }), '[f]ind by grep in open files')
       set('<leader>fc', without_previewer(builtin.find_files, { cwd = vim.fn.stdpath 'config' }), '[f]ind [c]onfig')
       ---@diagnostic disable-next-line: param-type-mismatch
       set('<leader>fp', without_previewer(builtin.find_files, { cwd = vim.fs.joinpath(vim.fn.stdpath 'data', 'lazy') }), '[f]ind [p]lugin files')
