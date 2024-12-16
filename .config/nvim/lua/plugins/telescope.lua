@@ -40,14 +40,16 @@ return {
       end
       local with_previewer = function(builtin, opts)
         opts = opts or {}
+        opts['previewer'] = true
         return function()
-          return builtin(get_common_opts({ previewer = true }, opts))
+          return builtin(get_common_opts(opts))
         end
       end
       local without_previewer = function(builtin, opts)
         opts = opts or {}
+        opts['previewer'] = false
         return function()
-          return builtin(get_common_opts { previewer = false }, opts)
+          return builtin(get_common_opts(opts))
         end
       end
 
@@ -97,6 +99,8 @@ return {
       set('<leader>/', without_previewer(builtin.current_buffer_fuzzy_find), '[/] fuzzy find')
       set('<leader>f/', with_previewer(builtin.live_grep, { grep_open_files = true }), '[f]ind by [g]rep in open files')
       set('<leader>fc', without_previewer(builtin.find_files, { cwd = vim.fn.stdpath 'config' }), '[f]ind [c]onfig')
+      ---@diagnostic disable-next-line: param-type-mismatch
+      set('<leader>fp', without_previewer(builtin.find_files, { cwd = vim.fs.joinpath(vim.fn.stdpath 'data', 'lazy') }), '[f]ind [p]lugin files')
     end,
   },
 }
