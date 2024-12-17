@@ -40,14 +40,17 @@ set('n', '<down>', '<cmd>echo "Use j"<CR>')
 
 -- [ splits ]
 
--- Keybinds to make split navigation easier.
---  Use CTRL+<hjkl> to switch between windows
---
---  See `:help wincmd` for a list of all window commands
 set('n', '<C-h>', '<C-w><C-h>', { desc = 'Move focus to the left window' })
 set('n', '<C-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
 set('n', '<C-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
 set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
+
+-- [ quickfix ]
+
+set('n', '<M-j>', '<cmd>cnext<CR>zz', { noremap = true, silent = true })
+set('n', '<M-k>', '<cmd>cprev<CR>zz', { noremap = true, silent = true })
+-- set('n', '<leader>k', '<cmd>lnext<CR>zz', { noremap = true, silent = true })
+-- set('n', '<leader>j', '<cmd>lprev<CR>zz', { noremap = true, silent = true })
 
 -- [ copy ]
 
@@ -84,11 +87,5 @@ set('n', 'J', 'mzJ`z', { noremap = true, silent = true })
 
 -- new tmux session
 set('n', '<C-f>', '<cmd>silent !tmux neww tmux-sessionizer<CR>', { noremap = true, silent = true })
-
--- quickfix list
--- set("n", "<C-k>", "<cmd>cnext<CR>zz", { noremap = true, silent = true })
--- set("n", "<C-j>", "<cmd>cprev<CR>zz", { noremap = true, silent = true })
--- set("n", "<leader>k", "<cmd>lnext<CR>zz", { noremap = true, silent = true })
--- set("n", "<leader>j", "<cmd>lprev<CR>zz", { noremap = true, silent = true })
 
 -- vim: ts=2 sts=2 sw=2 et
