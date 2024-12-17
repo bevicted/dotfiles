@@ -91,7 +91,6 @@ return {
       set('<leader>fk', with_previewer(builtin.keymaps), '[f]ind [k]eymap')
       set('<leader>ff', without_previewer(builtin.find_files), '[f]ind [f]ile')
       set('<leader>fw', with_previewer(builtin.grep_string), '[f]ind current [w]ord')
-      set('<leader>fg', with_previewer(builtin.live_grep), '[f]ind by [g]rep')
       set('<leader>fd', with_previewer(builtin.diagnostics), '[f]ind [d]iagnostics')
       set('<leader>fr', with_previewer(builtin.resume), '[f]ind [r]esume')
       set('<leader>f.', without_previewer(builtin.oldfiles), '[f]ind [.] recent file')
@@ -101,6 +100,7 @@ return {
       set('<leader>fc', without_previewer(builtin.find_files, { cwd = vim.fn.stdpath 'config' }), '[f]ind [c]onfig')
       ---@diagnostic disable-next-line: param-type-mismatch
       set('<leader>fp', without_previewer(builtin.find_files, { cwd = vim.fs.joinpath(vim.fn.stdpath 'data', 'lazy') }), '[f]ind [p]lugin files')
+      set('<leader>fg', with_previewer(require('config.telescope').live_multigrep, common_opts), '[f]ind by multi[g]rep')
     end,
   },
 }
