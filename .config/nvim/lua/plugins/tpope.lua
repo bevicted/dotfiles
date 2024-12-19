@@ -6,7 +6,6 @@ return {
         'tpope/vim-fugitive',
         keys = {
           { '<leader>gf', '<cmd>Git<cr>', desc = '[g]it [f]ugitive' },
-          { '<leader>gb', '<cmd>Git blame -wCCC<cr>', desc = '[g]it [b]lame' },
         },
       },
     },
