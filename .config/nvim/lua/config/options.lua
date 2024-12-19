@@ -67,7 +67,12 @@ vim.opt.showmode = false
 vim.opt.signcolumn = 'yes'
 vim.opt.updatetime = 250
 vim.opt.list = true
-vim.opt.listchars = 'tab:» ,trail:·,nbsp:␣'
+vim.opt.listchars = {
+  nbsp = '␣',
+  space = '·',
+  tab = '<->',
+  trail = '·',
+}
 vim.o.scrolloff = 10
 
 -- [ splits ]
