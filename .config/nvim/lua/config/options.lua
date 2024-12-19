@@ -77,8 +77,7 @@ vim.opt.splitbelow = true
 
 -- [ autocomplete ]
 
-vim.opt.completeopt = vim.opt.completeopt:get()
--- vim.opt.completeopt = 'menuone,noselect,preview'
+vim.opt.completeopt = 'menuone,noselect,preview'
 
 -- [ interaction ]
 
