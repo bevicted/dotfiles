@@ -42,9 +42,9 @@ return {
         end, { desc = 'hunk [r]eset' })
         map('n', '<leader>gA', gitsigns.stage_buffer, { desc = '[g]it [S]tage buffer' })
         map('n', '<leader>gR', gitsigns.reset_buffer, { desc = '[g]it [R]eset buffer' })
-        map('n', '<leader>gha', gitsigns.stage_hunk, { desc = '[g]it [h]unk [s]tage' })
+        map('n', '<leader>gha', gitsigns.stage_hunk, { desc = '[g]it [h]unk [a]dd' })
         map('n', '<leader>ghr', gitsigns.reset_hunk, { desc = '[g]it [h]unk [r]eset' })
-        map('n', '<leader>ghu', gitsigns.undo_stage_hunk, { desc = '[g]it [h]unk [u]ndo stage' })
+        map('n', '<leader>ghu', gitsigns.undo_stage_hunk, { desc = '[g]it [h]unk [u]unstage' })
         map('n', '<leader>ghp', gitsigns.preview_hunk, { desc = '[g]it [h]unk [p]review' })
         map('n', '<leader>gb', function()
           gitsigns.blame_line { extra_opts = { '-wCCC' } }

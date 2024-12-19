@@ -27,13 +27,14 @@ return {
             vim.keymap.set('n', keys, func, { buffer = event.buf, desc = 'LSP: ' .. desc })
           end
 
-          set('gd', require('telescope.builtin').lsp_definitions, '[g]oto [d]efinition')
+          local builtin = require 'telescope.builtin'
+          set('gd', builtin.lsp_definitions, '[g]oto [d]efinition')
           set('gD', vim.lsp.buf.declaration, '[g]oto [D]eclaration')
-          set('gr', require('telescope.builtin').lsp_references, '[g]oto [r]eferences')
-          set('gI', require('telescope.builtin').lsp_implementations, '[g]oto [I]mplementation')
-          set('gt', require('telescope.builtin').lsp_type_definitions, '[g]oto [t]ype definition')
-          set('gs', require('telescope.builtin').lsp_document_symbols, '[g]oto [s]ymbol')
-          set('gS', require('telescope.builtin').lsp_dynamic_workspace_symbols, '[g]oto workspace [S]ymbol')
+          set('gr', builtin.lsp_references, '[g]oto [r]eferences')
+          set('gI', builtin.lsp_implementations, '[g]oto [I]mplementation')
+          set('gt', builtin.lsp_type_definitions, '[g]oto [t]ype definition')
+          set('gs', builtin.lsp_document_symbols, '[g]oto [s]ymbol')
+          set('gS', builtin.lsp_dynamic_workspace_symbols, '[g]oto workspace [S]ymbol')
           set('<leader>rn', vim.lsp.buf.rename, '[r]e[n]ame')
           set('<leader>ca', vim.lsp.buf.code_action, '[c]ode [a]ction')
           set('K', vim.lsp.buf.hover, 'Hover Documentation')

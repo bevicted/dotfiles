@@ -85,8 +85,8 @@ return {
       local set = function(lhs, rhs, desc)
         vim.keymap.set('n', lhs, rhs, { desc = desc })
       end
-      local builtin = require 'telescope.builtin'
 
+      local builtin = require 'telescope.builtin'
       set('<leader>fh', with_previewer(builtin.help_tags), '[f]ind [h]elp')
       set('<leader>fk', with_previewer(builtin.keymaps), '[f]ind [k]eymap')
       set('<leader>ff', without_previewer(builtin.find_files), '[f]ind [f]ile')
