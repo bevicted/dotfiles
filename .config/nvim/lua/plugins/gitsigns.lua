@@ -40,12 +40,12 @@ return {
         map('v', '<leader>hr', function()
           gitsigns.reset_hunk { vim.fn.line '.', vim.fn.line 'v' }
         end, { desc = 'hunk [r]eset' })
-        map('n', '<leader>gA', gitsigns.stage_buffer, { desc = 'hunk [S]tage buffer' })
-        map('n', '<leader>gR', gitsigns.reset_buffer, { desc = 'hunk [R]eset buffer' })
-        map('n', '<leader>gha', gitsigns.stage_hunk, { desc = 'hunk [s]tage' })
-        map('n', '<leader>ghr', gitsigns.reset_hunk, { desc = 'hunk [r]eset' })
-        map('n', '<leader>ghu', gitsigns.undo_stage_hunk, { desc = 'hunk [u]ndo stage' })
-        map('n', '<leader>ghp', gitsigns.preview_hunk, { desc = 'hunk [p]review' })
+        map('n', '<leader>gA', gitsigns.stage_buffer, { desc = '[g]it [S]tage buffer' })
+        map('n', '<leader>gR', gitsigns.reset_buffer, { desc = '[g]it [R]eset buffer' })
+        map('n', '<leader>gha', gitsigns.stage_hunk, { desc = '[g]it [h]unk [s]tage' })
+        map('n', '<leader>ghr', gitsigns.reset_hunk, { desc = '[g]it [h]unk [r]eset' })
+        map('n', '<leader>ghu', gitsigns.undo_stage_hunk, { desc = '[g]it [h]unk [u]ndo stage' })
+        map('n', '<leader>ghp', gitsigns.preview_hunk, { desc = '[g]it [h]unk [p]review' })
         map('n', '<leader>gb', function()
           gitsigns.blame_line { extra_opts = { '-wCCC' } }
         end, { desc = '[g]it [b]lame line' })
