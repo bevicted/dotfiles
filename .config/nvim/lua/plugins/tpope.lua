@@ -16,7 +16,6 @@ return {
       vim.g.github_enterprise_urls = { vim.g.ghe_url }
     end,
   },
-  { 'tpope/vim-sleuth' },
 }
 
 -- vim: ts=2 sts=2 sw=2 et
