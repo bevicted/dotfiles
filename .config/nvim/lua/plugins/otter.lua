@@ -10,7 +10,7 @@ return {
       function()
         require('otter').activate()
       end,
-      desc = '[O]tter Activate',
+      desc = '[o]tter activate',
     },
   },
 }
