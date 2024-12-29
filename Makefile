@@ -1,12 +1,12 @@
 UNAME_S := $(shell uname -s)
 
 define packages
-alacritty \
 base-devel \
 coreutils \
 entr \
 fd \
 fzf \
+ghostty \
 git \
 git-delta \
 go \
@@ -22,6 +22,7 @@ parallel \
 podman \
 python \
 ripgrep \
+rofi \
 sad \
 stow \
 timeshift \
@@ -34,9 +35,17 @@ yq \
 zsh
 endef
 
+.PHONY: arch-init
+arch-init: arch-pkgs arch-aur-pkgs tpm gopkgs zsh link
+
+.PHONY: zsh
+zsh:
+	chsh -s '/usr/bin/zsh'
+
 .PHONY: tpm
 tpm:
 	git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+	# <ctrl+a>I to install packages
 
 .PHONY: link
 link:
@@ -46,7 +55,7 @@ link:
 
 .PHONY: link-delete
 link-delete:
-	stow --verbose --target=$$HOME --delete  sf.
+	stow --verbose --target=$$HOME --delete sf.
 
 .PHONY: arkenfox
 arkenfox:
@@ -54,16 +63,16 @@ arkenfox:
 	$$HOME/.mozilla/firefox/user.arkenfox/prefsCleaner.sh
 
 .PHONY: arch-pkgs
-arch-packages:
+arch-pkgs:
 	sudo pacman --needed -S ${packages}
 
 .PHONY: arch-aur-pkgs
 ifeq (, $(shell command -v yay 2> /dev/null))
-arch-aur-packages: arch-yay
+arch-aur-pkgs: arch-yay
 else
-arch-aur-packages:
+arch-aur-pkgs:
 endif
-	yay -S golangci-lint ncspot
+	yay -S 1password 1password-cli golangci-lint ncspot
 
 .PHONY: arch-yay
 arch-yay:
