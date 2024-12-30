@@ -32,6 +32,7 @@ vim \
 xorg-xrandr \
 xsel \
 yq \
+zig \
 zsh
 endef
 
