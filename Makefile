@@ -28,6 +28,7 @@ stow \
 timeshift \
 tmux \
 ttf-jetbrains-mono-nerd \
+unzip \
 vim \
 xorg-xrandr \
 xsel \
