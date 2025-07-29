@@ -30,7 +30,6 @@ M.live_multigrep = function(opts)
         table.insert(cmd, table.concat(pieces, ' ', 1, len))
       end
 
-      print(table.concat(cmd, ' '))
       return cmd
     end,
     entry_maker = make_entry.gen_from_vimgrep(opts),
