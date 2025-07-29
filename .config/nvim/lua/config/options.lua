@@ -89,4 +89,12 @@ vim.opt.completeopt = 'menuone,noselect,preview'
 vim.opt.mouse = 'a'
 vim.opt.timeoutlen = 300
 
+-- [ ft ]
+
+vim.filetype.add {
+  pattern = {
+    ['.whitesource'] = 'json',
+  },
+}
+
 -- vim: ts=2 sts=2 sw=2 et
