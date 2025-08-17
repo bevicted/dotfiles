@@ -17,6 +17,7 @@ return {
           '.venv/',
           '.godot/',
           '.obsidian/',
+          'target/',
         },
         layout_strategy = 'vertical',
         layout_config = {
