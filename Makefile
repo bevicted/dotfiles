@@ -1,37 +1,28 @@
 UNAME_S := $(shell uname -s)
+ARKEN_TMP_REPO_PATH := /tmp/arkenfox
+ARKEN_USER_PATH := ${HOME}/.mozilla/firefox/user.arkenfox
 
 define packages
-base-devel \
-coreutils \
 entr \
 fd \
 fzf \
 ghostty \
 git \
-git-delta \
 go \
 jq \
 kubectl \
 man \
-minikube \
 neovim \
 nodejs \
-npm \
-obsidian \
 parallel \
 podman \
-python \
 ripgrep \
-rofi \
-sad \
+shellcheck \
 stow \
-timeshift \
 tmux \
 ttf-jetbrains-mono-nerd \
 unzip \
 vim \
-xorg-xrandr \
-xsel \
 yq \
 zig \
 zsh
@@ -51,18 +42,30 @@ tpm:
 
 .PHONY: link
 link:
-	stow --verbose --restow --target=$$HOME .
+	stow --verbose --restow --target=${HOME} .
 	sudo stow --verbose --restow --dir ./bin --target /usr/local/bin .
 	sudo stow --verbose --restow --dir ./etc/X11/xorg.conf.d --target /etc/X11/xorg.conf.d .
 
 .PHONY: link-delete
 link-delete:
-	stow --verbose --target=$$HOME --delete sf.
+	stow --verbose --target=${HOME} --delete sf.
 
 .PHONY: arkenfox
 arkenfox:
-	$$HOME/.mozilla/firefox/user.arkenfox/updater.sh
-	$$HOME/.mozilla/firefox/user.arkenfox/prefsCleaner.sh
+	# currently I need to manually create the firefox profile with the USER_PATH selected as the dir
+	# has to be done before this make target is ran
+	# firefox -p
+
+	rm -rf ${ARKEN_TMP_REPO_PATH}
+	mkdir -p ${ARKEN_TMP_REPO_PATH}
+	git clone --depth 1 --no-tags --single-branch --branch master https://github.com/arkenfox/user.js.git ${ARKEN_TMP_REPO_PATH}
+	mv -f ${ARKEN_TMP_REPO_PATH}/user.js ${ARKEN_USER_PATH}
+	mv -f ${ARKEN_TMP_REPO_PATH}/updater.sh ${ARKEN_USER_PATH}
+	mv -f ${ARKEN_TMP_REPO_PATH}/prefsCleaner.sh ${ARKEN_USER_PATH}
+	rm -rf ${ARKEN_TMP_REPO_PATH}
+
+	${ARKEN_USER_PATH}/updater.sh
+	${ARKEN_USER_PATH}/prefsCleaner.sh
 
 .PHONY: arch-pkgs
 arch-pkgs:
@@ -74,13 +77,13 @@ arch-aur-pkgs: arch-yay
 else
 arch-aur-pkgs:
 endif
-	yay -S 1password 1password-cli golangci-lint ncspot
+	yay -S 1password 1password-cli golangci-lint
 
 .PHONY: arch-yay
 arch-yay:
-	mkdir -p ~/dev/aur/
-	git clone https://aur.archlinux.org/yay.git ~/dev/aur/yay
-	cd ~/dev/aur/yay && makepkg -si
+	mkdir -p ${HOME}/dev/aur/
+	git clone https://aur.archlinux.org/yay.git ${HOME}/dev/aur/yay
+	cd ${HOME}/dev/aur/yay && makepkg -si
 	yay -Y --gendb
 	yay -Syu --devel
 	yay -Y --devel --save
@@ -124,3 +127,4 @@ osx-shims:
 .PHONY: gopkgs
 gopkgs:
 	go install github.com/charmbracelet/mods@latest
+	go install mvdan.cc/sh/v3/cmd/shfmt@latest
