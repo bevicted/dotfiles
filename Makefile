@@ -14,8 +14,8 @@ kubectl \
 man \
 neovim \
 nodejs \
+npm \
 parallel \
-podman \
 ripgrep \
 shellcheck \
 stow \
@@ -70,6 +70,7 @@ arkenfox:
 .PHONY: arch-pkgs
 arch-pkgs:
 	sudo pacman --needed -S ${packages}
+	rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 .PHONY: arch-aur-pkgs
 ifeq (, $(shell command -v yay 2> /dev/null))
@@ -88,6 +89,10 @@ arch-yay:
 	yay -Syu --devel
 	yay -Y --devel --save
 
+.PHONY: hypr
+hypr:
+	sudo pacman --needed -S hyprlock hypridle swaync waybar
+
 .PHONY: osx-packages
 osx-packages:
 	brew install \
@@ -103,7 +108,6 @@ osx-packages:
 		nodejs \ # needed for some Mason LSPs
 		npm \ # needed for some Mason LSPs
 		parallel \
-		podman \
 		python \
 		ripgrep \
 		sad \
