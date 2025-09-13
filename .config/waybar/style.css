@@ -1,0 +1,155 @@
+/* tokyonight color scheme */
+@define-color bg-color #1a1b26;
+@define-color fg-color #a9b1d6;
+@define-color tn-green #9ece6a;
+@define-color tn-red #f7768e;
+@define-color tn-blue #7aa2f7;
+@define-color tn-yellow #e0af68;
+@define-color tn-purple #bb9af7;
+@define-color tn-grey #343b58;
+
+
+/* kanagawa color scheme */
+@define-color kngw-bg-color #16161d;
+@define-color kngw-fg-color #dcd7ba;
+@define-color kngw-green #76946a;
+@define-color kngw-red #c34043;
+@define-color kngw-blue #7e9cd8;
+@define-color kngw-yellow #c0a36e;
+@define-color kngw-purple #957fb8;
+@define-color kngw-grey #54546d;
+
+
+/* Global Styles */
+* {
+  font-family: JetBrainsMono NFP;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+/* Waybar */
+#waybar {
+  background: @kngw-bg-color;
+  color: @kngw-fg-color;
+}
+
+/* Tooltips */
+tooltip {
+  color: @kngw-fg-color;
+  background: @kngw-bg-color;
+  border: 2px solid @kngw-blue;
+}
+
+/* Modules */
+#mode,
+#tray,
+#clock,
+#clock.date,
+#mpris,
+#upower,
+#language,
+#workspaces,
+#network.vpn,
+#pulseaudio.speaker,
+#pulseaudio.mic,
+#temperature,
+#custom-timer,
+#custom-updates,
+#custom-weather,
+#custom-launcher,
+#custom-notification,
+#custom-scratchpad-indicator {
+  margin: 0px 1px;
+  padding: 0px 2px;
+}
+
+/* Specific Module Styling */
+#mpris {
+  margin: 0px 5px;
+}
+
+.modules-center {
+  margin: 0px 2px;
+  padding: 0 4px;
+}
+
+#mode,
+#custom-updates,
+#custom-scratchpad-indicator {
+  color: @kngw-blue;
+}
+
+#network.vpn {
+  color: @kngw-yellow;
+}
+
+#pulseaudio.speaker {
+  min-width: 13px;
+}
+
+#pulseaudio.mic {
+  color: @kngw-green;
+  min-width: 13px;
+}
+
+#pulseaudio.speaker.muted {
+  color: @kngw-red;
+}
+
+#pulseaudio.mic.source-muted {
+  background: none;
+  color: @kngw-fg-color;
+}
+
+#custom-notification.notification {
+  color: @kngw-blue;
+}
+
+#custom-notification.dnd-none {
+  color: @kngw-red;
+}
+
+#custom-notification.dnd-notification {
+  color: @kngw-red;
+}
+
+#custom-notification,
+#custom-notification.notification,
+#custom-notification.dnd-notification {
+  margin-right: 10px;
+}
+
+#custom-launcher {
+  color: @kngw-blue;
+  margin: 0px 0px 0px 10px;
+  border-radius: 0px;
+}
+
+#upower.charging {
+  color: @kngw-green;
+}
+
+#temperature.critical {
+  color: @kngw-red;
+}
+
+/* Workspace Buttons */
+#workspaces {
+  margin: 0px;
+  padding: 0px;
+}
+
+#workspaces button {
+  padding: 0px;
+  min-width: 13px;
+  color: @kngw-blue;
+  border-radius: 0px;
+}
+
+#workspaces button.empty {
+  color: @kngw-grey;
+}
+
+#workspaces button.active {
+  color: @kngw-fg-color;
+}
