@@ -19,6 +19,7 @@ parallel \
 ripgrep \
 shellcheck \
 stow \
+tldr \
 tmux \
 ttf-jetbrains-mono-nerd \
 unzip \
