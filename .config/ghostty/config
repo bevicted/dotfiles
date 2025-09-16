@@ -1,4 +1,4 @@
-theme = catppuccin-mocha
+theme = Catppuccin Mocha
 cursor-invert-fg-bg = true
 font-family = JetBrainsMono Nerd Font
 keybind = super+u=scroll_page_up
