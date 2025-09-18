@@ -64,7 +64,10 @@ arkenfox:
 	mv -f ${ARKEN_TMP_REPO_PATH}/updater.sh ${ARKEN_USER_PATH}
 	mv -f ${ARKEN_TMP_REPO_PATH}/prefsCleaner.sh ${ARKEN_USER_PATH}
 	rm -rf ${ARKEN_TMP_REPO_PATH}
+	${MAKE} arkenfox-apply
 
+.PHONY: arkenfox-apply
+arkenfox-apply:
 	${ARKEN_USER_PATH}/updater.sh
 	${ARKEN_USER_PATH}/prefsCleaner.sh
 
