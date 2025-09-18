@@ -18,6 +18,8 @@ return {
           '.godot/',
           '.obsidian/',
           'target/',
+          'storage/',
+          'security_state/',
         },
         layout_strategy = 'vertical',
         layout_config = {
