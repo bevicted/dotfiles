@@ -26,7 +26,7 @@
     "buttons-grid",
     "volume",
     "backlight",
-    "mpris"
+    "notifications"
   ],
   "widget-config": {
     "title": {
@@ -41,18 +41,12 @@
       "max-lines": 1,
       "text": "Notification Center"
     },
-    "mpris": {
-      "image-size": 100,
-      "image-radius": 0,
-      "blacklist": [
-        "firefox"
-      ]
-    },
     "volume": {
       "label": "vol"
     },
     "backlight": {
-      "label": "󰃟"
+      "label": "bkl",
+      "device": "amdgpu_bl1"
     },
     "buttons-grid": {
       "actions": [
