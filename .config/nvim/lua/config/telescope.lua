@@ -16,13 +16,23 @@ M.live_multigrep = function(opts)
       end
 
       local pieces = vim.split(prompt, '  ')
-      local cmd = { 'rg', '--hidden', '--color=never', '--no-heading', '--with-filename', '--line-number', '--column', '--smart-case' }
+      local cmd = {
+        'rg',
+        '--color=never',
+        '--no-heading',
+        '--with-filename',
+        '--line-number',
+        '--column',
+        '--smart-case',
+        '--glob',
+      }
       local len = #pieces
 
       if #pieces > 1 then
-        table.insert(cmd, '-g')
         table.insert(cmd, pieces[#pieces])
         len = len - 1
+      else
+        table.insert(cmd, '*')
       end
 
       if #pieces > 0 then
