@@ -217,8 +217,8 @@ user_pref("privacy.resistFingerprinting.pbmode", true);
 user_pref("privacy.window.maxInnerWidth", 1600);
 user_pref("privacy.window.maxInnerHeight", 900);
 user_pref("privacy.resistFingerprinting.block_mozAddonManager", true); // NOTE: To allow extensions to work on AMO, you also need 2662
-user_pref("privacy.resistFingerprinting.letterboxing", true);
-user_pref("privacy.resistFingerprinting.letterboxing.dimensions", ""); // TODO: might need to set some dimensions
+user_pref("privacy.resistFingerprinting.letterboxing", false);
+user_pref("privacy.resistFingerprinting.letterboxing.dimensions", ""); // WARN: DO NOT USE, for testing only
 // "privacy.resistFingerprinting.exemptedDomains" = "*.example.invalid";
 user_pref("privacy.spoof_english", 2);
 user_pref("browser.display.use_system_colors", false);
