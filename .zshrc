@@ -29,10 +29,6 @@ ZVM_INIT_MODE=sourcing
 zinit ice depth=1
 zinit light jeffreytse/zsh-vi-mode
 
-# abbr
-zinit ice depth=1
-zinit light olets/zsh-abbr
-
 # Funcs
 source "${HOME}/scripts/funcs.sh"
 
