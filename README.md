@@ -2,37 +2,12 @@
 
 there are many like it, but this one is mine
 
-## usage
-
-clone the repo and symlink applicable configs, install tools where needed
-
-e.g.:
-
-```sh
-ln -s ~/Projects/.dotfiles/.config/nvim ~/.config/nvim
-```
-
-add the bin folder to your path in your rc file:
-
-```sh
-PATH=~/Projects/.dotfiles/bin:$PATH
-```
-
 ## Docs
 
 links to docs I find myself revisiting
 
 - [archwiki](https://archlinux.org)
   - [Display Power Management Signaling](https://wiki.archlinux.org/title/Display_Power_Management_Signaling)
-
-## tools
-
-- [fd](https://github.com/sharkdp/fd)
-- [fzf](https://github.com/junegunn/fzf)
-- [mangohud](https://github.com/flightlessmango/MangoHud)
-- [p10k](https://github.com/romkatv/powerlevel10k)
-- [rg](https://github.com/BurntSushi/ripgrep)
-- [timeshift](https://github.com/linuxmint/timeshift)
 
 ## browser
 
