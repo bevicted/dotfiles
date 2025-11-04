@@ -1,3 +1,5 @@
+SHELL = /usr/bin/env bash
+
 UNAME_S := $(shell uname -s)
 ARKEN_TMP_REPO_PATH := /tmp/arkenfox
 ARKEN_USER_PATH := ${HOME}/.mozilla/firefox/user.arkenfox
@@ -45,7 +47,7 @@ tpm:
 link:
 	stow --verbose --restow --target=${HOME} .
 	sudo stow --verbose --restow --dir ./bin --target /usr/local/bin .
-	sudo stow --verbose --restow --dir ./etc/X11/xorg.conf.d --target /etc/X11/xorg.conf.d .
+	[ "$(UNAME_S)" != "Darwin" ] && sudo stow --verbose --restow --dir ./etc/X11/xorg.conf.d --target /etc/X11/xorg.conf.d .
 
 .PHONY: link-delete
 link-delete:
@@ -99,28 +101,27 @@ hypr:
 
 .PHONY: osx-packages
 osx-packages:
+	# node and npm needed for some LSPs
 	brew install \
 		bash \
 		coreutils \
 		entr \
 		fd \
 		fzf \
-		go
+		go \
 		jq \
 		kubectl \
 		neovim \
-		nodejs \ # needed for some Mason LSPs
-		npm \ # needed for some Mason LSPs
+		nodejs \
+		npm \
 		parallel \
 		python \
 		ripgrep \
-		sad \
 		stow \
 		tmux \
 		vim \
-		yq \
+		yq
 	brew install --cask \
-		alacritty \
 		font-jetbrains-mono-nerd-font
 
 .PHONY: osx-shims
@@ -134,5 +135,4 @@ osx-shims:
 
 .PHONY: gopkgs
 gopkgs:
-	go install github.com/charmbracelet/mods@latest
 	go install mvdan.cc/sh/v3/cmd/shfmt@latest
