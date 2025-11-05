@@ -4,10 +4,6 @@
 
 [core]
 	editor = nvim
-	pager = delta
-
-[interactive]
-	diffFilter = delta --color-only
 
 [diff]
 	colorMoved = default
@@ -16,7 +12,7 @@
 	rebase = true
 
 [alias]
-	smartblame = blame -wCCC
+	trueblame = blame -wCCC
 
 [branch]
 	sort = -committerdate
@@ -24,11 +20,18 @@
 [merge]
 	conflictStyle = zdiff3
 
-[delta]
-	navigate = true    # use n and N to move between diff sections
-	side-by-side = true
-	paging = always
+[user]
+  signingkey = signing key
 
-	dark = true
-	line-numbers = true
+[gpg]
+  format = ssh
+
+[gpg "ssh"]
+  program = "myprogram"
+
+[commit]
+  gpgsign = true
+
+[includeIf "hasconfig:remote.*.url:git@work.com:*/**"]
+  path = ~/.gitconfig.work
 
