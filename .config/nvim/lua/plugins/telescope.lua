@@ -13,13 +13,14 @@ return {
       local common_opts = {
         file_ignore_patterns = {
           '.git/',
-          'node_modules/',
-          '.venv/',
           '.godot/',
           '.obsidian/',
-          'target/',
-          'storage/',
+          '.venv/',
+          '.zig-cache/',
+          'node_modules/',
           'security_state/',
+          'storage/',
+          'target/',
         },
         layout_strategy = 'vertical',
         layout_config = {
