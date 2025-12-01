@@ -1,9 +1,27 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 # slightly modified version of primeagen's
 # https://github.com/ThePrimeagen/.dotfiles/blob/62eb982a12d75abbdeb6d679504382365456d75c/bin/.local/scripts/tmux-sessionizer
 
+for cmd in fd fzf tmux; do
+	if ! command -v "$cmd" >/dev/null 2>&1; then
+		echo "Error: command not found: $cmd" >&2
+		exit 1
+	fi
+done
+
+if [[ ! -d "$HOME/dev" ]]; then
+	echo "Error: Development directory '$HOME/dev' does not exist." >&2
+	exit 1
+fi
+
 if [[ $# -eq 1 ]]; then
+	if [[ ! -d "$1" ]]; then
+		echo "Error: Directory '$1' does not exist." >&2
+		exit 1
+	fi
 	selected_path=$1
 else
 	# do not break this line, could introduce weird behaviour
@@ -18,12 +36,21 @@ selected_name=$(basename "$selected_path" | tr . _)
 tmux_running=$(pgrep tmux)
 
 if [[ -z $TMUX ]] && [[ -z $tmux_running ]]; then
-	tmux new-session -s "$selected_name" -c "$selected_path"
+	tmux new-session -s "$selected_name" -c "$selected_path" || {
+		echo "Error: Failed to create tmux session." >&2
+		exit 1
+	}
 	exit 0
 fi
 
 if ! tmux has-session -t="$selected_name" 2>/dev/null; then
-	tmux new-session -ds "$selected_name" -c "$selected_path"
+	tmux new-session -ds "$selected_name" -c "$selected_path" || {
+		echo "Error: Failed to create detached tmux session." >&2
+		exit 1
+	}
 fi
 
-tmux switch-client -t "$selected_name"
+tmux switch-client -t "$selected_name" || {
+	echo "Error: Failed to switch to tmux session." >&2
+	exit 1
+}
