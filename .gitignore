@@ -19,14 +19,13 @@
 .mozilla/firefox/user.arkenfox/
 !.mozilla/firefox/user.arkenfox/user-overrides.js
 
-# obsidian
-obsidian_vault/.obsidian/workspace.json
-obsidian_vault/.obsidian/workspace-mobile.json
-
 # ssh
 .ssh/
 !.ssh/config
 
 # work
 work.sh
+
+# other
+AGENTS.md
 

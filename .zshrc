@@ -118,6 +118,7 @@ then
   # export PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:${PATH}"
   # export MANPATH="/opt/homebrew/opt/coreutils/libexec/gnuman:${MANPATH}"
 fi
+export PATH=/home/bevicted/.opencode/bin:$PATH
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
 

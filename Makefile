@@ -77,6 +77,7 @@ arkenfox-apply:
 arch-pkgs:
 	sudo pacman --needed -S ${packages}
 	rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+	opencode --version || curl -fsSL https://opencode.ai/install | bash
 
 .PHONY: arch-aur-pkgs
 ifeq (, $(shell command -v yay 2> /dev/null))
