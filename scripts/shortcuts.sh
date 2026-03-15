@@ -4,7 +4,13 @@ alias p='podman'
 alias k='kubectl'
 alias t='terraform'
 alias v='nvim .'
-alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
+if ls --version &>/dev/null; then
+    alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
+elif gls --version &>/dev/null; then
+    alias ls='gls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
+else
+    alias ls='ls -AFGh1'
+fi
 
 # git
 
