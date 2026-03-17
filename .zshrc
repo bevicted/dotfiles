@@ -118,9 +118,8 @@ then
   # export PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:${PATH}"
   # export MANPATH="/opt/homebrew/opt/coreutils/libexec/gnuman:${MANPATH}"
 fi
-export PATH=/home/bevicted/.opencode/bin:$PATH
 export GOPATH="$HOME/go"
-export PATH="$GOPATH/bin:$PATH"
+export PATH=$HOME/.opencode/bin:$HOME/.local/bin:$GOPATH/bin:$PATH
 
 # Pop me into tmux if it exists, current shell is interactive and is not already inside tmux
 if command_exists 'tmux' && \
