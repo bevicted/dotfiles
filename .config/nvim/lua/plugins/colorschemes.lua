@@ -15,7 +15,45 @@ return {
     lazy = false,
     name = 'catppuccin',
     priority = 1000,
-    init = function()
+    config = function()
+      require('catppuccin').setup {
+        integrations = {
+          blink_cmp = true,
+          fidget = true,
+          gitsigns = true,
+          mason = true,
+          mini = { enabled = true },
+          native_lsp = {
+            enabled = true,
+            underlines = {
+              errors = { 'undercurl' },
+              hints = { 'undercurl' },
+              warnings = { 'undercurl' },
+              information = { 'undercurl' },
+            },
+          },
+          semantic_tokens = true,
+          telescope = { enabled = true },
+          treesitter = true,
+        },
+        custom_highlights = function(colors)
+          return {
+            ['@variable.member'] = { fg = colors.lavender },
+            ['@property'] = { fg = colors.lavender },
+            ['@module'] = { fg = colors.lavender },
+            ['@variable.parameter'] = { fg = colors.maroon },
+            ['@constant.builtin'] = { fg = colors.peach, style = { 'bold' } },
+            ['@function.builtin'] = { fg = colors.peach, style = { 'italic' } },
+            ['@type.builtin'] = { fg = colors.yellow, style = { 'bold' } },
+            ['@keyword.return'] = { fg = colors.mauve, style = { 'bold' } },
+            ['@function.call'] = { fg = colors.blue },
+            ['@function.method.call'] = { fg = colors.blue },
+            ['@constructor'] = { fg = colors.sapphire },
+            ['@punctuation.bracket'] = { fg = colors.overlay2 },
+            ['@punctuation.delimiter'] = { fg = colors.overlay2 },
+          }
+        end,
+      }
       vim.cmd.colorscheme 'catppuccin-mocha'
     end,
   },
