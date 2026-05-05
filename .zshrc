@@ -131,3 +131,17 @@ then
   exec tmux
 fi
 
+# bun completions
+[ -s ~/.bun/_bun ] && source ~/.bun/_bun
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+icb_cmd=$(command -v icb)
+icb() {
+  local cmd
+  cmd=$("${icb_cmd}" "$@") || return
+  print -z -- "$cmd"
+}
+
