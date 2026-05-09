@@ -1,6 +1,7 @@
 .git
 .gitignore
 AGENTS.md
+CLAUDE.md
 LICENSE.md
 Makefile
 README.md
