@@ -20,6 +20,9 @@
 !.mozilla/firefox/user.arkenfox/
 .mozilla/firefox/user.arkenfox/*
 !.mozilla/firefox/user.arkenfox/user-overrides.js
+!.mozilla/firefox/user.arkenfox/chrome/
+.mozilla/firefox/user.arkenfox/chrome/*
+!.mozilla/firefox/user.arkenfox/chrome/userChrome.css
 
 # claude code
 .claude/*

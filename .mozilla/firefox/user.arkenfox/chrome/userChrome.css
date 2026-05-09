@@ -1,0 +1,9 @@
+/* Hide native horizontal tab bar */
+#TabsToolbar {
+  visibility: collapse !important;
+}
+
+/* Hide sidebar header (only when Sidebery is the active sidebar) */
+#sidebar-box[sidebarcommand*="sidebery"] #sidebar-header {
+  display: none;
+}
