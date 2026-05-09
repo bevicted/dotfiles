@@ -73,8 +73,8 @@ arkenfox:
 
 .PHONY: arkenfox-apply
 arkenfox-apply:
-	${ARKEN_USER_PATH}/updater.sh
-	${ARKEN_USER_PATH}/prefsCleaner.sh
+	${ARKEN_USER_PATH}/updater.sh -s -u
+	${ARKEN_USER_PATH}/prefsCleaner.sh -s
 
 .PHONY: arch-pkgs
 arch-pkgs:
