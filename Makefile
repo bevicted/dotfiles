@@ -32,7 +32,11 @@ zsh
 endef
 
 .PHONY: arch-init
-arch-init: arch-pkgs arch-aur-pkgs tpm gopkgs zsh link
+arch-init: arch-pkgs arch-aur-pkgs tpm gopkgs zsh link gsettings
+
+.PHONY: gsettings
+gsettings:
+	gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
 
 .PHONY: zsh
 zsh:
