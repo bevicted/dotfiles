@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# Dispatch to the 1Password ssh-sign binary for the current OS.
+# Used by git's gpg.ssh.program so .gitconfig stays portable.
+case "$(uname -s)" in
+	Darwin) exec /Applications/1Password.app/Contents/MacOS/op-ssh-sign "$@" ;;
+	Linux)  exec /opt/1Password/op-ssh-sign "$@" ;;
+	*)      echo "op-ssh-sign: unsupported OS $(uname -s)" >&2; exit 1 ;;
+esac
