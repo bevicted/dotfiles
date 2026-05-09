@@ -271,3 +271,8 @@ user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.addons", false);
 user_pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features", false);
 user_pref("browser.urlbar.showSearchTerms.enabled", false);
+
+// [SECTION 9100]: UI / SIDEBERY
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+user_pref("sidebar.revamp", false);
+user_pref("sidebar.verticalTabs", false);
