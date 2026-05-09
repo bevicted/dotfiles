@@ -113,16 +113,6 @@ fi
 export GOPATH="$HOME/go"
 export PATH=$HOME/.opencode/bin:$HOME/.local/bin:$GOPATH/bin:$PATH
 
-# Pop me into tmux if it exists, current shell is interactive and is not already inside tmux
-if command_exists 'tmux' && \
-  [ -n "$PS1" ] && \
-  [[ ! "$TERM" =~ screen ]] && \
-  [[ ! "$TERM" =~ tmux ]] && \
-  [ -z "$TMUX" ]
-then
-  exec tmux
-fi
-
 # bun completions
 [ -s ~/.bun/_bun ] && source ~/.bun/_bun
 
@@ -137,3 +127,13 @@ icb() {
   print -z -- "$cmd"
 }
 
+# Pop me into tmux if it exists, current shell is interactive and is not already inside tmux
+# WARN: Causes too many issues as of now
+# if command_exists 'tmux' && \
+#   [ -n "$PS1" ] && \
+#   [[ ! "$TERM" =~ screen ]] && \
+#   [[ ! "$TERM" =~ tmux ]] && \
+#   [ -z "$TMUX" ]
+# then
+#   exec tmux
+# fi
