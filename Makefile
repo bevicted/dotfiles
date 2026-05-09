@@ -44,7 +44,7 @@ zsh:
 
 .PHONY: tpm
 tpm:
-	git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+	git clone https://github.com/tmux-plugins/tpm ~/.config/tmux/plugins/tpm
 	# <ctrl+a>I to install packages
 
 .PHONY: link
@@ -54,7 +54,8 @@ link:
 
 .PHONY: link-delete
 link-delete:
-	stow --verbose --target=${HOME} --delete sf.
+	stow --verbose --target=${HOME} --delete .
+	sudo stow --verbose --dir ./bin --target /usr/local/bin --delete .
 
 .PHONY: arkenfox
 arkenfox:
