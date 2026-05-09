@@ -21,7 +21,6 @@ parallel \
 ripgrep \
 shellcheck \
 stow \
-tldr \
 tmux \
 ttf-jetbrains-mono-nerd \
 unzip \
@@ -47,7 +46,6 @@ tpm:
 link:
 	stow --verbose --restow --target=${HOME} .
 	sudo stow --verbose --restow --dir ./bin --target /usr/local/bin .
-	[ "$(UNAME_S)" != "Darwin" ] && sudo stow --verbose --restow --dir ./etc/X11/xorg.conf.d --target /etc/X11/xorg.conf.d .
 
 .PHONY: link-delete
 link-delete:
@@ -77,7 +75,6 @@ arkenfox-apply:
 arch-pkgs:
 	sudo pacman --needed -S ${packages}
 	rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-	opencode --version || curl -fsSL https://opencode.ai/install | bash
 
 .PHONY: arch-aur-pkgs
 ifeq (, $(shell command -v yay 2> /dev/null))
@@ -98,7 +95,7 @@ arch-yay:
 
 .PHONY: hypr
 hypr:
-	sudo pacman --needed -S hyprlock hypridle swaync waybar
+	sudo pacman --needed -S hyprlock hypridle swaync quickshell
 
 .PHONY: osx-packages
 osx-packages:

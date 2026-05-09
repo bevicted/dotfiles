@@ -1,6 +1,10 @@
 [user]
 	name = bevicted
-	email = BisonsEvicted@email.com
+	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIItyNDT2EFa58cHtyquZNFasSYhAzJs5nATXXyCyZIG/
+	# no default email; rely on per-remote includes below. useConfigOnly makes
+	# git refuse to commit in repos whose remote doesn't match any includeIf,
+	# instead of silently falling back to a wrong identity.
+	useConfigOnly = true
 
 [core]
 	editor = nvim
@@ -17,21 +21,34 @@
 [branch]
 	sort = -committerdate
 
-[merge]
-	conflictStyle = zdiff3
-
-[user]
-  signingkey = signing key
-
 [gpg]
-  format = ssh
+	format = ssh
 
 [gpg "ssh"]
-  program = "myprogram"
+	# Wrapper at bin/op-ssh-sign dispatches to the right 1Password binary
+	# per OS. Lives in this repo and gets stowed to /usr/local/bin.
+	program = /usr/local/bin/op-ssh-sign
 
 [commit]
-  gpgsign = true
+	gpgsign = true
 
+# Escape hatch for any future machine-local overrides.
+# Missing file is silently ignored by git.
+[include]
+	path = ~/.gitconfig.local
+
+# Per-remote identity overrides. Both URL forms (https + ssh) point at the
+# same include file so cloning either way picks up the right email.
+[includeIf "hasconfig:remote.*.url:https://github.com/**"]
+	path = ~/.gitconfig.github
+[includeIf "hasconfig:remote.*.url:git@github.com:*/**"]
+	path = ~/.gitconfig.github
+
+[includeIf "hasconfig:remote.*.url:https://codeberg.org/**"]
+	path = ~/.gitconfig.codeberg
+[includeIf "hasconfig:remote.*.url:git@codeberg.org:*/**"]
+	path = ~/.gitconfig.codeberg
+
+# Work override — keep last so it wins over personal account includes.
 [includeIf "hasconfig:remote.*.url:git@work.com:*/**"]
-  path = ~/.gitconfig.work
-
+	path = ~/.gitconfig.work

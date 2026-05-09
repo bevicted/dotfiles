@@ -16,12 +16,23 @@
 .config/nvim/lazy-lock.json
 
 # firefox
-.mozilla/firefox/user.arkenfox/
+.mozilla/firefox/*
+!.mozilla/firefox/user.arkenfox/
+.mozilla/firefox/user.arkenfox/*
 !.mozilla/firefox/user.arkenfox/user-overrides.js
+
+# claude code
+.claude/*
+!.claude/CLAUDE.md
+!.claude/skills/
 
 # ssh
 .ssh/
 !.ssh/config
+
+# git
+.gitconfig.local
+.gitconfig.work
 
 # work
 work.sh
