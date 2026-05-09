@@ -85,15 +85,7 @@ setopt HIST_FIND_NO_DUPS
 setopt globdots
 
 # Aliases
-## Shortcuts
-source $HOME/scripts/shortcuts.sh
-
-## Tool replacements
-alias_command_if_exists 'docker' 'podman'
-alias_command_if_exists 'vim' 'nvim'
-alias_command_if_exists 'grep' 'rg'
-alias_command_if_exists 'find' 'fd'
-alias_command_if_exists 'find' 'fdfind'
+source $HOME/scripts/aliases.sh
 
 # Vars
 export VISUAL=nvim
