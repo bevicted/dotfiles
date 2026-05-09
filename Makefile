@@ -17,6 +17,7 @@ man \
 neovim \
 nodejs \
 npm \
+openssh \
 parallel \
 ripgrep \
 shellcheck \
@@ -95,7 +96,26 @@ arch-yay:
 
 .PHONY: hypr
 hypr:
-	sudo pacman --needed -S hyprlock hypridle swaync quickshell
+	sudo pacman --needed -S \
+		brightnessctl \
+		grim \
+		hyprland \
+		hypridle \
+		hyprlauncher \
+		hyprlock \
+		hyprpaper \
+		hyprpolkitagent \
+		pipewire \
+		pipewire-alsa \
+		pipewire-pulse \
+		playerctl \
+		qt6-wayland \
+		quickshell \
+		slurp \
+		swaync \
+		wireplumber \
+		wl-clipboard \
+		xdg-desktop-portal-hyprland
 
 .PHONY: osx-packages
 osx-packages:

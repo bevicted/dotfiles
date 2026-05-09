@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 
-alias p='podman'
+alias d='docker'
+alias dc='docker compose'
 alias k='kubectl'
+alias p='podman'
 alias t='terraform'
-alias v='nvim .'
+alias e='$EDITOR .'
+
 if ls --version &>/dev/null; then
-    alias ls='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
+    alias lsa='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
 elif gls --version &>/dev/null; then
-    alias ls='gls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
+    alias lsa='gls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'
 else
-    alias ls='ls -AFGh1'
+    alias lsa='ls -AFGh1'
 fi
 
 # git
@@ -59,8 +62,8 @@ alias grv='git revert'
 alias gs='git status --short --branch'
 alias gst='git stash'
 alias gt='git tag'
-alias gwipe='git reset --hard && git clean --force -df'
 alias gtfo='git checkout origin/$(git_main_branch) -- '
+alias gwipe='git reset --hard && git clean --force -df'
 alias gwt='git worktree'
 alias gwta='git worktree add'
 alias gwtls='git worktree list'
