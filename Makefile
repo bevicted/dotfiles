@@ -9,19 +9,24 @@ HYPR_PKGS   := $(shell cat pkgs/pacman-hypr)
 NVIDIA_PKGS := $(shell cat pkgs/pacman-nvidia)
 BREW_PKGS   := $(COMMON_PKGS) $(shell cat pkgs/brew)
 BREW_CASKS  := $(shell cat pkgs/brew-cask)
+AUR_PKGS    := $(shell cat pkgs/aur)
+GO_PKGS     := $(shell cat pkgs/go)
+
+.PHONY: self-installers
+self-installers:
+	command -v rustup >/dev/null 2>&1 || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 .PHONY: arch-init
-arch-init: arch-pkgs arch-aur-pkgs tpm gopkgs zsh link gsettings
+arch-init: self-installers pacman aur tpm go-install zsh link gsettings
 
-.PHONY: arch-pkgs
-arch-pkgs:
+.PHONY: pacman
+pacman:
 	sudo pacman --needed -S $(ARCH_PKGS)
-	rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-.PHONY: arch-aur-pkgs
-arch-aur-pkgs:
+.PHONY: aur
+aur:
 	command -v yay >/dev/null 2>&1 || $(MAKE) yay
-	yay -S 1password 1password-cli golangci-lint
+	yay -S $(AUR_PKGS)
 
 .PHONY: yay
 yay:
@@ -40,8 +45,8 @@ hypr:
 # Open kernel modules (nvidia-open-dkms) — recommended for Turing/Ampere+ (16xx, 20xx, and later).
 # Required for 50xx series. Arch handles /etc/modprobe.d/nvidia.conf (modeset=1),
 # suspend services, and NVreg_PreserveVideoMemoryAllocations kernel param.
-.PHONY: arch-hypr-nvidia
-arch-hypr-nvidia:
+.PHONY: hypr-nvidia
+hypr-nvidia:
 	sudo pacman --needed -S $(NVIDIA_PKGS)
 	sudo sed -i -E '/nvidia_drm/! s/^MODULES=\(\)/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/; /nvidia_drm/! s/^MODULES=\((.+)\)/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
 	sudo mkinitcpio -P
@@ -68,9 +73,9 @@ zsh:
 tpm:
 	git clone https://github.com/tmux-plugins/tpm ~/.config/tmux/plugins/tpm
 
-.PHONY: gopkgs
-gopkgs:
-	go install mvdan.cc/sh/v3/cmd/shfmt@latest
+.PHONY: go-install
+go-install:
+	for pkg in $(GO_PKGS); do go install "$$pkg" || exit 1; done
 
 .PHONY: link
 link:
@@ -100,12 +105,15 @@ arkenfox-apply:
 	$(ARKEN_USER_PATH)/updater.sh -s -u
 	$(ARKEN_USER_PATH)/prefsCleaner.sh -s
 
-.PHONY: brew-packages
-brew-packages:
+.PHONY: brew
+brew:
+	command -v brew >/dev/null 2>&1 || /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+	brew update
+	brew upgrade
 	brew install $(BREW_PKGS)
+	brew install --cask $(BREW_CASKS)
 	brew tap hashicorp/tap
 	brew install hashicorp/tap/terraform
-	brew install --cask $(BREW_CASKS)
 
 # https://gist.github.com/bbqtd/a4ac060d6f6b9ea6fe3aabe735aa9d95
 # Fix osx tmux colors.
