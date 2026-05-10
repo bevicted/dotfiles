@@ -13,6 +13,8 @@ ripgrep
 shellcheck
 stow
 tmux
+tree-sitter
+tree-sitter-cli
 vim
 yq
 zig
