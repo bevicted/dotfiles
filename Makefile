@@ -122,6 +122,24 @@ hypr:
 		wl-clipboard \
 		xdg-desktop-portal-hyprland
 
+# https://wiki.hypr.land/Nvidia/
+# Open kernel modules (nvidia-open-dkms) — recommended for Turing/Ampere+ (16xx, 20xx, and later).
+# Required for 50xx series. Arch handles /etc/modprobe.d/nvidia.conf (modeset=1),
+# suspend services, and NVreg_PreserveVideoMemoryAllocations kernel param.
+.PHONY: arch-hypr-nvidia
+arch-hypr-nvidia:
+	sudo pacman --needed -S \
+		egl-wayland \
+		lib32-nvidia-utils \
+		libva-nvidia-driver \
+		linux-firmware-nvidia \
+		nvidia-open-dkms \
+		nvidia-utils
+	sudo sed -i -E '/nvidia_drm/! s/^MODULES=\(\)/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/; /nvidia_drm/! s/^MODULES=\((.+)\)/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+	sudo mkinitcpio -P
+	@echo
+	@echo "Reboot, then verify: cat /sys/module/nvidia_drm/parameters/modeset (expect Y)"
+
 .PHONY: osx-packages
 osx-packages:
 	# node and npm needed for some LSPs
