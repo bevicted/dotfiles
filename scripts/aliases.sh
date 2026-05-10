@@ -2,10 +2,11 @@
 
 alias d='docker'
 alias dc='docker compose'
+alias e='$EDITOR .'
 alias k='kubectl'
+alias o='xdg-open'
 alias p='podman'
 alias t='terraform'
-alias e='$EDITOR .'
 
 if ls --version &>/dev/null; then
     alias lsa='ls --almost-all --color --classify --group-directories-first --human-readable -1 --time-style=long-iso'

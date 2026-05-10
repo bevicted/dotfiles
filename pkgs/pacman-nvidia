@@ -1,0 +1,6 @@
+egl-wayland
+lib32-nvidia-utils
+libva-nvidia-driver
+linux-firmware-nvidia
+nvidia-open-dkms
+nvidia-utils
