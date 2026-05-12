@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+worktree_dir="${HOME}/.worktrees"
+project_name="$(basename "$(git rev-parse --show-toplevel)")"
+
+expand() {
+	printf '%s/%s-%s' "${worktree_dir}" "${project_name}" "$1"
+}
+
+require_arg() {
+	if [[ $# -lt 2 ]]; then
+		echo "gw ${1}: missing suffix arg" >&2
+		exit 1
+	fi
+}
+
+cmd="${1:-list}"
+shift || true
+
+case "${cmd}" in
+	add)
+		require_arg add "$@"
+		suffix="$1"; shift
+		git worktree add "$(expand "${suffix}")" "$@"
+		;;
+	rm|remove)
+		require_arg "${cmd}" "$@"
+		suffix="$1"; shift
+		git worktree remove "$(expand "${suffix}")" "$@"
+		;;
+	ls|list)
+		git worktree list "$@"
+		;;
+	sess|sessionize)
+		selected=$(git worktree list --porcelain | awk '/^worktree /{print $2}' | fzf) || exit 0
+		[[ -z "${selected}" ]] && exit 0
+		tmux-sessionizer "${selected}"
+		;;
+	mv|move)
+		if [[ $# -lt 2 ]]; then
+			echo "gw ${cmd}: need src and dst suffix" >&2
+			exit 1
+		fi
+		src="$1"; dst="$2"; shift 2
+		git worktree move "$(expand "${src}")" "$(expand "${dst}")" "$@"
+		;;
+	lock|unlock)
+		require_arg "${cmd}" "$@"
+		suffix="$1"; shift
+		git worktree "${cmd}" "$(expand "${suffix}")" "$@"
+		;;
+	*)
+		git worktree "${cmd}" "$@"
+		;;
+esac
