@@ -32,10 +32,11 @@
 [commit]
 	gpgsign = true
 
-# Escape hatch for any future machine-local overrides.
-# Missing file is silently ignored by git.
-[include]
-	path = ~/.gitconfig.local
+# Rewrite https → ssh so clones with https URLs still push over ssh.
+[url "git@github.com:"]
+	insteadOf = https://github.com/
+[url "git@codeberg.org:"]
+	insteadOf = https://codeberg.org/
 
 # Per-remote identity overrides. Both URL forms (https + ssh) point at the
 # same include file so cloning either way picks up the right email.
@@ -49,6 +50,7 @@
 [includeIf "hasconfig:remote.*.url:git@codeberg.org:*/**"]
 	path = ~/.gitconfig.codeberg
 
-# Work override — keep last so it wins over personal account includes.
-[includeIf "hasconfig:remote.*.url:git@work.com:*/**"]
-	path = ~/.gitconfig.work
+# Escape hatch for any future machine-local overrides.
+# Missing file is silently ignored by git.
+[include]
+	path = ~/.gitconfig.local
