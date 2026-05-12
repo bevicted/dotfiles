@@ -38,6 +38,11 @@
 [url "git@codeberg.org:"]
 	insteadOf = https://codeberg.org/
 
+# Escape hatch for any future machine-local overrides.
+# Missing file is silently ignored by git.
+[include]
+	path = ~/.gitconfig.local
+
 # Per-remote identity overrides. Both URL forms (https + ssh) point at the
 # same include file so cloning either way picks up the right email.
 [includeIf "hasconfig:remote.*.url:https://github.com/**"]
@@ -49,8 +54,3 @@
 	path = ~/.gitconfig.codeberg
 [includeIf "hasconfig:remote.*.url:git@codeberg.org:*/**"]
 	path = ~/.gitconfig.codeberg
-
-# Escape hatch for any future machine-local overrides.
-# Missing file is silently ignored by git.
-[include]
-	path = ~/.gitconfig.local
