@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 
 RowLayout {
-    spacing: 10
+    spacing: 8
 
     SystemClock {
         id: clock
@@ -12,16 +12,16 @@ RowLayout {
 
     Text {
         text: Qt.formatDateTime(clock.date, "ddd dd MMM")
-        color: "#bac2de"
+        color: "#a6adc8"
         font.family: "JetBrainsMono Nerd Font"
         font.pixelSize: 12
     }
 
     Text {
         text: Qt.formatDateTime(clock.date, "HH:mm")
-        color: "#cdd6f4"
+        color: "#fab387"
         font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 13
+        font.pixelSize: 12
         font.weight: Font.Medium
     }
 }
