@@ -48,6 +48,14 @@ PanelWindow {
 
             Item { Layout.fillWidth: true }
 
+            Network {
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            Volume {
+                Layout.alignment: Qt.AlignVCenter
+            }
+
             Clock {
                 Layout.alignment: Qt.AlignVCenter
             }
