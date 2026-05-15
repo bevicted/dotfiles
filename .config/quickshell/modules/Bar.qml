@@ -8,10 +8,7 @@ PanelWindow {
     required property var modelData
     screen: modelData
 
-    // matches hyprland gaps_in / rounding / border_size
-    readonly property int gap: 3
-    readonly property int barHeight: 30
-    readonly property int rounding: 10
+    readonly property int barHeight: 24
 
     anchors {
         top: true
@@ -19,29 +16,31 @@ PanelWindow {
         right: true
     }
 
-    margins {
-        top: gap
-        left: gap
-        right: gap
-    }
-
     implicitHeight: barHeight
-    exclusiveZone: barHeight + gap * 2
+    exclusiveZone: barHeight
     color: "transparent"
 
     Rectangle {
         anchors.fill: parent
         color: "#1e1e2e"
-        opacity: 0.96
-        radius: bar.rounding
-        border.width: 1
-        border.color: "#595959"
+        opacity: 0.85
+
+        Rectangle {
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+            height: 1
+            color: "#45475a"
+            opacity: 0.5
+        }
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
-            spacing: 12
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            spacing: 16
 
             Workspaces {
                 Layout.alignment: Qt.AlignVCenter

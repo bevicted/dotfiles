@@ -3,33 +3,34 @@ import QtQuick.Layouts
 import Quickshell.Hyprland
 
 RowLayout {
-    spacing: 6
+    spacing: 10
 
     Repeater {
         model: Hyprland.workspaces
 
-        delegate: Rectangle {
-            id: pill
+        delegate: Text {
+            id: ws
             required property var modelData
 
-            implicitWidth: modelData.focused ? 26 : 10
-            implicitHeight: 10
-            radius: 5
-            color: modelData.focused
-                ? "#b4befe"
-                : modelData.hasFullscreen ? "#cba6f7" : "#585b70"
+            readonly property bool focused: modelData.focused
+            readonly property bool occupied: (modelData.toplevels?.values?.length ?? 0) > 0
 
-            Behavior on implicitWidth {
-                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
-            }
+            text: modelData.id
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 12
+            font.weight: focused ? Font.Bold : Font.Normal
+            color: focused
+                ? "#cdd6f4"
+                : occupied ? "#a6adc8" : "#6c7086"
+
             Behavior on color {
-                ColorAnimation { duration: 160 }
+                ColorAnimation { duration: 120 }
             }
 
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: Hyprland.dispatch("workspace " + pill.modelData.id)
+                onClicked: Hyprland.dispatch("workspace " + ws.modelData.id)
             }
         }
     }
