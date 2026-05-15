@@ -11,7 +11,7 @@ Text {
     property string down: "0B"
     property string up: "0B"
 
-    text: "󰓢 " + down + " 󰓞 " + up
+    text: "↓ " + down + "  ↑ " + up
     color: "#89b4fa"
     font.family: "JetBrainsMono Nerd Font"
     font.pixelSize: 12
