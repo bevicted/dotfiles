@@ -66,3 +66,36 @@ alias gst='git stash'
 alias gt='git tag'
 alias gtfo='git checkout origin/$(git_main_branch) -- '
 alias gwipe='git reset --hard && git clean --force -df'
+
+# gw completion: own subcommands on the first word, then hand off to git's
+# native `git worktree` completer (branches, paths, flags) for the rest.
+if [[ -n "${ZSH_VERSION:-}" ]]; then
+	_gw() {
+		local -a subcmds=(
+			'add:create worktree + branch <suffix>, jump in'
+			'rm:remove worktree <suffix>, kill its tmux session'
+			'remove:remove worktree <suffix>, kill its tmux session'
+			'prune:prune stale worktrees + kill their dead tmux sessions'
+			'ls:list worktrees'
+			'list:list worktrees'
+			'sess:fzf-pick a worktree and sessionize it'
+			'sessionize:fzf-pick a worktree and sessionize it'
+			'mv:move worktree <src> <dst>'
+			'move:move worktree <src> <dst>'
+			'lock:lock worktree <suffix>'
+			'unlock:unlock worktree <suffix>'
+		)
+		if (( CURRENT == 2 )); then
+			_describe -t commands 'gw command' subcmds
+			return
+		fi
+		case "${words[2]}" in
+			sess|sessionize|ls|list) return ;;
+		esac
+		# Rewrite the line as `git worktree <cmd> ...` and defer to _git.
+		words=(git worktree "${words[@]:1}")
+		(( CURRENT += 1 ))
+		_git
+	}
+	compdef _gw gw
+fi
