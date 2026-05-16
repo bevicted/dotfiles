@@ -2,11 +2,32 @@
 
 set -euo pipefail
 
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	echo "gw: not inside a git repository" >&2
+	exit 1
+fi
+
 worktree_dir="${HOME}/.worktrees"
-project_name="$(basename "$(git rev-parse --show-toplevel)")"
+
+# Resolve the *main* worktree path. git-common-dir is `.git` (relative) in the
+# main worktree but an absolute path in linked worktrees, so this stays stable
+# no matter which worktree gw is invoked from. project_name must derive from
+# here, otherwise running gw from inside a linked worktree would nest names
+# (my-project-foo-bar instead of my-project-bar).
+main_worktree="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
+project_name="$(basename "${main_worktree}")"
 
 expand() {
 	printf '%s/%s-%s' "${worktree_dir}" "${project_name}" "$1"
+}
+
+# Mirrors the session naming in tmux-sessionizer (basename, dots -> _).
+session_name() {
+	basename "$1" | tr . _
+}
+
+have_tmux() {
+	command -v tmux >/dev/null 2>&1
 }
 
 require_arg() {
@@ -16,27 +37,82 @@ require_arg() {
 	fi
 }
 
-cmd="${1:-list}"
+cmd="${1:-sessionize}"
 shift || true
 
 case "${cmd}" in
 	add)
 		require_arg add "$@"
 		suffix="$1"; shift
-		git worktree add "$(expand "${suffix}")" "$@"
+		path="$(expand "${suffix}")"
+		# Worktree dir stays project-prefixed; branch is just the suffix.
+		if git show-ref --verify --quiet "refs/heads/${suffix}"; then
+			# Reusing an existing branch: do NOT silently branch from HEAD,
+			# and refuse a start-point that git would ignore anyway.
+			if [[ $# -gt 0 ]]; then
+				echo "gw add: branch '${suffix}' already exists; can't also apply start-point ($*)." >&2
+				echo "        Pick a new suffix, or run 'gw add ${suffix}' alone to check the existing branch out." >&2
+				exit 1
+			fi
+			tip="$(git log -1 --format='%h %s' "${suffix}" 2>/dev/null || true)"
+			echo "gw add: branch '${suffix}' already EXISTS — checking it out (NOT branching from HEAD)." >&2
+			echo "        tip: ${tip}" >&2
+			git worktree add "${path}" "${suffix}"
+		else
+			git worktree add -b "${suffix}" "${path}" "$@"
+		fi
+		tmux-sessionizer "${path}"
 		;;
 	rm|remove)
 		require_arg "${cmd}" "$@"
 		suffix="$1"; shift
-		git worktree remove "$(expand "${suffix}")" "$@"
+		path="$(expand "${suffix}")"
+		sess="$(session_name "${path}")"
+		git worktree remove "${path}" "$@"
+		if have_tmux && tmux has-session -t="${sess}" 2>/dev/null; then
+			# If we're sitting inside the session being killed, hop to the
+			# main project session first (created if absent) so the client
+			# survives, then kill the orphaned worktree session.
+			if [[ -n "${TMUX:-}" && "$(tmux display-message -p '#S')" == "${sess}" ]]; then
+				tmux-sessionizer "${main_worktree}"
+			fi
+			tmux kill-session -t "${sess}" 2>/dev/null || true
+		fi
+		;;
+	prune)
+		git worktree prune "$@"
+		if have_tmux; then
+			# Build the set of session names that still back a live worktree.
+			live=" "
+			while IFS= read -r p; do
+				live+="$(session_name "${p}") "
+			done < <(git worktree list --porcelain | awk '/^worktree /{print $2}')
+			current=""
+			[[ -n "${TMUX:-}" ]] && current="$(tmux display-message -p '#S')"
+			while IFS= read -r s; do
+				# Only touch sessions that look like this project's worktrees.
+				[[ "${s}" == "${project_name}-"* ]] || continue
+				[[ "${live}" == *" ${s} "* ]] && continue
+				if [[ "${s}" == "${current}" ]]; then
+					tmux-sessionizer "${main_worktree}"
+				fi
+				tmux kill-session -t "${s}" 2>/dev/null || true
+			done < <(tmux list-sessions -F '#S' 2>/dev/null || true)
+		fi
 		;;
 	ls|list)
 		git worktree list "$@"
 		;;
 	sess|sessionize)
-		selected=$(git worktree list --porcelain | awk '/^worktree /{print $2}' | fzf) || exit 0
+		# Show paths relative to the worktree dir in the picker, but pass the
+		# full path through (tab-delimited; fzf displays field 1 only).
+		selected=$(
+			git worktree list --porcelain | awk '/^worktree /{print $2}' \
+				| awk -v p="${worktree_dir}/" 'BEGIN{n=length(p)} {d=$0; if (substr(d,1,n)==p) d=substr(d,n+1); print d "\t" $0}' \
+				| fzf --delimiter='\t' --with-nth=1
+		) || exit 0
 		[[ -z "${selected}" ]] && exit 0
-		tmux-sessionizer "${selected}"
+		tmux-sessionizer "${selected#*$'\t'}"
 		;;
 	mv|move)
 		if [[ $# -lt 2 ]]; then
@@ -44,7 +120,16 @@ case "${cmd}" in
 			exit 1
 		fi
 		src="$1"; dst="$2"; shift 2
-		git worktree move "$(expand "${src}")" "$(expand "${dst}")" "$@"
+		src_path="$(expand "${src}")"
+		dst_path="$(expand "${dst}")"
+		src_sess="$(session_name "${src_path}")"
+		dst_sess="$(session_name "${dst_path}")"
+		git worktree move "${src_path}" "${dst_path}" "$@"
+		if have_tmux && tmux has-session -t="${src_sess}" 2>/dev/null; then
+			# Keep the session tracking the renamed worktree. Panes keep their
+			# (now stale) cwd — re-cd inside if needed.
+			tmux rename-session -t "${src_sess}" "${dst_sess}" 2>/dev/null || true
+		fi
 		;;
 	lock|unlock)
 		require_arg "${cmd}" "$@"
