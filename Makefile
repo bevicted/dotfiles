@@ -26,7 +26,7 @@ pacman:
 .PHONY: aur
 aur:
 	command -v yay >/dev/null 2>&1 || $(MAKE) yay
-	yay -S $(AUR_PKGS)
+	yay --needed -S $(AUR_PKGS)
 
 .PHONY: yay
 yay:
