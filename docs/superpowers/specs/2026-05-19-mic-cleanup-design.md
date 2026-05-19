@@ -263,10 +263,12 @@ context.modules = [
           { output = "hs:Out"          input = "comp:Input" }
         ]
       }
-      capture.props  = { node.passive = true
+      capture.props  = { node.name = "effect_input.cleaned-mic"
+                         node.passive = true
                          audio.channels = 1  audio.position = [ MONO ] }
-      playback.props = { media.class = Audio/Source
-                         node.name = "effect_input.cleaned-mic"
+      playback.props = { node.name = "effect_output.cleaned-mic"
+                         media.class = Audio/Source
+                         node.description = "Cleaned Mic"
                          audio.channels = 1  audio.position = [ MONO ] }
     }
   }
