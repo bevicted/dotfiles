@@ -44,7 +44,7 @@ link. `audio.channels = 1`, `audio.position = [ MONO ]` on both
 | Denoise + gate | `type = ladspa`, `plugin = "librnnoise_ladspa"`, `label = noise_suppressor_mono` | control `"VAD Threshold (%)"`; doubles as soft gate — covers "noise" + "gate" in one stage |
 | Rumble/pop removal | `type = builtin`, `label = bq_highpass` | control ports `"Freq"`, `"Q"`, `"Gain"`. No dependency |
 | Harshness tame | `type = builtin`, `label = bq_highshelf` | control ports `"Freq"`, `"Q"`, `"Gain"`. No dependency |
-| Leveling | `type = ladspa`, `plugin = "sc4_1882"`, `label = sc4` | mono SC4 (`sc4_1882.so`); ports `"Attack time (ms)"`, `"Release time (ms)"`, `"Threshold level (dB)"`, `"Ratio (1:n)"`, `"Knee radius (dB)"`, `"Makeup gain (dB)"` |
+| Leveling | `type = ladspa`, `plugin = "sc4m_1916"`, `label = sc4m` | mono SC4 (`sc4m_1916.so`, audio ports `Input`/`Output`); controls `"Attack time (ms)"`, `"Release time (ms)"`, `"Threshold level (dB)"`, `"Ratio (1:n)"`, `"Knee radius (dB)"`, `"Makeup gain (dB)"`. (`sc4_1882`/`sc4` is the stereo variant — not used.) |
 
 The chain has >1 node, so `filter.graph` **must** include an explicit
 `links` array wiring stage outputs to the next stage's input (auto-link
@@ -121,7 +121,7 @@ spec directory is not symlinked into `$HOME`.)
 | Package | Repo file | Reason |
 |---------|-----------|--------|
 | `noise-suppression-for-voice` | `pkgs/aur` | provides `librnnoise_ladspa.so` (RNNoise LADSPA) |
-| `swh-plugins` | `pkgs/pacman` | provides SC4 compressor LADSPA (`sc4_1882.so`) |
+| `swh-plugins` | `pkgs/pacman` | provides SC4 compressor LADSPA (mono `sc4m_1916.so`) |
 | `ladspa` | `pkgs/pacman` | provides `analyseplugin` (note British spelling — Arch package is `ladspa`, not Debian's `ladspa-sdk`) for the mandatory label/port introspection step |
 
 Package-list files are newline-separated and consumed via `$(shell cat)`
@@ -179,7 +179,7 @@ implementation.
    - **Mitigation (mandatory implementation step):** after installing the
      packages, introspect the actual labels/control ports —
      `analyseplugin` (from `ladspa`) on `librnnoise_ladspa.so` and on
-     `sc4_1882.so`, cross-checked against the shipped
+     `sc4m_1916.so` (mono variant), cross-checked against the shipped
      `/usr/share/pipewire/filter-chain/source-rnnoise.conf` — and write
      the *verified* exact strings into the config. Do not guess. The
      implementation plan must gate config-finalization on this
@@ -223,7 +223,14 @@ implementation.
 ## Appendix: config skeleton (strings filled at implementation)
 
 Derived from `/usr/share/pipewire/filter-chain/source-rnnoise.conf`.
-`<...>` = pin from `analyseplugin` introspection.
+Plugin labels/ports below are the VERIFIED strings from
+`analyseplugin` (Task 3, `/tmp/mic-cleanup-introspect.txt`):
+- RNNoise mono: `librnnoise_ladspa` label `noise_suppressor_mono`,
+  audio ports `Input`/`Output`, control `"VAD Threshold (%)"` (0–99).
+- SC4 mono: `sc4m_1916` label `sc4m`, audio ports `Input`/`Output`
+  (the stereo `sc4_1882`/`sc4` is NOT used in a mono chain).
+- Builtin biquad: labels `bq_highpass`/`bq_highshelf`, audio ports
+  `In`/`Out`, controls `"Freq"`/`"Q"`/`"Gain"`.
 
 ```
 # ~/.config/pipewire/pipewire.conf.d/99-input-denoise.conf
@@ -235,7 +242,7 @@ context.modules = [
       media.name       = "Cleaned Mic"
       filter.graph = {
         nodes = [
-          # [TUNE] "VAD Threshold (%)" : 0..100, higher = more gating
+          # [TUNE] "VAD Threshold (%)" : 0..99, higher = more gating
           { type = ladspa  plugin = "librnnoise_ladspa"
             label = noise_suppressor_mono  name = rnnoise
             control = { "VAD Threshold (%)" = 50.0 } }
@@ -245,15 +252,15 @@ context.modules = [
           # [TUNE] "Gain" dB cut to tame harshness
           { type = builtin label = bq_highshelf name = hs
             control = { "Freq" = 6000.0 "Q" = 0.7 "Gain" = -3.0 } }
-          # [TUNE] SC4 leveling
-          { type = ladspa  plugin = "sc4_1882"  label = sc4  name = comp
+          # [TUNE] SC4 mono leveling
+          { type = ladspa  plugin = "sc4m_1916"  label = sc4m  name = comp
             control = { "Ratio (1:n)" = 3.0 "Threshold level (dB)" = -18.0
                         "Makeup gain (dB)" = 6.0 } }
         ]
         links = [
-          { output = "rnnoise:<out>" input = "hp:<in>" }
-          { output = "hp:<out>"      input = "hs:<in>" }
-          { output = "hs:<out>"      input = "comp:<in>" }
+          { output = "rnnoise:Output" input = "hp:In" }
+          { output = "hp:Out"          input = "hs:In" }
+          { output = "hs:Out"          input = "comp:Input" }
         ]
       }
       capture.props  = { node.passive = true
