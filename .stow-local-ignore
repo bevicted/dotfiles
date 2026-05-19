@@ -6,6 +6,7 @@ LICENSE.md
 Makefile
 README.md
 bin
+docs
 etc
 git_configs.sh
 pkgs
