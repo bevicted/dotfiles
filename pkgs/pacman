@@ -2,8 +2,10 @@ docker
 docker-compose
 ghostty
 git
+ladspa-sdk
 man
 openssh
+swh-plugins
 terraform
 ttf-jetbrains-mono-nerd
 unzip
