@@ -64,14 +64,14 @@ Expected: newline-separated plain package names, no `#` comments. Note last line
 
 Use the Edit tool. Add `noise-suppression-for-voice` on its own line at the end, preserving the file's existing newline style. NO comment text on the line (Makefile passes lines verbatim to `yay`).
 
-- [ ] **Step 3: Append `swh-plugins` and `ladspa-sdk` to `pkgs/pacman`**
+- [ ] **Step 3: Append `swh-plugins` and `ladspa` to `pkgs/pacman`**
 
-Use the Edit tool. Add two lines at the end: `swh-plugins` and `ladspa-sdk`, each on its own line, no comments.
+Use the Edit tool. Add two lines at the end: `swh-plugins` and `ladspa`, each on its own line, no comments.
 
 - [ ] **Step 4: Verify the Makefile will consume them**
 
 Run: `make -np 2>/dev/null | grep -E 'AUR_PKGS|ARCH_PKGS' | head -4`
-Expected: `noise-suppression-for-voice` appears in the AUR_PKGS expansion; `swh-plugins` and `ladspa-sdk` appear in the ARCH_PKGS expansion.
+Expected: `noise-suppression-for-voice` appears in the AUR_PKGS expansion; `swh-plugins` and `ladspa` appear in the ARCH_PKGS expansion.
 
 - [ ] **Step 5: Commit**
 
@@ -92,7 +92,7 @@ This task produces the ground-truth strings every later config depends on. Outpu
 - [ ] **Step 1: Install the packages via the canonical targets**
 
 Run: `make pacman` then `make aur`
-Expected: `swh-plugins`, `ladspa-sdk`, `noise-suppression-for-voice` install without error. If `make aur` prompts, allow the build.
+Expected: `swh-plugins`, `ladspa`, `noise-suppression-for-voice` install without error. If `make aur` prompts, allow the build.
 
 - [ ] **Step 2: Confirm the plugin .so files exist**
 
@@ -101,12 +101,12 @@ Expected: at least `librnnoise_ladspa.so` and `sc4_1882.so` present. Record exac
 
 - [ ] **Step 3: Introspect RNNoise**
 
-Run: `analyzeplugin /usr/lib/ladspa/librnnoise_ladspa.so`
+Run: `analyseplugin /usr/lib/ladspa/librnnoise_ladspa.so`
 Expected: lists plugin label(s). Record the exact mono label (`noise_suppressor_mono` or build variant) and the exact VAD control port string (e.g. `VAD Threshold (%)`) into `/tmp/mic-cleanup-introspect.txt`.
 
 - [ ] **Step 4: Introspect SC4**
 
-Run: `analyzeplugin /usr/lib/ladspa/sc4_1882.so`
+Run: `analyseplugin /usr/lib/ladspa/sc4_1882.so`
 Expected: label `sc4` (confirm) and exact control port strings for ratio, threshold, attack, release, knee, makeup gain, plus the audio input/output port names. Record all into the notes file.
 
 - [ ] **Step 5: Capture the shipped reference config**
@@ -136,7 +136,7 @@ Build from the skeleton in the spec appendix, substituting Task 3's verified str
 
 Create `.config/pipewire/pipewire.conf.d/99-input-denoise.conf` using the spec-appendix skeleton as the structure, with these rules:
 - Every `plugin`, `label`, and `control` key string is copied from `/tmp/mic-cleanup-introspect.txt`, not from memory or the skeleton's placeholders.
-- `links` array wires `rnnoise → hp → hs → comp` using the exact port names the shipped reference config / `analyzeplugin` reported (RNNoise and SC4 LADSPA port names differ from builtin `In`/`Out`; use what introspection showed).
+- `links` array wires `rnnoise → hp → hs → comp` using the exact port names the shipped reference config / `analyseplugin` reported (RNNoise and SC4 LADSPA port names differ from builtin `In`/`Out`; use what introspection showed).
 - `capture.props` mirrors the shipped `source-rnnoise.conf` exactly: include `node.passive = true`, `audio.channels = 1`, `audio.position = [ MONO ]`.
 - `playback.props`: `media.class = Audio/Source`, `node.name = "effect_input.cleaned-mic"`, `node.description = "Cleaned Mic"`, `audio.channels = 1`, `audio.position = [ MONO ]`.
 - Top-of-file comment header lists each `[TUNE]` control port with its unit and valid range, so future tuning is edit-a-number (spec "Tuning later" requirement).
@@ -257,7 +257,7 @@ Expected: commits for scaffolding, pkgs, filter-chain, wireplumber rule (+ any .
 - Processing chain (mono RNNoise→HP→HS→SC4, explicit links) → Task 4.
 - Generic hardware binding / `node.passive` / no device string → Task 4 Step 1+5.
 - Default routing via tracked WirePlumber rule, not mutable state → Task 5.
-- Packages via Makefile lists incl. `ladspa-sdk` → Task 2.
+- Packages via Makefile lists incl. `ladspa` → Task 2.
 - Introspection gate before config finalization → Task 3 (hard ordering constraint stated in header).
 - Stow paths + `docs` ignore → Task 1, Task 6.
 - Stow-fold pollution risk + `git status` clean → Task 6 Step 5.

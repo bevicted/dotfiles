@@ -2,7 +2,7 @@ docker
 docker-compose
 ghostty
 git
-ladspa-sdk
+ladspa
 man
 openssh
 swh-plugins
