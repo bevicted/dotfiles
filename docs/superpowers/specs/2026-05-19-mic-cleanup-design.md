@@ -122,7 +122,7 @@ spec directory is not symlinked into `$HOME`.)
 |---------|-----------|--------|
 | `noise-suppression-for-voice` | `pkgs/aur` | provides `librnnoise_ladspa.so` (RNNoise LADSPA) |
 | `swh-plugins` | `pkgs/pacman` | provides SC4 compressor LADSPA (`sc4_1882.so`) |
-| `ladspa-sdk` | `pkgs/pacman` | provides `analyzeplugin` for the mandatory label/port introspection step |
+| `ladspa` | `pkgs/pacman` | provides `analyseplugin` (note British spelling — Arch package is `ladspa`, not Debian's `ladspa-sdk`) for the mandatory label/port introspection step |
 
 Package-list files are newline-separated and consumed via `$(shell cat)`
 in the Makefile — **no `#` comments** (a comment line would be passed to
@@ -178,14 +178,14 @@ implementation.
    long-term).
    - **Mitigation (mandatory implementation step):** after installing the
      packages, introspect the actual labels/control ports —
-     `analyzeplugin` (from `ladspa-sdk`) on `librnnoise_ladspa.so` and on
+     `analyseplugin` (from `ladspa`) on `librnnoise_ladspa.so` and on
      `sc4_1882.so`, cross-checked against the shipped
      `/usr/share/pipewire/filter-chain/source-rnnoise.conf` — and write
      the *verified* exact strings into the config. Do not guess. The
      implementation plan must gate config-finalization on this
      introspection.
    - **Recovery (documented):** if a future package update renames a
-     port, mic disappears; re-run `analyzeplugin`, fix the string,
+     port, mic disappears; re-run `analyseplugin`, fix the string,
      restart user services.
 
 2. **Hardware-default binding edge cases.** If no hardware mic is present
@@ -223,7 +223,7 @@ implementation.
 ## Appendix: config skeleton (strings filled at implementation)
 
 Derived from `/usr/share/pipewire/filter-chain/source-rnnoise.conf`.
-`<...>` = pin from `analyzeplugin` introspection.
+`<...>` = pin from `analyseplugin` introspection.
 
 ```
 # ~/.config/pipewire/pipewire.conf.d/99-input-denoise.conf
