@@ -28,6 +28,7 @@
 .claude/*
 !.claude/CLAUDE.md
 !.claude/skills/
+!.claude/commands/
 
 # ssh
 .ssh/
