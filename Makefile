@@ -10,7 +10,11 @@ NVIDIA_PKGS := $(shell cat pkgs/pacman-nvidia)
 BREW_PKGS   := $(COMMON_PKGS) $(shell cat pkgs/brew)
 BREW_CASKS  := $(shell cat pkgs/brew-cask)
 AUR_PKGS    := $(shell cat pkgs/aur)
+GAMING_PKGS := $(shell cat pkgs/pacman-gaming)
+AUR_GAMING_PKGS := $(shell cat pkgs/aur-gaming)
 GO_PKGS     := $(shell cat pkgs/go)
+
+PACMAN_INSTALL := sudo pacman --needed -S
 
 .PHONY: self-installers
 self-installers:
@@ -21,7 +25,7 @@ arch-init: self-installers pacman aur tpm go-install zsh link gsettings
 
 .PHONY: pacman
 pacman:
-	sudo pacman --needed -S $(ARCH_PKGS)
+	$(PACMAN_INSTALL) $(ARCH_PKGS)
 
 .PHONY: aur
 aur:
@@ -39,7 +43,7 @@ yay:
 
 .PHONY: hypr
 hypr:
-	sudo pacman --needed -S $(HYPR_PKGS)
+	$(PACMAN_INSTALL) $(HYPR_PKGS)
 
 # https://wiki.hypr.land/Nvidia/
 # Open kernel modules (nvidia-open-dkms) — recommended for Turing/Ampere+ (16xx, 20xx, and later).
@@ -47,11 +51,16 @@ hypr:
 # suspend services, and NVreg_PreserveVideoMemoryAllocations kernel param.
 .PHONY: hypr-nvidia
 hypr-nvidia:
-	sudo pacman --needed -S $(NVIDIA_PKGS)
+	$(PACMAN_INSTALL) $(NVIDIA_PKGS)
 	sudo sed -i -E '/nvidia_drm/! s/^MODULES=\(\)/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/; /nvidia_drm/! s/^MODULES=\((.+)\)/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
 	sudo mkinitcpio -P
 	@echo
 	@echo "Reboot, then verify: cat /sys/module/nvidia_drm/parameters/modeset (expect Y)"
+
+.PHONY: gaming
+gaming:
+	$(PACMAN_INSTALL) $(GAMING_PKGS)
+	yay --needed -S $(AUR_GAMING_PKGS)
 
 .PHONY: docker-setup
 docker-setup:
