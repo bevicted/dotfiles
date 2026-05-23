@@ -15,6 +15,7 @@ AUR_GAMING_PKGS := $(shell cat pkgs/aur-gaming)
 GO_PKGS     := $(shell cat pkgs/go)
 
 PACMAN_INSTALL := sudo pacman --needed -S
+YAY_INSTALL    := yay --needed --answerclean None --answerdiff None -S
 
 .PHONY: self-installers
 self-installers:
@@ -30,7 +31,7 @@ pacman:
 .PHONY: aur
 aur:
 	command -v yay >/dev/null 2>&1 || $(MAKE) yay
-	yay --needed -S $(AUR_PKGS)
+	$(YAY_INSTALL) $(AUR_PKGS)
 
 .PHONY: yay
 yay:
@@ -60,7 +61,7 @@ hypr-nvidia:
 .PHONY: gaming
 gaming:
 	$(PACMAN_INSTALL) $(GAMING_PKGS)
-	yay --needed -S $(AUR_GAMING_PKGS)
+	$(YAY_INSTALL) $(AUR_GAMING_PKGS)
 
 .PHONY: docker-setup
 docker-setup:
