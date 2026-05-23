@@ -1,0 +1,18 @@
+# Machine-specific monitor config. Untracked (real file is gitignored).
+#
+# Bootstrap:
+#   cp ~/.config/hypr/monitors.conf.example ~/.config/hypr/monitors.conf
+#   # edit monitors.conf with output of: hyprctl monitors
+#
+# Use `desc:` matching so config survives port swaps and absent monitors
+# on other machines (e.g. laptop with no external displays falls through
+# to the wildcard `monitor=,preferred,auto,auto` in hyprland.conf).
+#
+# Format: monitor=NAME,RESOLUTION@HZ,POSITION,SCALE[,vrr,MODE]
+# VRR mode: 0=off, 1=on, 2=fullscreen only (safest, no desktop flicker).
+
+# Primary ultrawide, 165Hz with VRR in fullscreen
+# monitor=desc:Vendor Model Serial,3440x1440@165,0x0,1,vrr,2
+
+# Secondary 1080p60 to the right
+# monitor=desc:Vendor Model Serial,1920x1080@60,3440x0,1
