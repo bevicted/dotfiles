@@ -29,7 +29,7 @@ else
 		worktrees_cmd=(fd --max-depth 1 --type directory --unrestricted --follow . "$HOME/.worktrees")
 	fi
 	# do not break this line, could introduce weird behaviour
-	selected_path=$({ fd --max-depth 4 --type directory --unrestricted --follow --prune '^\.git$' "$HOME/dev" --exec dirname {}; "${worktrees_cmd[@]}"; echo "$HOME/dev/"; } | fzf)
+	selected_path=$({ fd --max-depth 4 --unrestricted --follow --prune '^(\.git|\.sessionize)$' "$HOME/dev" --exec dirname {}; "${worktrees_cmd[@]}"; echo "$HOME/dev/"; } | fzf)
 fi
 
 if [[ -z $selected_path ]]; then
