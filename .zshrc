@@ -120,12 +120,7 @@ export PATH=$HOME/.opencode/bin:$HOME/.local/bin:$GOPATH/bin:$PATH
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
-icb_cmd=$(command -v icb)
-icb() {
-  local cmd
-  cmd=$("${icb_cmd}" "$@") || return
-  print -z -- "$cmd"
-}
+command -v icb >/dev/null 2>&1 && eval "$(icb init zsh)"
 
 # Pop me into tmux if it exists, current shell is interactive and is not already inside tmux
 # WARN: Causes too many issues as of now
