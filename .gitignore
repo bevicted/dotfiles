@@ -31,8 +31,9 @@
 !.claude/commands/
 
 # ssh
-.ssh/
+.ssh/*
 !.ssh/config
+!.ssh/*.pub
 
 # git
 .gitconfig.local
