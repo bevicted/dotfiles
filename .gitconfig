@@ -28,6 +28,9 @@
 	# Wrapper at bin/op-ssh-sign dispatches to the right 1Password binary
 	# per OS. Lives in this repo and gets stowed to /usr/local/bin.
 	program = /usr/local/bin/op-ssh-sign
+	# Assembled by `make allowed-signers` from .ssh/allowed_signers.public
+	# (tracked) + .ssh/allowed_signers.work (gitignored, optional).
+	allowedSignersFile = ~/.ssh/allowed_signers
 
 [commit]
 	gpgsign = true
