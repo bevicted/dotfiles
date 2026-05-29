@@ -34,6 +34,7 @@
 .ssh/*
 !.ssh/config
 !.ssh/*.pub
+!.ssh/allowed_signers.public
 
 # git
 .gitconfig.local

@@ -91,6 +91,15 @@ go-install:
 link:
 	stow --verbose --restow --target=$(HOME) .
 	sudo stow --verbose --restow --dir ./bin --target /usr/local/bin .
+	$(MAKE) allowed-signers
+
+# Assemble ~/.ssh/allowed_signers from the tracked public entries plus an
+# optional local .work file (gitignored). Result is a plain file, not a stow
+# symlink, so `cat >>` from per-machine setup stays safe across `make link`.
+.PHONY: allowed-signers
+allowed-signers:
+	cat $(HOME)/.ssh/allowed_signers.public > $(HOME)/.ssh/allowed_signers
+	[ -f $(HOME)/.ssh/allowed_signers.work ] && cat $(HOME)/.ssh/allowed_signers.work >> $(HOME)/.ssh/allowed_signers || true
 
 .PHONY: link-delete
 link-delete:
