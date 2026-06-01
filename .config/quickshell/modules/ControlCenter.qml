@@ -32,6 +32,13 @@ PanelWindow {
 
     readonly property string accent: "#b4befe"
 
+    // thermal gradient: cool=accent, warm=yellow, hot=red (catppuccin)
+    function tempColor(t) {
+        if (t >= 80) return "#f38ba8"
+        if (t >= 65) return "#f9e2af"
+        return root.accent
+    }
+
     PwObjectTracker { objects: Pipewire.defaultAudioSink ? [Pipewire.defaultAudioSink] : [] }
 
     Item {
@@ -138,9 +145,11 @@ PanelWindow {
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#45475a"; opacity: 0.4 }
                 Repeater {
                     model: [
-                        { label: "CPU ", frac: sys.cpu,  text: Math.round(sys.cpu * 100) + "%" },
-                        { label: "RAM ", frac: sys.memFrac, text: sys.memText },
-                        { label: "DISK", frac: sys.diskFrac, text: sys.diskText }
+                        { label: "CPU ", frac: sys.cpu,  text: Math.round(sys.cpu * 100) + "%", color: root.accent },
+                        { label: "RAM ", frac: sys.memFrac, text: sys.memText, color: root.accent },
+                        { label: "DISK", frac: sys.diskFrac, text: sys.diskText, color: root.accent },
+                        { label: "TCPU", frac: sys.cpuTemp / 100, text: Math.round(sys.cpuTemp) + "°C", color: root.tempColor(sys.cpuTemp) },
+                        { label: "TGPU", frac: sys.gpuTemp / 100, text: Math.round(sys.gpuTemp) + "°C", color: root.tempColor(sys.gpuTemp) }
                     ]
                     delegate: RowLayout {
                         required property var modelData
@@ -160,7 +169,7 @@ PanelWindow {
                                 height: parent.height
                                 radius: 4
                                 width: parent.width * Math.max(0, Math.min(1, modelData.frac))
-                                color: "#b4befe"
+                                color: modelData.color
                             }
                         }
                         Text {
@@ -320,6 +329,8 @@ PanelWindow {
         property string memText: "—"
         property real diskFrac: 0
         property string diskText: "—"
+        property real cpuTemp: 0
+        property real gpuTemp: 0
     }
     FileView { id: statFile; path: "/proc/stat"; blockLoading: true }
     FileView { id: memFile; path: "/proc/meminfo"; blockLoading: true }
@@ -339,9 +350,32 @@ PanelWindow {
             }
         }
     }
+    Process {
+        id: cpuTempProc
+        // hwmon index is unstable across boots; resolve coretemp dynamically.
+        command: ["/bin/sh", "-c", "for h in /sys/class/hwmon/hwmon*; do [ \"$(cat $h/name 2>/dev/null)\" = coretemp ] && cat \"$h/temp1_input\" && break; done"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const v = parseFloat(this.text.trim())
+                if (!isNaN(v)) sys.cpuTemp = v / 1000
+            }
+        }
+    }
+    Process {
+        id: gpuTempProc
+        command: ["/usr/bin/nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const v = parseFloat(this.text.trim())
+                if (!isNaN(v)) sys.gpuTemp = v
+            }
+        }
+    }
     Timer {
         interval: 2000; running: root.shown; repeat: true; triggeredOnStart: true
         onTriggered: {
+            cpuTempProc.running = true
+            gpuTempProc.running = true
             statFile.reload()
             const c = statFile.text().split("\n")[0].trim().split(/\s+/)
             // c[0]="cpu", then user nice system idle iowait irq softirq ...
