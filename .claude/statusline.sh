@@ -92,3 +92,7 @@ fi
 
 printf "${ORANGE}%s${RESET}" "${SEGMENTS[*]}"
 [ -n "$SAVINGS" ] && printf " ${ORANGE}%s${RESET}" "$SAVINGS"
+
+# A non-zero exit blanks the statusline (Claude Code treats it as failure), and
+# the final && above returns 1 whenever SAVINGS is empty. Always succeed.
+exit 0
