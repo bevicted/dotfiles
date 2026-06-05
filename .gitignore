@@ -29,6 +29,8 @@
 !.claude/CLAUDE.md
 !.claude/skills/
 !.claude/commands/
+!.claude/settings.json
+!.claude/statusline.sh
 
 # ssh
 .ssh/*
