@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code statusline — caveman badge + effort + session/week usage.
+# Claude Code statusline — caveman badge + effort + context + session/week usage.
 #
 # Wired via ~/.claude/settings.json:
 #   "statusLine": { "type": "command", "command": "~/.claude/statusline.sh" }
@@ -10,11 +10,13 @@
 #                        dependency on the plugin cache path (which carries a
 #                        hash that changes on every plugin update)
 #   [<effort>]           .effort.level (live, reflects mid-session /effort)
+#   [ctx <pct>%]         .context_window.used_percentage — context window used
 #   [5h <pct>% ~<t>]     .rate_limits.five_hour  — Claude's "current session"
 #   [7d <pct>% ~<t>]     .rate_limits.seven_day  — Claude's "current week"
 #
 # Each segment is omitted when its source field is absent (effort: model has no
-# effort param; rate_limits: non-subscriber, or before the first API response).
+# effort param; ctx: before the first API response; rate_limits: non-subscriber,
+# or before the first API response).
 
 CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 ORANGE='\033[38;5;172m'
@@ -53,15 +55,21 @@ if [ "${CAVEMAN_STATUSLINE_SAVINGS:-1}" != "0" ] && [ -f "$SAVINGS_FILE" ] && [ 
 fi
 
 # --- usage segments from session JSON ----------------------------------------
-# One jq call, tab-separated; empty string for any absent field.
-IFS=$'\t' read -r EFFORT FIVE_PCT FIVE_RESET WEEK_PCT WEEK_RESET <<<"$(
+# One jq call, pipe-delimited; empty string for any absent field. The delimiter
+# is '|' (not tab): tab is IFS whitespace, so `read` would collapse empty
+# leading/middle fields and shift the rest, mis-assigning values when e.g.
+# effort is absent but context is present. '|' is non-whitespace, so empty
+# fields are preserved positionally. None of the values (effort levels,
+# percentages, unix-epoch resets) ever contain '|'.
+IFS='|' read -r EFFORT CTX_PCT FIVE_PCT FIVE_RESET WEEK_PCT WEEK_RESET <<<"$(
   printf '%s' "$input" | jq -r '[
     .effort.level // "",
+    .context_window.used_percentage // "",
     .rate_limits.five_hour.used_percentage // "",
     .rate_limits.five_hour.resets_at // "",
     .rate_limits.seven_day.used_percentage // "",
     .rate_limits.seven_day.resets_at // ""
-  ] | @tsv'
+  ] | map(tostring) | join("|")'
 )"
 
 # Time until a unix-epoch reset, compact: 3d / 2h / 5m / now.
@@ -79,6 +87,7 @@ fmt_reset() {
 SEGMENTS=()
 [ -n "$BADGE" ] && SEGMENTS+=("$BADGE")
 [ -n "$EFFORT" ] && SEGMENTS+=("[$EFFORT]")
+[ -n "$CTX_PCT" ] && SEGMENTS+=("[ctx $(printf '%.0f' "$CTX_PCT")%]")
 if [ -n "$FIVE_PCT" ]; then
   R=$(fmt_reset "$FIVE_RESET")
   SEGMENTS+=("[5h $(printf '%.0f' "$FIVE_PCT")%${R:+ ~$R}]")
