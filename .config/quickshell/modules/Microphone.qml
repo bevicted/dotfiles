@@ -1,37 +1,21 @@
 import QtQuick
-import Quickshell
-import Quickshell.Io
+import Quickshell.Services.Pipewire
 
 Text {
     id: root
 
-    property int volume: 0
-    property bool muted: false
+    readonly property var node: Pipewire.defaultAudioSource
+    readonly property bool muted: node?.audio?.muted ?? false
+    readonly property int volume: Math.round((node?.audio?.volume ?? 0) * 100)
 
     text: (muted ? "󰍭 " : "󰍬 ") + volume + "%"
     color: muted ? "#6c7086" : "#a6e3a1"
     font.family: "JetBrainsMono Nerd Font"
     font.pixelSize: 12
 
-    Process {
-        id: getVol
-        command: ["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const t = this.text.trim()
-                root.muted = t.indexOf("MUTED") !== -1
-                const m = t.match(/Volume: ([0-9.]+)/)
-                root.volume = m ? Math.round(parseFloat(m[1]) * 100) : 0
-            }
-        }
-    }
-
-    Timer {
-        interval: 1000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: getVol.running = true
+    // Bind the node so its audio properties stay live.
+    PwObjectTracker {
+        objects: [root.node]
     }
 
     MouseArea {
@@ -40,13 +24,14 @@ Text {
         cursorShape: Qt.PointingHandCursor
 
         onClicked: {
-            Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
-            getVol.running = true
+            if (root.node?.audio)
+                root.node.audio.muted = !root.node.audio.muted
         }
         onWheel: (wheel) => {
-            const step = wheel.angleDelta.y > 0 ? "5%+" : "5%-"
-            Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", step, "-l", "1.0"])
-            getVol.running = true
+            if (!root.node?.audio)
+                return
+            const step = wheel.angleDelta.y > 0 ? 0.05 : -0.05
+            root.node.audio.volume = Math.max(0, Math.min(1, root.node.audio.volume + step))
         }
     }
 }
