@@ -48,6 +48,10 @@ PanelWindow {
 
             Item { Layout.fillWidth: true }
 
+            Microphone {
+                Layout.alignment: Qt.AlignVCenter
+            }
+
             Volume {
                 Layout.alignment: Qt.AlignVCenter
             }
