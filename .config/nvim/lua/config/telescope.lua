@@ -29,7 +29,16 @@ M.live_multigrep = function(opts)
       local len = #pieces
 
       if #pieces > 1 then
-        table.insert(cmd, pieces[#pieces])
+        local glob = pieces[#pieces]
+        -- rg --glob needs wildcards: a bare word matches only a file named
+        -- exactly that, so plain substrings give 0 results. Wrap bare words in
+        -- '*' for substring matching; leave explicit globs (*.lua, *foo*) alone.
+        if glob == '' then
+          glob = '*'
+        elseif not glob:find '[%*%?%[%]{}]' then
+          glob = '*' .. glob .. '*'
+        end
+        table.insert(cmd, glob)
         len = len - 1
       else
         table.insert(cmd, '*')
