@@ -18,16 +18,11 @@
       "source": {
         "source": "github",
         "repo": "JuliusBrussee/caveman"
-      },
-      "samber": {
-        "source": {
-          "source": "github",
-          "repo": "samber/cc"
-        }
       }
     }
   },
   "effortLevel": "xhigh",
+  "skipWorkflowUsageWarning": true,
   "theme": "dark",
-  "skipWorkflowUsageWarning": true
+  "tui": "fullscreen"
 }
