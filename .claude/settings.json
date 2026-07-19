@@ -8,10 +8,11 @@
     "command": "~/.claude/statusline.sh"
   },
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": false,
     "caveman@caveman": true,
     "cc-skills-golang@samber": true,
-    "gopls-lsp@claude-plugins-official": true
+    "gopls-lsp@claude-plugins-official": true,
+    "mattpocock-skills@mattpocock": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
@@ -19,10 +20,16 @@
         "source": "github",
         "repo": "JuliusBrussee/caveman"
       }
+    },
+    "mattpocock": {
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills"
+      }
     }
   },
   "effortLevel": "xhigh",
+  "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
-  "theme": "dark",
-  "tui": "fullscreen"
+  "theme": "dark"
 }
