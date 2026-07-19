@@ -35,6 +35,10 @@ gbmv() {
     fi
 }
 
+bob() {
+    BOBSHELL_API_KEY=$(op read "op://Employee/ekglcf3lx5qidh7qg47dommsae/credential") command opencode "$@"
+}
+
 get_subcommands() {
     help_text=$("$@" --help)
     if [ -n "$(echo "${help_text}" | rg '^COMMANDS:$')" ]; then
