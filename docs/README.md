@@ -8,6 +8,7 @@ links to docs I find myself revisiting
 
 - [archwiki](https://archlinux.org)
   - [Display Power Management Signaling](https://wiki.archlinux.org/title/Display_Power_Management_Signaling)
+- [kobo → drm-free epub (kobodl)](kobo-dedrm.md)
 
 ## browser
 
