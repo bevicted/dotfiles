@@ -6,7 +6,7 @@ Heredoc only acceptable when piping into a command that consumes stdin without w
 
 # Prefer dedicated tools over bash utilities
 
-Use the dedicated tool, not the bash equivalent. The bash versions are denied in `~/.claude/settings.json` and will fail anyway.
+Prefer the dedicated tool over the bash equivalent when it exists in the session:
 
 | Instead of bash | Use tool |
 |-----------------|----------|
@@ -17,6 +17,8 @@ Use the dedicated tool, not the bash equivalent. The bash versions are denied in
 | `echo > file`, `cat <<EOF > file` | Write |
 
 Reach for Read/Grep/Glob/Edit/Write first. Only fall back to Bash for shell-only operations (process management, git, package managers, build tools, pipe-trimming with `head`/`tail`, etc.).
+
+Exception — **Grep and Glob are absent in some builds (the 1M-context Opus variant ships without them).** If a dedicated tool isn't present in the session, silently fall back to bash `rg`/`grep`/`find` — don't announce it, don't retry the missing tool. Bash `grep`/`rg`/`find` are NOT denied (the only deny rule is `git push`), so the fallback works. Read/Edit/Write are always present.
 
 `head`/`tail` allowed — common in pipes (`git log | head`, `ls -t | tail`).
 
