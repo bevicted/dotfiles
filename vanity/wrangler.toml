@@ -1,0 +1,7 @@
+name = "go-vanity"
+main = "worker.js"
+compatibility_date = "2026-05-05"
+
+routes = [
+  { pattern = "go.bevicted.dev/*", zone_name = "bevicted.dev" }
+]

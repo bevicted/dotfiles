@@ -48,6 +48,9 @@
 # work
 work.sh
 
+# vanity worker tooling (go.bevicted.dev cloudflare worker)
+vanity/node_modules/
+
 # other
 AGENTS.md
 
