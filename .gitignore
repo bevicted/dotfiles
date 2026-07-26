@@ -40,7 +40,6 @@
 
 # git
 .gitconfig.local
-.gitconfig.work
 
 # hypr — per-machine monitor layout (PII: serials, hardware models)
 .config/hypr/monitors.conf
