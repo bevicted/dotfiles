@@ -19,7 +19,11 @@ return {
           path = '/tmp/' .. basename .. '.99.debug',
           print_on_error = true,
         },
-        tmp_dir = './tmp',
+        -- keep scratch out of every project repo; ClaudeCodeProvider runs
+        -- claude with --dangerously-skip-permissions so an out-of-cwd path is
+        -- fine. NOTE: other providers (opencode/cursor/gemini) sandbox to cwd
+        -- and may fail to read/write here.
+        tmp_dir = '/tmp/99/' .. basename,
         completion = {
           source = 'blink',
         },
