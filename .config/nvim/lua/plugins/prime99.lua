@@ -19,11 +19,10 @@ return {
           path = '/tmp/' .. basename .. '.99.debug',
           print_on_error = true,
         },
-        -- keep scratch out of every project repo; ClaudeCodeProvider runs
-        -- claude with --dangerously-skip-permissions so an out-of-cwd path is
-        -- fine. NOTE: other providers (opencode/cursor/gemini) sandbox to cwd
-        -- and may fail to read/write here.
-        tmp_dir = '/tmp/99/' .. basename,
+        -- scratch must live inside cwd so cwd-sandboxed providers (opencode,
+        -- codex, cursor, gemini) can read/write it. '.99/' is ignored globally
+        -- via ~/.config/git/ignore, so no per-repo .gitignore needed.
+        tmp_dir = './.99',
         completion = {
           source = 'blink',
         },
