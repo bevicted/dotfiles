@@ -8,6 +8,7 @@
 
 [core]
 	editor = nvim
+	excludesfile = ~/.config/git/ignore
 
 [diff]
 	colorMoved = default

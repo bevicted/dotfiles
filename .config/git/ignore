@@ -1,0 +1,5 @@
+# Global gitignore (git reads ~/.config/git/ignore by XDG default;
+# also wired via core.excludesfile in .gitconfig).
+
+# ThePrimeagen/99 nvim plugin scratch dir (tmp_dir = './.99')
+.99/
