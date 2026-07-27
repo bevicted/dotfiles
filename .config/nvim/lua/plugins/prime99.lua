@@ -24,7 +24,7 @@ return {
           source = 'blink',
         },
         md_files = {
-          'CLAUDE.md',
+          'AGENTS.md',
         },
       }
 
