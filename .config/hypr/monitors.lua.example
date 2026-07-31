@@ -1,0 +1,29 @@
+-- Machine-specific monitor config. Untracked (real file is gitignored).
+--
+-- Bootstrap:
+--   cp ~/.config/hypr/monitors.lua.example ~/.config/hypr/monitors.lua
+--   # edit monitors.lua with the output of: hyprctl monitors
+-- hyprland.lua pulls it in via require("monitors"). If monitors.lua is absent,
+-- it falls through to the wildcard hl.monitor({ output = "", ... }) default.
+--
+-- Use `output = "desc:..."` matching so the config survives port swaps and
+-- absent monitors on other machines.
+--
+-- VRR mode: 0 = off, 1 = on, 2 = fullscreen only (safest, no desktop flicker).
+
+-- Primary ultrawide, 165Hz with VRR in fullscreen
+-- hl.monitor({
+--     output = "desc:Vendor Model Serial",
+--     mode = "3440x1440@165",
+--     position = "0x0",
+--     scale = "1",
+--     vrr = 2,
+-- })
+
+-- Secondary 1080p60 to the right
+-- hl.monitor({
+--     output = "desc:Vendor Model Serial",
+--     mode = "1920x1080@60",
+--     position = "3440x0",
+--     scale = "1",
+-- })

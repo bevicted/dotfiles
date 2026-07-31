@@ -14,8 +14,13 @@ hl.monitor({
 })
 
 -- Machine-specific monitor overrides (refresh rate, position, VRR).
--- Untracked — see monitors.conf.example for the format, then create monitors.lua.
-require("monitors")
+-- Untracked — copy monitors.lua.example to monitors.lua and edit.
+-- Soft load: a machine without monitors.lua (e.g. laptop, no externals) falls
+-- through to the wildcard default above; real errors inside it still surface.
+local ok, err = pcall(require, "monitors")
+if not ok and not tostring(err):find("module 'monitors' not found", 1, true) then
+    error(err)
+end
 
 
 -- Programs
