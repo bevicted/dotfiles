@@ -43,6 +43,7 @@
 
 # hypr — per-machine monitor layout (PII: serials, hardware models)
 .config/hypr/monitors.conf
+.config/hypr/monitors.lua
 
 # work
 work.sh
