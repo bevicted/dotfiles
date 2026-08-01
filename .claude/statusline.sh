@@ -21,6 +21,11 @@
 # Each segment is omitted when its source field is absent (effort: model has no
 # effort param; ctx: before the first API response; rate_limits: non-subscriber,
 # or before the first API response).
+#
+# SIDE EFFECT: also mirrors the rate-limit numbers to $CONFIG_DIR/.rate-limits.json
+# on every render. Rate limits reach the statusline and nowhere else — hooks never
+# receive them — so this file is the only way a long-running script or agent can
+# read the numbers and throttle itself. See the "usage mirror" block below.
 
 CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 ORANGE='\033[38;5;172m'
@@ -82,6 +87,40 @@ IFS='|' read -r EFFORT CTX_USED CTX_SIZE MODEL_ID FIVE_PCT FIVE_RESET WEEK_PCT W
     .rate_limits.seven_day.resets_at // ""
   ] | map(tostring) | join("|")'
 )"
+
+# --- usage mirror ------------------------------------------------------------
+# Dump the rate-limit numbers where non-statusline code can read them. Written
+# on every render, so freshness is bounded by render cadence; consumers should
+# treat a stale written_at as "unknown" rather than "fine". Values are emitted as
+# JSON numbers, or null when the field was absent — never as strings, so a
+# consumer can compare numerically without unwrapping.
+#
+# Defensive, matching the rest of this script: values are sanitized to digits and
+# a dot before being interpolated into JSON (they come from jq's tostring of a
+# number, but a malformed value would otherwise produce a file that every
+# consumer fails to parse); the write is atomic via a PID-unique temp so two
+# concurrent sessions can never expose a half-written file; and the whole block
+# is best-effort — any failure leaves the rendered statusline and the exit status
+# untouched, because a broken mirror must never blank the statusline.
+json_num() { case "$1" in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$1" ;; esac; }
+
+if [ -n "$FIVE_PCT" ] || [ -n "$WEEK_PCT" ]; then
+  USAGE_FILE="$CONFIG_DIR/.rate-limits.json"
+  USAGE_TMP="$USAGE_FILE.$$.tmp"
+  # Nested rather than `! printf ... && mv ...`: in that form `!` negates only the
+  # printf, so a SUCCESSFUL write short-circuits the `&&` and the mv never runs,
+  # silently orphaning the temp file on every render.
+  if printf '{"written_at":%s,"five_hour_pct":%s,"five_hour_resets_at":%s,"seven_day_pct":%s,"seven_day_resets_at":%s}\n' \
+     "$(date +%s)" \
+     "$(json_num "$FIVE_PCT")" "$(json_num "$FIVE_RESET")" \
+     "$(json_num "$WEEK_PCT")" "$(json_num "$WEEK_RESET")" \
+     >"$USAGE_TMP" 2>/dev/null
+  then
+    mv -f "$USAGE_TMP" "$USAGE_FILE" 2>/dev/null || rm -f "$USAGE_TMP" 2>/dev/null
+  else
+    rm -f "$USAGE_TMP" 2>/dev/null
+  fi
+fi
 
 # Time until a unix-epoch reset, compact: 3d / 2h / 5m / now.
 fmt_reset() {
