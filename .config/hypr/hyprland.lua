@@ -195,8 +195,9 @@ hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "fullscreen
 
 -- Push-to-talk (Discord on Voice Activity). mouse:276 = thumb btn 2 (Discord "mouse 9").
 -- Mic muted by default; opens only while held. Works regardless of window focus.
-hl.bind("mouse:276", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 0"))
-hl.bind("mouse:276", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 1"), { release = true })
+-- ignore_mods so it still fires while SHIFT/CTRL are held on press or release.
+hl.bind("mouse:276", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 0"), { ignore_mods = true })
+hl.bind("mouse:276", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 1"), { release = true, ignore_mods = true })
 
 
 -- Window rules -- https://wiki.hypr.land/Configuring/Window-Rules/
