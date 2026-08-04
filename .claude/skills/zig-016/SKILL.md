@@ -5,8 +5,7 @@ description: >
   0.15/older idioms). Arms the current agent with the ground-truth workflow (grep the
   installed std source, verify with the compiler), the 0.16 breaking-change cheat sheet,
   verified-compiling exemplars, TigerBeetle's TigerStyle house-style guide, and optional
-  repo-level enforcement templates (CLAUDE.md
-  block, path-scoped rules, PreToolUse ban hook, specialized subagent). Invoke when
+  repo-level enforcement templates. Invoke when
   writing/reviewing Zig, when a build hits a 0.16 API change, or before delegating Zig
   work to subagents. Trigger: /zig-016, "zig 0.16", "help me write zig".
 ---
