@@ -4,7 +4,8 @@ description: >
   Write correct Zig 0.16.0 code and offset stale training data (models default to
   0.15/older idioms). Arms the current agent with the ground-truth workflow (grep the
   installed std source, verify with the compiler), the 0.16 breaking-change cheat sheet,
-  verified-compiling exemplars, and optional repo-level enforcement templates (CLAUDE.md
+  verified-compiling exemplars, TigerBeetle's TigerStyle house-style guide, and optional
+  repo-level enforcement templates (CLAUDE.md
   block, path-scoped rules, PreToolUse ban hook, specialized subagent). Invoke when
   writing/reviewing Zig, when a build hits a 0.16 API change, or before delegating Zig
   work to subagents. Trigger: /zig-016, "zig 0.16", "help me write zig".
@@ -80,6 +81,15 @@ If any of these appear in Zig you are about to write, it is almost certainly wro
 | `pub fn main() !void` needing args/env | `pub fn main(init: std.process.Init) !void` |
 
 Full detail with old→new for every change: `reference/api-deltas.md`.
+
+## House style: TigerStyle
+
+The rest of this skill guards *correctness* — does it compile on 0.16. For *quality* — how the Zig
+should read — apply TigerBeetle's **TigerStyle**, which optimizes for safety, then performance, then
+developer experience, in that order. When writing new Zig or reviewing it beyond 0.16 compatibility,
+load `reference/tiger-style.md` (vendored; epigraph quotes cut, rest verbatim) and grep it for the
+topic at hand — assertions, the 70-line function limit, naming, batching, off-by-one — rather than
+reading the whole file.
 
 ## Optional: repo-level hard enforcement
 
