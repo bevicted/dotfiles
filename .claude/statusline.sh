@@ -10,7 +10,11 @@
 #                        dependency on the plugin cache path (which carries a
 #                        hash that changes on every plugin update)
 #   [<effort>]           .effort.level (live, reflects mid-session /effort)
-#   [ctx <pct>%]         .context_window.used_percentage — context window used
+#   [ctx <n> (<pct>%)]   context used: all four current_usage token types summed
+#                        over context_window_size — the ccstatusline / Matt
+#                        Pocock metric. More honest than native .used_percentage,
+#                        which counts input tokens only (claude-code#28167).
+#                        <n> is compact (182k, 1.2M); size is 1000000 for [1m].
 #   [5h <pct>% ~<t>]     .rate_limits.five_hour  — Claude's "current session"
 #   [7d <pct>% ~<t>]     .rate_limits.seven_day  — Claude's "current week"
 #
@@ -61,10 +65,17 @@ fi
 # effort is absent but context is present. '|' is non-whitespace, so empty
 # fields are preserved positionally. None of the values (effort levels,
 # percentages, unix-epoch resets) ever contain '|'.
-IFS='|' read -r EFFORT CTX_PCT FIVE_PCT FIVE_RESET WEEK_PCT WEEK_RESET <<<"$(
+IFS='|' read -r EFFORT CTX_USED CTX_SIZE MODEL_ID FIVE_PCT FIVE_RESET WEEK_PCT WEEK_RESET <<<"$(
   printf '%s' "$input" | jq -r '[
     .effort.level // "",
-    .context_window.used_percentage // "",
+    (.context_window as $c |
+       if   $c.current_usage then ($c.current_usage
+              | (.input_tokens // 0) + (.output_tokens // 0)
+              + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0))
+       elif $c.total_input_tokens != null then (($c.total_input_tokens // 0) + ($c.total_output_tokens // 0))
+       else "" end),
+    .context_window.context_window_size // "",
+    .model.id // "",
     .rate_limits.five_hour.used_percentage // "",
     .rate_limits.five_hour.resets_at // "",
     .rate_limits.seven_day.used_percentage // "",
@@ -83,11 +94,26 @@ fmt_reset() {
   fi
 }
 
+# Compact token count: 950 / 182k / 1.2M.
+fmt_tokens() {
+  local n=$1
+  if   [ "$n" -ge 1000000 ]; then printf '%d.%dM' "$((n / 1000000))" "$(((n % 1000000) / 100000))"
+  elif [ "$n" -ge 1000 ];    then printf '%dk' "$((n / 1000))"
+  else                            printf '%d' "$n"
+  fi
+}
+
 # --- assemble ----------------------------------------------------------------
 SEGMENTS=()
 [ -n "$BADGE" ] && SEGMENTS+=("$BADGE")
 [ -n "$EFFORT" ] && SEGMENTS+=("[$EFFORT]")
-[ -n "$CTX_PCT" ] && SEGMENTS+=("[ctx $(printf '%.0f' "$CTX_PCT")%]")
+if [ -n "$CTX_USED" ]; then
+  SIZE="$CTX_SIZE"
+  if ! [ "$SIZE" -gt 0 ] 2>/dev/null; then
+    case "$MODEL_ID" in *'[1m]'*) SIZE=1000000 ;; *) SIZE=200000 ;; esac
+  fi
+  SEGMENTS+=("[ctx $(fmt_tokens "$CTX_USED") ($((CTX_USED * 100 / SIZE))%)]")
+fi
 if [ -n "$FIVE_PCT" ]; then
   R=$(fmt_reset "$FIVE_RESET")
   SEGMENTS+=("[5h $(printf '%.0f' "$FIVE_PCT")%${R:+ ~$R}]")
