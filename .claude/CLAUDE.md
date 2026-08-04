@@ -4,6 +4,10 @@ Do not use `python3 -c "..."` (or scripts) to edit, replace, or rewrite file con
 
 Python is fine for actual computation, data processing, or running real programs — just not as a workaround for file editing.
 
+# Coding
+
+If you need a paragraph-long comment to justify why the workaround is OK, the code is wrong - fix the code.
+
 # Committing
 
 Commit your work proactively (without being asked) in cohesive, self-contained commits — one logical change each, with a clear message. Never batch unrelated changes into a single commit. A request for different batching, or "don't commit", overrides this.
