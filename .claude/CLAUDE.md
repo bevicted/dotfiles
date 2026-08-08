@@ -1,33 +1,35 @@
-# No python3 for file edits
+# General guidance
 
-Do not use `python3 -c "..."` (or scripts) to edit, replace, or rewrite file contents. Use the Edit tool for in-place changes and the Write tool for full rewrites.
-
-Python is fine for actual computation, data processing, or running real programs — just not as a workaround for file editing.
+- Be concise and succinct.
+- Avoid characters not available on a standard keyboard (em/en-dashes, arrow symbols, etc.). Use ,.;- or ASCII representations like `-> -| _|_` instead.
+- Do not glaze. The user is not always correct; verify, validate, and push back if necessary.
+- Avoid slop words unless alternatives are inappropriate.
 
 # Coding
 
-If you need a paragraph-long comment to justify why the workaround is OK, the code is wrong - fix the code.
+- If you need a paragraph-long comment to justify why the workaround is OK, the code is wrong - fix the code.
+- Prefer simple but correct solutions.
 
 # Committing
 
-Commit your work proactively (without being asked) in cohesive, self-contained commits — one logical change each, with a clear message. Never batch unrelated changes into a single commit. A request for different batching, or "don't commit", overrides this.
+Commit proactively in cohesive, self-contained units. One logical change per commit. Never batch unrelated changes. User can override batching or say "don't commit".
 
-Don't commit a change whose correctness you can't verify. Leave it uncommitted and tell the user what needs checking. "Verified" means you exercised the actual behavior — not just that unit tests pass.
+Only commit verified changes. Leave unverified work uncommitted and report what needs checking. "Verified" = exercised actual behavior, not just passing tests.
 
-Commit to the branch that's currently checked out; don't create or switch branches unless asked. Branch choice is the user's.
+Commit to current branch. Don't create or switch branches unless asked.
 
-Never push, and never ask to push — pushing is a user-only action.
+Never push. Never ask to push. Pushing is user-only.
 
-# Commit signing — 1Password failure must not block work
+# Commit signing — 1Password timeout recovery
 
-All commits should be signed via the 1Password SSH key (configured in `~/.gitconfig` via `gpg.ssh.program = op-ssh-sign`). If signing fails because the 1Password unlock prompt was missed/timed out, **do not stop development and do not retry interactively**.
+Commits must be signed via 1Password SSH key (`gpg.ssh.program = op-ssh-sign`). If signing fails (missed/timed-out unlock prompt), DO NOT block work.
 
-Workflow when signing fails:
-1. Make the commit unsigned: `git -c commit.gpgsign=false commit ...` (one-off; do not edit `~/.gitconfig`).
-2. Keep working — chain further unsigned commits the same way.
-3. At end of task (or when user is back), retroactively sign the unsigned range:
-   - Single commit: `git commit --amend -S --no-edit`
-   - Range: `git rebase --exec 'git commit --amend --no-edit -S' <first-unsigned>^`
-4. Tell the user which commits are unsigned so they can sign them when 1Password is unlocked.
+**Recovery workflow:**
+1. Commit unsigned: `git -c commit.gpgsign=false commit ...` (one-off flag; never edit `~/.gitconfig`)
+2. Continue work — chain additional unsigned commits same way
+3. At task end (or when user returns), retroactively sign unsigned range:
+   - Single: `git commit --amend -S --no-edit`
+   - Multiple: `git rebase --exec 'git commit --amend --no-edit -S' <first-unsigned>^`
+4. Report which commits are unsigned
 
-Never disable signing globally, never switch keys, never silently skip the issue. The unsigned-fallback is only for the 1Password unlock-window race.
+Never disable signing globally. Never switch keys. Never ignore the unsigned state. This fallback is only for 1Password unlock race.
