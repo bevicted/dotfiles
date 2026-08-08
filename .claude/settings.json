@@ -13,12 +13,6 @@
     "mattpocock-skills@mattpocock": true
   },
   "extraKnownMarketplaces": {
-    "caveman": {
-      "source": {
-        "source": "github",
-        "repo": "JuliusBrussee/caveman"
-      }
-    },
     "mattpocock": {
       "source": {
         "source": "github",

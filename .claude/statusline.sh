@@ -1,14 +1,11 @@
 #!/bin/bash
-# Claude Code statusline — caveman badge + effort + context + session/week usage.
+# Claude Code statusline — effort + context + session/week usage.
 #
 # Wired via ~/.claude/settings.json:
 #   "statusLine": { "type": "command", "command": "~/.claude/statusline.sh" }
 #
 # Reads session JSON on stdin (see code.claude.com/docs/en/statusline) and
-# renders, all in caveman orange (256-color 172):
-#   [CAVEMAN]            mode badge — reproduced inline so there is no
-#                        dependency on the plugin cache path (which carries a
-#                        hash that changes on every plugin update)
+# renders, all in 256-color 172 (orange):
 #   [<effort>]           .effort.level (live, reflects mid-session /effort)
 #   [ctx <n> (<pct>%)]   context used: all four current_usage token types summed
 #                        over context_window_size — the ccstatusline / Matt
@@ -32,36 +29,6 @@ ORANGE='\033[38;5;172m'
 RESET='\033[0m'
 
 input=$(cat)
-
-# --- caveman badge (reproduced from the plugin's caveman-statusline.sh) -------
-# Same hardening: refuse symlinks (a local attacker could point the flag at a
-# secret and have its bytes — including ANSI escapes — rendered every keystroke),
-# cap the read, strip to [a-z0-9-], whitelist known modes. Unlike the plugin
-# script this never exits early on a missing/bad flag — it just skips the badge
-# so the usage segments still render with caveman off.
-BADGE=""
-FLAG="$CONFIG_DIR/.caveman-active"
-if [ -f "$FLAG" ] && [ ! -L "$FLAG" ]; then
-  MODE=$(head -c 64 "$FLAG" 2>/dev/null | tr -d '\n\r' | tr '[:upper:]' '[:lower:]')
-  MODE=$(printf '%s' "$MODE" | tr -cd 'a-z0-9-')
-  case "$MODE" in
-    off|lite|full|ultra|wenyan-lite|wenyan|wenyan-full|wenyan-ultra|commit|review|compress)
-      if [ -z "$MODE" ] || [ "$MODE" = "full" ]; then
-        BADGE="[CAVEMAN]"
-      else
-        BADGE="[CAVEMAN:$(printf '%s' "$MODE" | tr '[:lower:]' '[:upper:]')]"
-      fi
-      ;;
-  esac
-fi
-
-# Savings suffix: pre-rendered string written by caveman-stats.js. Same symlink
-# refusal + control-byte stripping as the flag. Absent until /caveman-stats runs.
-SAVINGS=""
-SAVINGS_FILE="$CONFIG_DIR/.caveman-statusline-suffix"
-if [ "${CAVEMAN_STATUSLINE_SAVINGS:-1}" != "0" ] && [ -f "$SAVINGS_FILE" ] && [ ! -L "$SAVINGS_FILE" ]; then
-  SAVINGS=$(head -c 64 "$SAVINGS_FILE" 2>/dev/null | tr -d '\000-\037')
-fi
 
 # --- usage segments from session JSON ----------------------------------------
 # One jq call, pipe-delimited; empty string for any absent field. The delimiter
@@ -144,7 +111,6 @@ fmt_tokens() {
 
 # --- assemble ----------------------------------------------------------------
 SEGMENTS=()
-[ -n "$BADGE" ] && SEGMENTS+=("$BADGE")
 [ -n "$EFFORT" ] && SEGMENTS+=("[$EFFORT]")
 if [ -n "$CTX_USED" ]; then
   SIZE="$CTX_SIZE"
@@ -165,8 +131,7 @@ fi
 [ ${#SEGMENTS[@]} -eq 0 ] && exit 0
 
 printf "${ORANGE}%s${RESET}" "${SEGMENTS[*]}"
-[ -n "$SAVINGS" ] && printf " ${ORANGE}%s${RESET}" "$SAVINGS"
 
-# A non-zero exit blanks the statusline (Claude Code treats it as failure), and
-# the final && above returns 1 whenever SAVINGS is empty. Always succeed.
+# A non-zero exit blanks the statusline (Claude Code treats it as failure), so
+# exit explicitly rather than inheriting printf's status.
 exit 0
