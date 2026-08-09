@@ -1,7 +1,7 @@
 # Repo-level enforcement (optional)
 
 The `/zig-016` skill arms the current agent on demand. These templates make a repo enforce Zig
-0.16 on **every** agent automatically. Install only what you want — they stack.
+0.16 on **every** agent automatically. Install only what you want; they stack.
 
 | File | Install to | Effect | Reaches |
 |---|---|---|---|
@@ -21,5 +21,5 @@ Requires `jq`. The script self-skips non-`.zig` targets and fails open if `jq` i
 can never wedge your workflow. Exit code 2 denies the Write/Edit with guidance on stderr.
 
 Layers of defense, in order of trust: **compiler + std grep** (authoritative) > **CLAUDE.md/rules**
-(bias) > **hook** (deterministic backstop). The hook catches only the listed patterns — it is a
+(bias) > **hook** (deterministic backstop). The hook catches only the listed patterns; it is a
 safety net, not a substitute for compiling.

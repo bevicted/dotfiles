@@ -8,8 +8,8 @@ patterns over reconstructing from memory. If you change one, re-verify with the 
 | `hello.zig` | Juicy Main, `std.Io.File.stdout().writeStreamingAll(io, ...)` | `zig build-exe hello.zig` |
 | `args_env.zig` | CLI args via `init.minimal.args.toSlice`, env count via `init.environ_map` | `zig build-exe args_env.zig` |
 | `read_file.zig` | `std.Io.Dir.cwd().readFileAlloc(io, name, gpa, .limited(N))` | `zig build-exe read_file.zig` |
-| `arraylist_writer.zig` | unmanaged `ArrayList` (`.empty` + `append(gpa,…)`), `std.Io.Writer.fixed`+`print`+`buffered`, `std.Io.Reader.fixed`+`takeDelimiterExclusive` | `zig test arraylist_writer.zig` |
-| `meta_types.zig` | `@Int`/`@Tuple`, float→int via `@round`, implicit small-int→float coercion | `zig test meta_types.zig` |
+| `arraylist_writer.zig` | unmanaged `ArrayList` (`.empty` + `append(gpa,...)`), `std.Io.Writer.fixed`+`print`+`buffered`, `std.Io.Reader.fixed`+`takeDelimiterExclusive` | `zig test arraylist_writer.zig` |
+| `meta_types.zig` | `@Int`/`@Tuple`, float->int via `@round`, implicit small-int->float coercion | `zig test meta_types.zig` |
 
 Re-verify all at once:
 ```sh

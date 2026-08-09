@@ -7,7 +7,7 @@
 # On a match we print guidance to stderr and exit 2 (deny). Otherwise exit 0.
 #
 # Requires: jq. If jq is missing or the payload can't be parsed we fail OPEN
-# (exit 0) so the hook never wedges your workflow — the compiler is the real
+# (exit 0) so the hook never wedges your workflow; the compiler is the real
 # backstop anyway.
 
 set -uo pipefail
@@ -42,17 +42,17 @@ res=(
   'ArrayList\([^)]*\)(\{\}|\.init)'
 )
 msgs=(
-  '`std.io.*` is Zig 0.15 — use `std.Io` (capital I).'
-  '`fixedBufferStream` removed — `var r: std.Io.Reader = .fixed(x);` / `.Writer = .fixed(buf);`'
-  '`@Type` removed — use `@Int`/`@Struct`/`@Union`/`@Enum`/`@Tuple`/`@Pointer`/`@Fn`/`@EnumLiteral`.'
-  '`@intFromFloat` deprecated — use `@round`/`@floor`/`@ceil`/`@trunc`.'
+  '`std.io.*` is Zig 0.15; use `std.Io` (capital I).'
+  '`fixedBufferStream` removed; `var r: std.Io.Reader = .fixed(x);` / `.Writer = .fixed(buf);`'
+  '`@Type` removed; use `@Int`/`@Struct`/`@Union`/`@Enum`/`@Tuple`/`@Pointer`/`@Fn`/`@EnumLiteral`.'
+  '`@intFromFloat` deprecated; use `@round`/`@floor`/`@ceil`/`@trunc`.'
   '`std.fs.*` moved to `std.Io.*` (e.g. `std.Io.Dir.cwd()`).'
-  '`readToEndAlloc` gone — `file.reader(io,&.{}).interface.allocRemaining(gpa,.limited(N))`.'
-  '`std.Thread.Pool` removed — use `std.Io.async` / `std.Io.Group`.'
-  'Global env removed — use Juicy Main `init.environ_map`.'
-  '`@cImport` deprecated — use build-system `b.addTranslateC(...)`.'
+  '`readToEndAlloc` gone; `file.reader(io,&.{}).interface.allocRemaining(gpa,.limited(N))`.'
+  '`std.Thread.Pool` removed; use `std.Io.async` / `std.Io.Group`.'
+  'Global env removed; use Juicy Main `init.environ_map`.'
+  '`@cImport` deprecated; use build-system `b.addTranslateC(...)`.'
   '`std.time.*` timing moved to `std.Io.Timestamp`.'
-  'Managed ArrayList removed — unmanaged default: `var l: std.ArrayList(T) = .empty;` + `l.append(gpa, x)`.'
+  'Managed ArrayList removed; unmanaged default: `var l: std.ArrayList(T) = .empty;` + `l.append(gpa, x)`.'
 )
 
 hits=()

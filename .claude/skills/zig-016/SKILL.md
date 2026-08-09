@@ -13,7 +13,7 @@ description: >
 # Zig 0.16
 
 Zig 0.16.0 is a large breaking release ("Writergate" I/O interface; fs/net/process migrated
-to `Io`; "Juicy Main"). Models — including you — are mostly trained on 0.15 and older and will
+to `Io`; "Juicy Main"). Models, including you, are mostly trained on 0.15 and older and will
 silently emit stale idioms (`std.io`, `@Type`, managed `ArrayList`, `std.fs.cwd`, `@intFromFloat`).
 This skill exists to counteract that.
 
@@ -34,7 +34,7 @@ non-trivial Zig claim in one of these before presenting code as done:
    zig ast-check FILE.zig          # fast: syntax + invalid builtins (e.g. @Type)
    zig build / zig test / zig build-exe FILE.zig   # full: catches API mismatches
    ```
-   Write → compile → read the real error → fix. Do not declare Zig code correct on memory alone.
+   Write -> compile -> read the real error -> fix. Do not declare Zig code correct on memory alone.
 
 Everything below is a fast-path so you grep/compile *less*, not a replacement for it.
 
@@ -45,10 +45,10 @@ Everything below is a fast-path so you grep/compile *less*, not a replacement fo
 2. Load the cheat sheet into your working context:
    read `$HOME/.claude/skills/zig-016/reference/api-deltas.md`.
 3. Prefer patterns from the verified exemplars in
-   `$HOME/.claude/skills/zig-016/examples/` (every file compiles/tests green on 0.16 — see
+   `$HOME/.claude/skills/zig-016/examples/` (every file compiles/tests green on 0.16; see
    `examples/README.md`). Pattern-match these instead of reconstructing from memory.
 4. For anything not covered, grep std and/or the vendored release notes
-   (`reference/release-notes.md` — grep it, do not read the whole 150KB file), then compile.
+   (`reference/release-notes.md`; grep it, do not read the whole 150KB file), then compile.
 
 ## Delegating to subagents (they are stale too)
 
@@ -56,7 +56,7 @@ Subagents start fresh and will revert to 0.15. When you spawn one for Zig work, 
 into its prompt (built-in Explore/Plan agents also skip CLAUDE.md, so never trust their Zig
 API specifics):
 
-> Target is Zig 0.16.0. Do not trust trained-in Zig knowledge — it is likely 0.15 or older.
+> Target is Zig 0.16.0. Do not trust trained-in Zig knowledge; it is likely 0.15 or older.
 > Before presenting any Zig code as correct: grep the real signature in `/usr/lib/zig/std`
 > and compile with `zig ast-check`/`zig build`. Read `$HOME/.claude/skills/zig-016/reference/api-deltas.md`
 > and prefer patterns from `$HOME/.claude/skills/zig-016/examples/`.
@@ -79,15 +79,15 @@ If any of these appear in Zig you are about to write, it is almost certainly wro
 | `std.os.environ` (global env) | `init.environ_map` (Juicy Main) |
 | `pub fn main() !void` needing args/env | `pub fn main(init: std.process.Init) !void` |
 
-Full detail with old→new for every change: `reference/api-deltas.md`.
+Full detail with old->new for every change: `reference/api-deltas.md`.
 
 ## House style: TigerStyle
 
-The rest of this skill guards *correctness* — does it compile on 0.16. For *quality* — how the Zig
-should read — apply TigerBeetle's **TigerStyle**, which optimizes for safety, then performance, then
+The rest of this skill guards *correctness*: does it compile on 0.16. For *quality* (how the Zig
+should read), apply TigerBeetle's **TigerStyle**, which optimizes for safety, then performance, then
 developer experience, in that order. When writing new Zig or reviewing it beyond 0.16 compatibility,
 load `reference/tiger-style.md` (vendored; epigraph quotes cut, rest verbatim) and grep it for the
-topic at hand — assertions, the 70-line function limit, naming, batching, off-by-one — rather than
+topic at hand (assertions, the 70-line function limit, naming, batching, off-by-one) rather than
 reading the whole file.
 
 ## Optional: repo-level hard enforcement
@@ -96,11 +96,11 @@ The skill above arms *this* agent on demand. To make a specific repo enforce 0.1
 agent (main + custom subagents + teammates) without invoking the skill, install the templates in
 `$HOME/.claude/skills/zig-016/enforcement/` (see `enforcement/README.md`):
 
-- `CLAUDE.snippet.md` — paste into the repo `CLAUDE.md` (auto-loaded context).
-- `rules-zig-016.md` — drop at `.claude/rules/zig-016.md`; path-scoped to `**/*.zig`.
-- `validate-zig.sh` + `settings.hook.json` — a `PreToolUse` hook that blocks the banned
+- `CLAUDE.snippet.md`: paste into the repo `CLAUDE.md` (auto-loaded context).
+- `rules-zig-016.md`: drop at `.claude/rules/zig-016.md`; path-scoped to `**/*.zig`.
+- `validate-zig.sh` + `settings.hook.json`: a `PreToolUse` hook that blocks the banned
   patterns above on Write/Edit of `.zig` files. Fires inside subagents too (hard backstop).
-- `zig-016-builder.agent.md` — a `.claude/agents/` subagent with the cheat sheet baked in.
+- `zig-016-builder.agent.md`: a `.claude/agents/` subagent with the cheat sheet baked in.
 
 Offer these when the user wants durability across sessions; do not install them unprompted.
 
@@ -108,4 +108,4 @@ Offer these when the user wants durability across sessions; do not install them 
 
 When a newer Zig lands, this whole skill can be regenerated the same way it was built: fetch the
 release notes, verify every claim against a fresh install, re-compile the exemplars. Never edit
-the cheat sheet from memory — re-derive from the toolchain.
+the cheat sheet from memory; re-derive from the toolchain.
