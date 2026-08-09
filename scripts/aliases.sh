@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-alias c='claude --worktree'
+alias cf='claude --model claude-fable-5 --effort high'
+alias co='claude --model claude-opus-5 --effort xhigh'
 alias d='docker'
 alias dc='docker compose'
 alias e='$EDITOR .'
