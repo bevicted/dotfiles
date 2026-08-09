@@ -26,15 +26,20 @@ An **ADR** is the **seam**: one frozen decision that feeds the contract.
 ```
 docs/
   design/            rationale (see table)
+    00-*.md          index
     NN-*.md
-    adr/NN-*.md      one decision each, immutable, Status header
+    adr/             one decision each, immutable, Status header
+      00-*.md        index
+      template.md    Nygard skeleton, copy-me, unnumbered
+      NN-*.md        a decision record
   spec/              contract (see table)
     00-*.md          index + RFC 2119 conventions block (governs all spec/)
     NN-terminology   domain nouns the clauses bind to (normative)
     NN-*.md          requirements, grammar, errors, ...
 ```
 
-`NN-` orders files; `00-` is the section index/TOC.
+`NN-` orders files; `00-` is the section index/TOC. The ADR `template.md` is the
+sole unnumbered file (neither a record nor an index).
 
 ## The sorting test: which kind owns a piece of content
 
@@ -71,9 +76,10 @@ informative glossary.
 
 ## ADRs (design/adr/)
 
-One atomic decision per record. **Immutable**: supersede with a new ADR rather
-than editing an accepted one. Carry a **Status**: proposed | accepted |
-superseded.
+One atomic decision per record. **Immutable** once accepted, except its Status
+line: supersede with a new ADR rather than editing the body. Carry a **Status**:
+proposed | accepted | superseded. The copy-me skeleton is an unnumbered
+`template.md`; the directory is indexed by its `00-*.md`.
 
 ## Cross-linking the seam
 

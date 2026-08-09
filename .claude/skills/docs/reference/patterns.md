@@ -52,18 +52,23 @@ Put beside the first grammar block.
 # NN. <Title>
 
 Status: proposed | accepted | superseded by ADR-MM
+Date: YYYY-MM-DD
 
 ## Context
-<forces at play; the situation demanding a decision>
+<forces at play, in tension: the situation demanding a decision. Rejected
+alternatives belong here.>
 
 ## Decision
-<the choice, stated plainly>
+<the choice, stated plainly and in active voice: "We will ...">
 
 ## Consequences
-<what becomes easier and harder as a result>
+<the resulting context: what becomes easier and harder, unfavorable outcomes
+included.>
 ```
 
-Immutable once accepted: supersede with a new ADR; never rewrite history.
+Live as an unnumbered `template.md` (neither a record nor an index). Immutable
+once accepted, except the Status line: supersede with a new ADR, never rewrite
+history.
 
 ## Error catalog shape
 
