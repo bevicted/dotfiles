@@ -78,7 +78,65 @@ type RequestAuth = {
 	accountId: string;
 };
 
+type ResolvedRequestAuth = Awaited<
+	ReturnType<ExtensionContext["modelRegistry"]["getApiKeyAndHeaders"]>
+>;
+
+// Timed-out callers share an OAuth refresh because Pi cannot cancel auth resolution.
+const authLookups = new WeakMap<object, Map<string, Promise<ResolvedRequestAuth>>>();
+
 class UnofficialProviderError extends Error {}
+
+function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+	signal.throwIfAborted();
+
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => {
+			signal.removeEventListener("abort", onAbort);
+			reject(signal.reason);
+		};
+
+		signal.addEventListener("abort", onAbort, { once: true });
+		if (signal.aborted) {
+			onAbort();
+			return;
+		}
+
+		operation.then(
+			(value) => {
+				signal.removeEventListener("abort", onAbort);
+				resolve(value);
+			},
+			(error: unknown) => {
+				signal.removeEventListener("abort", onAbort);
+				reject(error);
+			},
+		);
+	});
+}
+
+function getSharedRequestAuth(
+	ctx: ExtensionContext,
+	model: NonNullable<ExtensionContext["model"]>,
+): Promise<ResolvedRequestAuth> {
+	const registryKey = ctx.modelRegistry as object;
+	let registryLookups = authLookups.get(registryKey);
+	if (!registryLookups) {
+		registryLookups = new Map<string, Promise<ResolvedRequestAuth>>();
+		authLookups.set(registryKey, registryLookups);
+	}
+
+	const existing = registryLookups.get(model.provider);
+	if (existing) return existing;
+
+	const lookup = ctx.modelRegistry.getApiKeyAndHeaders(model);
+	registryLookups.set(model.provider, lookup);
+	lookup.then(
+		() => registryLookups.delete(model.provider),
+		() => registryLookups.delete(model.provider),
+	);
+	return lookup;
+}
 
 function isOfficialBaseUrl(value: string | undefined): boolean {
 	if (!value) return false;
@@ -132,13 +190,18 @@ export function extractChatGPTAccountId(bearerToken: string): string | undefined
 	}
 }
 
-async function resolveRequestAuth(ctx: ExtensionContext): Promise<RequestAuth | undefined> {
+async function resolveRequestAuth(
+	ctx: ExtensionContext,
+	signal: AbortSignal,
+): Promise<RequestAuth | undefined> {
+	signal.throwIfAborted();
 	const model = ctx.model;
 	if (!isOfficialOpenAICodexProvider(ctx, model)) {
 		throw new UnofficialProviderError("OpenAI Codex provider identity could not be established");
 	}
 
-	const resolved = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+	const resolved = await abortable(getSharedRequestAuth(ctx, model), signal);
+	signal.throwIfAborted();
 	const currentModel = ctx.model;
 	if (
 		!currentModel ||
@@ -160,28 +223,41 @@ export async function fetchUsageSnapshot(
 	ctx: ExtensionContext,
 	parentSignal: AbortSignal,
 ): Promise<UsageSnapshot> {
-	const auth = await resolveRequestAuth(ctx);
-	if (!auth) throw new Error("OpenAI Codex OAuth auth is unavailable");
-
 	const controller = new AbortController();
-	const abortFromParent = () => controller.abort();
+	const abortFromParent = () => controller.abort(parentSignal.reason);
 	parentSignal.addEventListener("abort", abortFromParent, { once: true });
-	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+	if (parentSignal.aborted) abortFromParent();
+	const timeout = setTimeout(
+		() => controller.abort(new DOMException("Usage refresh timed out", "TimeoutError")),
+		REQUEST_TIMEOUT_MS,
+	);
 
 	try {
-		const response = await fetch(USAGE_URL, {
-			method: "GET",
-			headers: {
-				Accept: "application/json",
-				Authorization: `Bearer ${auth.bearerToken}`,
-				"ChatGPT-Account-Id": auth.accountId,
-				originator: "pi",
-			},
-			signal: controller.signal,
-		});
+		controller.signal.throwIfAborted();
+		const auth = await resolveRequestAuth(ctx, controller.signal);
+		controller.signal.throwIfAborted();
+		if (!auth) throw new Error("OpenAI Codex OAuth auth is unavailable");
+
+		controller.signal.throwIfAborted();
+		const response = await abortable(
+			fetch(USAGE_URL, {
+				method: "GET",
+				headers: {
+					Accept: "application/json",
+					Authorization: `Bearer ${auth.bearerToken}`,
+					"ChatGPT-Account-Id": auth.accountId,
+					originator: "pi",
+				},
+				signal: controller.signal,
+			}),
+			controller.signal,
+		);
 		if (!response.ok) throw new Error(`Usage request failed with HTTP ${response.status}`);
 
-		const snapshot = parseUsageSnapshot(await response.json());
+		controller.signal.throwIfAborted();
+		const snapshot = parseUsageSnapshot(
+			await abortable(response.json(), controller.signal),
+		);
 		if (!snapshot) throw new Error("Usage response did not contain a valid main rate limit");
 		return snapshot;
 	} finally {
