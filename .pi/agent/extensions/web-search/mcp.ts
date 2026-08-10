@@ -45,6 +45,22 @@ export interface McpCallRequest {
   };
 }
 
+export interface ExaSearchResult {
+  text: string;
+  responseBytes: number;
+}
+
+type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+type TimerHandle = ReturnType<typeof setTimeout>;
+
+/** Narrow seams used by the dependency-free transport tests. */
+export interface TransportTestOptions {
+  fetch?: FetchLike;
+  timeoutMs?: number;
+  setTimeout?: (callback: () => void, milliseconds: number) => TimerHandle;
+  clearTimeout?: (handle: TimerHandle) => void;
+}
+
 export class McpProtocolError extends Error {
   constructor(message: string) {
     super(message);
@@ -253,4 +269,217 @@ export function parseMcpResponse(body: string): string {
     throw new McpProtocolError("Invalid Exa MCP response: no JSON-RPC payload");
   }
   throw new McpProtocolError("Invalid Exa MCP response: expected JSON or SSE data");
+}
+
+interface CollectedBody {
+  text: string;
+  bytes: number;
+}
+
+type AbortKind = "caller" | "timeout";
+
+function validContentLength(value: string | null): bigint | undefined {
+  if (value === null || !/^\d+$/.test(value.trim())) return undefined;
+  try {
+    return BigInt(value.trim());
+  } catch {
+    return undefined;
+  }
+}
+
+async function cancelBody(body: ReadableStream<Uint8Array> | null, reason?: unknown): Promise<void> {
+  if (body === null || body.locked) return;
+  try {
+    await body.cancel(reason);
+  } catch {
+    // Cancellation is cleanup; retain the error that caused it.
+  }
+}
+
+async function collectBody(
+  body: ReadableStream<Uint8Array> | null,
+  maximumBytes: number,
+  signal: AbortSignal,
+): Promise<CollectedBody> {
+  if (body === null) return { text: "", bytes: 0 };
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let bytes = 0;
+  let cancelPromise: Promise<void> | undefined;
+  const cancelReader = (reason?: unknown): Promise<void> => {
+    cancelPromise ??= reader.cancel(reason).catch(() => undefined);
+    return cancelPromise;
+  };
+  const onAbort = () => {
+    void cancelReader(signal.reason);
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    if (signal.aborted) throw signal.reason;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw signal.reason;
+      if (done) break;
+      if (bytes + value.byteLength > maximumBytes) {
+        await cancelReader("response size limit exceeded");
+        throw new Error("Exa response exceeded 256 KiB");
+      }
+      bytes += value.byteLength;
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+    return { text: parts.join(""), bytes };
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    if (cancelPromise !== undefined) await cancelPromise;
+    reader.releaseLock();
+  }
+}
+
+async function collectErrorExcerpt(
+  body: ReadableStream<Uint8Array> | null,
+  signal: AbortSignal,
+): Promise<string> {
+  if (body === null) return "";
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let bytes = 0;
+  let cancelPromise: Promise<void> | undefined;
+  const cancelReader = (reason?: unknown): Promise<void> => {
+    cancelPromise ??= reader.cancel(reason).catch(() => undefined);
+    return cancelPromise;
+  };
+  const onAbort = () => {
+    void cancelReader(signal.reason);
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    if (signal.aborted) throw signal.reason;
+    while (bytes < MAX_ERROR_EXCERPT_BYTES) {
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw signal.reason;
+      if (done) break;
+      const accepted = value.subarray(0, MAX_ERROR_EXCERPT_BYTES - bytes);
+      bytes += accepted.byteLength;
+      parts.push(decoder.decode(accepted, { stream: bytes < MAX_ERROR_EXCERPT_BYTES }));
+      if (accepted.byteLength < value.byteLength || bytes === MAX_ERROR_EXCERPT_BYTES) break;
+    }
+    await cancelReader("HTTP error excerpt collected");
+    parts.push(decoder.decode());
+    return sanitizeDetail(parts.join(""));
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    await cancelReader("HTTP error response cleanup");
+    reader.releaseLock();
+  }
+}
+
+function sanitizeDetail(value: string): string {
+  return truncateUtf8(value.replace(/[\u0000-\u0020\u007f-\u009f]+/g, " ").trim(), MAX_ERROR_EXCERPT_BYTES);
+}
+
+function errorDetail(error: unknown): string {
+  if (error instanceof Error) return sanitizeDetail(error.message);
+  return sanitizeDetail(String(error));
+}
+
+function abortError(kind: AbortKind): Error {
+  return new Error(kind === "timeout"
+    ? "Web search timed out after 25 seconds"
+    : "Web search cancelled by caller");
+}
+
+function isUsefulTransportError(error: unknown): error is Error {
+  return error instanceof McpProtocolError ||
+    (error instanceof Error && (
+      error.message.startsWith("Exa response exceeded ") ||
+      error.message.startsWith("Exa request failed with HTTP ") ||
+      error.message.startsWith("Web search ")
+    ));
+}
+
+export async function searchExa(
+  input: SearchInput,
+  callerSignal?: AbortSignal,
+  testOptions: TransportTestOptions = {},
+): Promise<ExaSearchResult> {
+  const request = buildMcpRequest(input);
+  const controller = new AbortController();
+  let abortKind: AbortKind | undefined;
+
+  const abort = (kind: AbortKind, reason?: unknown) => {
+    if (abortKind !== undefined) return;
+    abortKind = kind;
+    controller.abort(reason);
+  };
+  const onCallerAbort = () => abort("caller", callerSignal?.reason);
+  if (callerSignal?.aborted) onCallerAbort();
+  else callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
+
+  const timeoutMs = testOptions.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const setTimer = testOptions.setTimeout ?? setTimeout;
+  const clearTimer = testOptions.clearTimeout ?? clearTimeout;
+  const timeout = setTimer(
+    () => abort("timeout", new DOMException("Web search timeout", "TimeoutError")),
+    timeoutMs,
+  );
+
+  try {
+    if (abortKind !== undefined) throw abortError(abortKind);
+
+    let response: Response;
+    try {
+      response = await (testOptions.fetch ?? fetch)(EXA_MCP_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (abortKind !== undefined) throw abortError(abortKind);
+      const detail = errorDetail(error);
+      throw new Error(`Web search network failure${detail.length === 0 ? "" : `: ${detail}`}`);
+    }
+
+    if (abortKind !== undefined) {
+      await cancelBody(response.body, controller.signal.reason);
+      throw abortError(abortKind);
+    }
+
+    if (!response.ok) {
+      const excerpt = await collectErrorExcerpt(response.body, controller.signal);
+      const suffix = excerpt.length === 0 ? "" : `: ${excerpt}`;
+      throw new Error(`Exa request failed with HTTP ${response.status}${suffix}`);
+    }
+
+    const contentLength = validContentLength(response.headers.get("Content-Length"));
+    if (contentLength !== undefined && contentLength > BigInt(MAX_RESPONSE_BYTES)) {
+      await cancelBody(response.body, "response Content-Length exceeds limit");
+      throw new Error("Exa response exceeded 256 KiB");
+    }
+
+    const collected = await collectBody(response.body, MAX_RESPONSE_BYTES, controller.signal);
+    if (abortKind !== undefined) throw abortError(abortKind);
+    return {
+      text: parseMcpResponse(collected.text),
+      responseBytes: collected.bytes,
+    };
+  } catch (error) {
+    if (abortKind !== undefined) throw abortError(abortKind);
+    if (isUsefulTransportError(error)) throw error;
+    const detail = errorDetail(error);
+    throw new Error(`Web search failed${detail.length === 0 ? "" : `: ${detail}`}`);
+  } finally {
+    clearTimer(timeout);
+    callerSignal?.removeEventListener("abort", onCallerAbort);
+  }
 }
