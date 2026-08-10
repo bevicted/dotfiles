@@ -19,7 +19,9 @@ import {
   McpProtocolError,
   NO_RESULTS_TEXT,
   REQUEST_TIMEOUT_MS,
+  boundSearchOutput,
   buildMcpRequest,
+  buildSearchToolResult,
   normalizeSearchInput,
   parseMcpResponse,
   searchExa,
@@ -639,6 +641,99 @@ test("maps fetch failures and preserves protocol error categories", async () => 
     }),
     (error: unknown) => error instanceof McpProtocolError && /Invalid Exa MCP response/.test(error.message),
   );
+});
+
+function outputLineCount(value: string): number {
+  if (value.length === 0) return 0;
+  return value.split(/\r\n|\r|\n/).length;
+}
+
+test("leaves output just below and exactly at the byte limit unchanged", () => {
+  for (const size of [MAX_OUTPUT_BYTES - 1, MAX_OUTPUT_BYTES]) {
+    const source = "x".repeat(size);
+    assert.deepEqual(boundSearchOutput(source), {
+      text: source,
+      outputBytes: size,
+      truncated: false,
+      originalBytes: size,
+      originalLines: 1,
+      retainedBytes: size,
+      retainedLines: 1,
+    });
+  }
+});
+
+test("leaves output just below and exactly at the line limit unchanged", () => {
+  for (const lines of [MAX_OUTPUT_LINES - 1, MAX_OUTPUT_LINES]) {
+    const source = Array.from({ length: lines }, () => "x").join("\n");
+    const output = boundSearchOutput(source);
+    assert.equal(output.text, source);
+    assert.equal(output.truncated, false);
+    assert.equal(output.originalLines, lines);
+    assert.equal(output.retainedLines, lines);
+    assert.equal(output.outputBytes, encoded(source).byteLength);
+  }
+});
+
+test("head-truncates line overflow with the notice inside final limits", () => {
+  const source = Array.from({ length: MAX_OUTPUT_LINES + 1 }, (_, index) => `line ${index + 1}`).join("\n");
+  const output = boundSearchOutput(source);
+
+  assert.equal(output.truncated, true);
+  assert.equal(output.originalLines, MAX_OUTPUT_LINES + 1);
+  assert.equal(output.retainedLines, MAX_OUTPUT_LINES - 2);
+  assert.ok(source.startsWith(output.text.slice(0, output.retainedBytes)));
+  assert.equal(output.text.match(/\[Search output truncated:/g)?.length, 1);
+  assert.ok(output.text.includes(`of ${MAX_OUTPUT_LINES + 1} lines`));
+  assert.ok(output.text.includes("narrower query or lower contextMaxCharacters"));
+  assert.equal(outputLineCount(output.text), MAX_OUTPUT_LINES);
+  assert.ok(output.outputBytes <= MAX_OUTPUT_BYTES);
+});
+
+test("head-truncates ASCII byte overflow and counts the notice", () => {
+  const source = "a".repeat(MAX_OUTPUT_BYTES + 1);
+  const output = boundSearchOutput(source);
+  const retained = output.text.slice(0, output.retainedBytes);
+
+  assert.equal(output.truncated, true);
+  assert.equal(retained, source.slice(0, output.retainedBytes));
+  assert.equal(output.outputBytes, encoded(output.text).byteLength);
+  assert.ok(output.outputBytes <= MAX_OUTPUT_BYTES);
+  assert.ok(outputLineCount(output.text) <= MAX_OUTPUT_LINES);
+  assert.equal(output.text.match(/\[Search output truncated:/g)?.length, 1);
+  assert.match(output.text, /retained \d+ of 51201 bytes and 1 of 1 lines/);
+});
+
+test("head-truncates multibyte UTF-8 without splitting code points", () => {
+  const source = "🙂".repeat(Math.ceil(MAX_OUTPUT_BYTES / 4) + 10);
+  const output = boundSearchOutput(source);
+  const retained = output.text.slice(0, output.text.indexOf("\n\n[Search output truncated:"));
+
+  assert.equal(output.truncated, true);
+  assert.equal(source.startsWith(retained), true);
+  assert.equal(retained.endsWith("🙂"), true);
+  assert.equal(output.text.includes("�"), false);
+  assert.equal(output.retainedBytes, encoded(retained).byteLength);
+  assert.equal(output.outputBytes, encoded(output.text).byteLength);
+  assert.ok(output.outputBytes <= MAX_OUTPUT_BYTES);
+  assert.ok(outputLineCount(output.text) <= MAX_OUTPUT_LINES);
+});
+
+test("builds exact small tool metadata without duplicating source text", () => {
+  const source = "Title: Source\nURL: https://example.com/\nText: unique-source-marker";
+  const result = buildSearchToolResult("current source", { text: source, responseBytes: 321 });
+
+  assert.deepEqual(result, {
+    content: [{ type: "text", text: source }],
+    details: {
+      provider: "exa",
+      query: "current source",
+      responseBytes: 321,
+      outputBytes: encoded(source).byteLength,
+      truncated: false,
+    },
+  });
+  assert.equal(JSON.stringify(result.details).includes("unique-source-marker"), false);
 });
 
 test("live Exa transport smoke test", {

@@ -50,6 +50,29 @@ export interface ExaSearchResult {
   responseBytes: number;
 }
 
+export interface BoundedSearchOutput {
+  text: string;
+  outputBytes: number;
+  truncated: boolean;
+  originalBytes: number;
+  originalLines: number;
+  retainedBytes: number;
+  retainedLines: number;
+}
+
+export interface SearchToolDetails {
+  provider: "exa";
+  query: string;
+  responseBytes: number;
+  outputBytes: number;
+  truncated: boolean;
+}
+
+export interface SearchToolResult {
+  content: [{ type: "text"; text: string }];
+  details: SearchToolDetails;
+}
+
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 type TimerHandle = ReturnType<typeof setTimeout>;
 
@@ -132,8 +155,28 @@ export function buildMcpRequest(input: SearchInput): McpCallRequest {
   };
 }
 
+const textEncoder = new TextEncoder();
+
+function utf8Length(value: string): number {
+  return textEncoder.encode(value).byteLength;
+}
+
+function countLines(value: string): number {
+  if (value.length === 0) return 0;
+  let lines = 1;
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] === "\r") {
+      if (value[index + 1] === "\n") index++;
+      lines++;
+    } else if (value[index] === "\n") {
+      lines++;
+    }
+  }
+  return lines;
+}
+
 function truncateUtf8(value: string, maximumBytes: number): string {
-  const encoded = new TextEncoder().encode(value);
+  const encoded = textEncoder.encode(value);
   if (encoded.byteLength <= maximumBytes) return value;
 
   for (let end = maximumBytes; end > 0; end--) {
@@ -144,6 +187,91 @@ function truncateUtf8(value: string, maximumBytes: number): string {
     }
   }
   return "";
+}
+
+function headWithinLimits(value: string, maximumBytes: number, maximumLines: number): string {
+  let bytes = 0;
+  let lines = value.length === 0 ? 0 : 1;
+  let end = 0;
+
+  while (end < value.length) {
+    const first = value[end];
+    const isCrLf = first === "\r" && value[end + 1] === "\n";
+    const isLineBreak = first === "\r" || first === "\n";
+    const part = isCrLf ? "\r\n" : String.fromCodePoint(value.codePointAt(end)!);
+    const partBytes = utf8Length(part);
+    if (bytes + partBytes > maximumBytes || (isLineBreak && lines >= maximumLines)) break;
+    bytes += partBytes;
+    end += part.length;
+    if (isLineBreak) lines++;
+  }
+
+  return value.slice(0, end);
+}
+
+function truncationNotice(
+  originalBytes: number,
+  originalLines: number,
+  retainedBytes: number,
+  retainedLines: number,
+): string {
+  return `[Search output truncated: retained ${retainedBytes} of ${originalBytes} bytes and ${retainedLines} of ${originalLines} lines. Try a narrower query or lower contextMaxCharacters.]`;
+}
+
+export function boundSearchOutput(value: string): BoundedSearchOutput {
+  const originalBytes = utf8Length(value);
+  const originalLines = countLines(value);
+  if (originalBytes <= MAX_OUTPUT_BYTES && originalLines <= MAX_OUTPUT_LINES) {
+    return {
+      text: value,
+      outputBytes: originalBytes,
+      truncated: false,
+      originalBytes,
+      originalLines,
+      retainedBytes: originalBytes,
+      retainedLines: originalLines,
+    };
+  }
+
+  const separator = "\n\n";
+  let sourceByteLimit = MAX_OUTPUT_BYTES;
+  let retained = "";
+  let notice = "";
+
+  while (true) {
+    retained = headWithinLimits(value, sourceByteLimit, MAX_OUTPUT_LINES - 2);
+    const retainedBytes = utf8Length(retained);
+    const retainedLines = countLines(retained);
+    notice = truncationNotice(originalBytes, originalLines, retainedBytes, retainedLines);
+    const outputBytes = retainedBytes + utf8Length(separator) + utf8Length(notice);
+    if (outputBytes <= MAX_OUTPUT_BYTES) break;
+    sourceByteLimit -= outputBytes - MAX_OUTPUT_BYTES;
+  }
+
+  const text = `${retained}${separator}${notice}`;
+  return {
+    text,
+    outputBytes: utf8Length(text),
+    truncated: true,
+    originalBytes,
+    originalLines,
+    retainedBytes: utf8Length(retained),
+    retainedLines: countLines(retained),
+  };
+}
+
+export function buildSearchToolResult(query: string, result: ExaSearchResult): SearchToolResult {
+  const output = boundSearchOutput(result.text);
+  return {
+    content: [{ type: "text", text: output.text }],
+    details: {
+      provider: "exa",
+      query,
+      responseBytes: result.responseBytes,
+      outputBytes: output.outputBytes,
+      truncated: output.truncated,
+    },
+  };
 }
 
 function boundedDetail(value: unknown): string | undefined {
