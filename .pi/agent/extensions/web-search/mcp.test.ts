@@ -8,9 +8,11 @@ import {
   EXA_MCP_TOOL,
   EXA_MCP_URL,
   JSON_RPC_VERSION,
+  MAX_ATTEMPTS,
   MAX_CONTEXT_CHARACTERS,
   MAX_ERROR_EXCERPT_BYTES,
   MAX_NUM_RESULTS,
+  MAX_RETRY_AFTER_MS,
   MAX_OUTPUT_BYTES,
   MAX_OUTPUT_LINES,
   MAX_RESPONSE_BYTES,
@@ -19,11 +21,13 @@ import {
   McpProtocolError,
   NO_RESULTS_TEXT,
   REQUEST_TIMEOUT_MS,
+  RETRY_FALLBACK_DELAYS_MS,
   boundSearchOutput,
   buildMcpRequest,
   buildSearchToolResult,
   normalizeSearchInput,
   parseMcpResponse,
+  parseRetryAfterMs,
   searchExa,
 } from "./mcp.ts";
 import type { SearchInput, TransportTestOptions } from "./mcp.ts";
@@ -48,6 +52,9 @@ test("exports the approved MCP and safety constants", () => {
   assert.equal(EXA_MCP_TOOL, "web_search_exa");
   assert.equal(NO_RESULTS_TEXT, "No search results found. Please try a different query.");
   assert.equal(REQUEST_TIMEOUT_MS, 25_000);
+  assert.equal(MAX_ATTEMPTS, 3);
+  assert.deepEqual(RETRY_FALLBACK_DELAYS_MS, [500, 1_000]);
+  assert.equal(MAX_RETRY_AFTER_MS, 5_000);
   assert.equal(MAX_RESPONSE_BYTES, 256 * 1024);
   assert.equal(MAX_OUTPUT_BYTES, 50 * 1024);
   assert.equal(MAX_OUTPUT_LINES, 2_000);
@@ -290,6 +297,40 @@ test("bounds upstream-controlled protocol error messages at valid UTF-8 boundari
   }
 });
 
+test("parses and caps Retry-After delay-seconds", () => {
+  const now = Date.parse("Wed, 21 Oct 2015 07:28:00 GMT");
+  assert.equal(parseRetryAfterMs("0", now), 0);
+  assert.equal(parseRetryAfterMs(" 2 ", now), 2_000);
+  assert.equal(parseRetryAfterMs("5", now), MAX_RETRY_AFTER_MS);
+  assert.equal(parseRetryAfterMs("999999999999999999999999", now), MAX_RETRY_AFTER_MS);
+});
+
+test("parses Retry-After HTTP-dates relative to the injected clock", () => {
+  const now = Date.parse("Wed, 21 Oct 2015 07:28:00 GMT");
+  assert.equal(parseRetryAfterMs("Wed, 21 Oct 2015 07:28:02 GMT", now), 2_000);
+  assert.equal(parseRetryAfterMs("Wed, 21 Oct 2015 07:29:00 GMT", now), MAX_RETRY_AFTER_MS);
+  assert.equal(parseRetryAfterMs("Wed, 21 Oct 2015 07:27:59 GMT", now), 0);
+  assert.equal(parseRetryAfterMs("Sunday, 06-Nov-94 08:49:37 GMT", now), 0);
+  assert.equal(parseRetryAfterMs("Sun Nov  6 08:49:37 1994", now), 0);
+});
+
+test("rejects malformed or ambiguous Retry-After values", () => {
+  const now = Date.parse("Wed, 21 Oct 2015 07:28:00 GMT");
+  for (const value of [
+    null,
+    "",
+    "-1",
+    "0.5",
+    "soon",
+    "Wed, 31 Feb 2015 07:28:02 GMT",
+    "Thu, 21 Oct 2015 07:28:02 GMT",
+    "Wed, 21 Oct 2015 24:00:00 GMT",
+    "Wed, 21 Oct 2015 07:28:02 GMT, Thu, 22 Oct 2015 07:28:02 GMT",
+  ]) {
+    assert.equal(parseRetryAfterMs(value, now), undefined);
+  }
+});
+
 interface StreamFixture {
   response: Response;
   body: ReadableStream<Uint8Array>;
@@ -329,36 +370,105 @@ function encoded(value: string): Uint8Array {
   return new TextEncoder().encode(value);
 }
 
-function transportOptions(fetchImpl: TransportTestOptions["fetch"]): {
+interface FakeTimerRecord {
+  handle: ReturnType<typeof setTimeout>;
+  callback: () => void;
+  due: number;
+  delay: number;
+}
+
+class FakeClock {
+  nowMs: number;
+  private nextHandle = 1;
+  private records = new Map<ReturnType<typeof setTimeout>, FakeTimerRecord>();
+  readonly scheduledDelays: number[] = [];
+  clearCount = 0;
+
+  constructor(nowMs = 0) {
+    this.nowMs = nowMs;
+  }
+
+  readonly now = (): number => this.nowMs;
+
+  readonly setTimeout = (callback: () => void, milliseconds: number): ReturnType<typeof setTimeout> => {
+    const handle = { fakeTimer: this.nextHandle++ } as unknown as ReturnType<typeof setTimeout>;
+    this.records.set(handle, {
+      handle,
+      callback,
+      due: this.nowMs + milliseconds,
+      delay: milliseconds,
+    });
+    this.scheduledDelays.push(milliseconds);
+    return handle;
+  };
+
+  readonly clearTimeout = (handle: ReturnType<typeof setTimeout>): void => {
+    this.records.delete(handle);
+    this.clearCount++;
+  };
+
+  pendingCount(): number {
+    return this.records.size;
+  }
+
+  fireDelay(milliseconds: number): void {
+    const record = [...this.records.values()].find((candidate) => candidate.delay === milliseconds);
+    assert.ok(record, `expected a pending ${milliseconds} ms timer`);
+    this.records.delete(record.handle);
+    this.nowMs = Math.max(this.nowMs, record.due);
+    record.callback();
+  }
+
+  async advanceBy(milliseconds: number): Promise<void> {
+    const target = this.nowMs + milliseconds;
+    while (true) {
+      const next = [...this.records.values()]
+        .filter((record) => record.due <= target)
+        .sort((left, right) => left.due - right.due)[0];
+      if (next === undefined) break;
+      this.records.delete(next.handle);
+      this.nowMs = next.due;
+      next.callback();
+      await Promise.resolve();
+    }
+    this.nowMs = target;
+    await Promise.resolve();
+  }
+}
+
+function transportOptions(
+  fetchImpl: TransportTestOptions["fetch"],
+  nowMs = 0,
+): {
   options: TransportTestOptions;
+  clock: FakeClock;
   fireTimeout: () => void;
   timeoutDelay: () => number | undefined;
   clearCount: () => number;
 } {
-  let timeoutCallback: (() => void) | undefined;
-  let delay: number | undefined;
-  let clears = 0;
-  const handle = {} as ReturnType<typeof setTimeout>;
+  const clock = new FakeClock(nowMs);
   return {
     options: {
       fetch: fetchImpl,
-      setTimeout(callback, milliseconds) {
-        timeoutCallback = callback;
-        delay = milliseconds;
-        return handle;
-      },
-      clearTimeout(actual) {
-        assert.equal(actual, handle);
-        clears++;
-      },
+      now: clock.now,
+      setTimeout: clock.setTimeout,
+      clearTimeout: clock.clearTimeout,
     },
+    clock,
     fireTimeout() {
-      assert.ok(timeoutCallback);
-      timeoutCallback();
+      clock.fireDelay(REQUEST_TIMEOUT_MS);
     },
-    timeoutDelay: () => delay,
-    clearCount: () => clears,
+    timeoutDelay: () => clock.scheduledDelays[0],
+    clearCount: () => clock.clearCount,
   };
+}
+
+async function waitUntil(predicate: () => boolean, message: string): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (predicate()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.fail(message);
 }
 
 function paddedSuccess(byteLength: number): Uint8Array {
@@ -370,7 +480,7 @@ function paddedSuccess(byteLength: number): Uint8Array {
   return result;
 }
 
-test("posts one exact keyless request and returns parsed text with raw byte count", async () => {
+test("a first-attempt success posts one exact keyless request and returns parsed text", async () => {
   const body = `event: message\ndata: ${success([{ type: "text", text: "URL: https://example.com/" }])}\n`;
   const fixture = streamResponse([encoded(body)]);
   const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
@@ -401,6 +511,195 @@ test("posts one exact keyless request and returns parsed text with raw byte coun
   assert.equal(fixture.cancellations(), 0);
   assert.equal(lifecycle.timeoutDelay(), REQUEST_TIMEOUT_MS);
   assert.equal(lifecycle.clearCount(), 1);
+});
+
+test("retries one 429 after the fallback delay and reuses the exact request", async () => {
+  const throttled = streamResponse([encoded("discarded detail")], { status: 429 }, false);
+  const succeeded = streamResponse([encoded(success([{ type: "text", text: "retry worked" }]))]);
+  const calls: RequestInit[] = [];
+  const lifecycle = transportOptions(async (_input, init) => {
+    assert.ok(init);
+    calls.push(init);
+    if (calls.length === 2) {
+      assert.equal(throttled.cancellations(), 1);
+      assert.equal(throttled.body.locked, false);
+    }
+    return calls.length === 1 ? throttled.response : succeeded.response;
+  });
+
+  const promise = searchExa({ query: "transient throttle" }, undefined, lifecycle.options);
+  await waitUntil(
+    () => lifecycle.clock.scheduledDelays.includes(RETRY_FALLBACK_DELAYS_MS[0]),
+    "expected the first retry delay",
+  );
+  assert.equal(calls.length, 1);
+  await lifecycle.clock.advanceBy(RETRY_FALLBACK_DELAYS_MS[0] - 1);
+  assert.equal(calls.length, 1);
+  await lifecycle.clock.advanceBy(1);
+
+  assert.deepEqual(await promise, {
+    text: "retry worked",
+    responseBytes: encoded(success([{ type: "text", text: "retry worked" }])).byteLength,
+  });
+  assert.equal(calls.length, 2);
+  assert.strictEqual(calls[1], calls[0]);
+  assert.strictEqual(calls[1].headers, calls[0].headers);
+  assert.strictEqual(calls[1].body, calls[0].body);
+  assert.strictEqual(calls[1].signal, calls[0].signal);
+  assert.deepEqual(lifecycle.clock.scheduledDelays, [REQUEST_TIMEOUT_MS, 500]);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.equal(succeeded.body.locked, false);
+});
+
+test("retries two 429 responses with indexed fallbacks under one deadline", async () => {
+  const first = streamResponse([encoded("first detail")], {
+    status: 429,
+    headers: { "Retry-After": "malformed" },
+  }, false);
+  const second = streamResponse([encoded("second detail")], {
+    status: 429,
+    headers: { "Retry-After": "-1" },
+  }, false);
+  const third = new Response(success([{ type: "text", text: "third attempt" }]));
+  const responses = [first.response, second.response, third];
+  let fetchCalls = 0;
+  const lifecycle = transportOptions(async () => responses[fetchCalls++]);
+
+  const promise = searchExa({ query: "two throttles" }, undefined, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(500), "expected the first fallback");
+  await lifecycle.clock.advanceBy(500);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(1_000), "expected the second fallback");
+  assert.equal(fetchCalls, 2);
+  await lifecycle.clock.advanceBy(1_000);
+
+  assert.equal((await promise).text, "third attempt");
+  assert.equal(fetchCalls, MAX_ATTEMPTS);
+  assert.deepEqual(lifecycle.clock.scheduledDelays, [REQUEST_TIMEOUT_MS, 500, 1_000]);
+  assert.equal(first.cancellations(), 1);
+  assert.equal(second.cancellations(), 1);
+  assert.equal(first.body.locked, false);
+  assert.equal(second.body.locked, false);
+  assert.equal(third.body?.locked, false);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+});
+
+test("three 429 responses report only the bounded final detail without a third wait", async () => {
+  const first = streamResponse([encoded("must-not-appear-first")], { status: 429 }, false);
+  const second = streamResponse([encoded("must-not-appear-second")], { status: 429 }, false);
+  const finalMarker = "final throttle";
+  const third = streamResponse(
+    [encoded(`${finalMarker}\n${"x".repeat(MAX_ERROR_EXCERPT_BYTES + 100)}must-not-appear-tail`)],
+    { status: 429 },
+    false,
+  );
+  const responses = [first.response, second.response, third.response];
+  let fetchCalls = 0;
+  const lifecycle = transportOptions(async () => responses[fetchCalls++]);
+
+  const promise = searchExa({ query: "exhausted throttle" }, undefined, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(500), "expected the first fallback");
+  await lifecycle.clock.advanceBy(500);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(1_000), "expected the second fallback");
+  await lifecycle.clock.advanceBy(1_000);
+
+  await assert.rejects(promise, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /^Exa request failed with HTTP 429: final throttle /);
+    assert.equal(error.message.includes("must-not-appear-first"), false);
+    assert.equal(error.message.includes("must-not-appear-second"), false);
+    assert.equal(error.message.includes("must-not-appear-tail"), false);
+    return true;
+  });
+  assert.equal(fetchCalls, MAX_ATTEMPTS);
+  assert.deepEqual(lifecycle.clock.scheduledDelays, [REQUEST_TIMEOUT_MS, 500, 1_000]);
+  for (const fixture of [first, second, third]) {
+    assert.equal(fixture.cancellations(), 1);
+    assert.equal(fixture.body.locked, false);
+  }
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+});
+
+test("honors numeric and dated Retry-After values, caps them, and skips zero waits", async () => {
+  const now = Date.parse("Wed, 21 Oct 2015 07:28:00 GMT");
+  const cases = [
+    { header: "2", delay: 2_000 },
+    { header: "Wed, 21 Oct 2015 07:28:03 GMT", delay: 3_000 },
+    { header: "999999999999999999999999", delay: MAX_RETRY_AFTER_MS },
+    { header: "Wed, 21 Oct 2015 07:29:00 GMT", delay: MAX_RETRY_AFTER_MS },
+    { header: "invalid", delay: RETRY_FALLBACK_DELAYS_MS[0] },
+    { header: "0", delay: 0 },
+    { header: "Wed, 21 Oct 2015 07:27:59 GMT", delay: 0 },
+  ];
+
+  for (const { header, delay } of cases) {
+    const throttled = streamResponse([], {
+      status: 429,
+      headers: { "Retry-After": header },
+    }, false);
+    let fetchCalls = 0;
+    const lifecycle = transportOptions(async () => {
+      fetchCalls++;
+      return fetchCalls === 1
+        ? throttled.response
+        : new Response(success([{ type: "text", text: header }]));
+    }, now);
+
+    const promise = searchExa({ query: header }, undefined, lifecycle.options);
+    if (delay > 0) {
+      await waitUntil(() => lifecycle.clock.scheduledDelays.includes(delay), `expected a ${delay} ms delay`);
+      assert.equal(fetchCalls, 1);
+      await lifecycle.clock.advanceBy(delay);
+    }
+
+    assert.equal((await promise).text, header);
+    assert.equal(fetchCalls, 2);
+    assert.equal(throttled.cancellations(), 1);
+    assert.deepEqual(
+      lifecycle.clock.scheduledDelays,
+      delay === 0 ? [REQUEST_TIMEOUT_MS] : [REQUEST_TIMEOUT_MS, delay],
+    );
+    assert.equal(lifecycle.clock.pendingCount(), 0);
+  }
+});
+
+test("deadline expiry during backoff prevents the next attempt", async () => {
+  const throttled = streamResponse([], { status: 429 }, false);
+  let fetchCalls = 0;
+  const lifecycle = transportOptions(async () => {
+    fetchCalls++;
+    return throttled.response;
+  });
+  lifecycle.options.timeoutMs = 400;
+
+  const promise = searchExa({ query: "deadline during retry" }, undefined, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(500), "expected a pending backoff");
+  await lifecycle.clock.advanceBy(400);
+
+  await assert.rejects(promise, /^Error: Web search timed out after 25 seconds$/);
+  assert.equal(fetchCalls, 1);
+  assert.equal(throttled.cancellations(), 1);
+  assert.equal(throttled.body.locked, false);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+});
+
+test("caller cancellation during backoff clears the wait and prevents another attempt", async () => {
+  const throttled = streamResponse([], { status: 429 }, false);
+  const caller = new AbortController();
+  let fetchCalls = 0;
+  const lifecycle = transportOptions(async () => {
+    fetchCalls++;
+    return throttled.response;
+  });
+
+  const promise = searchExa({ query: "cancel retry" }, caller.signal, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(500), "expected a pending backoff");
+  caller.abort("stop");
+
+  await assert.rejects(promise, /^Error: Web search cancelled by caller$/);
+  assert.equal(fetchCalls, 1);
+  assert.equal(throttled.cancellations(), 1);
+  assert.equal(throttled.body.locked, false);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
 });
 
 test("accepts exactly 256 KiB and rejects the first byte beyond it", async () => {

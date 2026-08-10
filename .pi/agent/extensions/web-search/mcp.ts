@@ -11,6 +11,9 @@ export const DEFAULT_LIVECRAWL = "fallback";
 export const DEFAULT_SEARCH_TYPE = "auto";
 export const MAX_CONTEXT_CHARACTERS = 50_000;
 export const REQUEST_TIMEOUT_MS = 25_000;
+export const MAX_ATTEMPTS = 3;
+export const RETRY_FALLBACK_DELAYS_MS = [500, 1_000] as const;
+export const MAX_RETRY_AFTER_MS = 5_000;
 export const MAX_RESPONSE_BYTES = 256 * 1024;
 export const MAX_OUTPUT_BYTES = 50 * 1024;
 export const MAX_OUTPUT_LINES = 2_000;
@@ -82,6 +85,7 @@ export interface TransportTestOptions {
   timeoutMs?: number;
   setTimeout?: (callback: () => void, milliseconds: number) => TimerHandle;
   clearTimeout?: (handle: TimerHandle) => void;
+  now?: () => number;
 }
 
 export class McpProtocolError extends Error {
@@ -415,6 +419,95 @@ function validContentLength(value: string | null): bigint | undefined {
   }
 }
 
+const HTTP_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const HTTP_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HTTP_WEEKDAYS_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const HTTP_MONTH = `(${HTTP_MONTHS.join("|")})`;
+const HTTP_WEEKDAY = `(${HTTP_WEEKDAYS.join("|")})`;
+const HTTP_WEEKDAY_LONG = `(${HTTP_WEEKDAYS_LONG.join("|")})`;
+
+function httpDateEpochMs(value: string, nowMs: number): number | undefined {
+  let match = new RegExp(
+    `^${HTTP_WEEKDAY}, (\\d{2}) ${HTTP_MONTH} (\\d{4}) (\\d{2}):(\\d{2}):(\\d{2}) GMT$`,
+  ).exec(value);
+  let weekday: number;
+  let day: number;
+  let month: number;
+  let year: number;
+  let hour: number;
+  let minute: number;
+  let second: number;
+
+  if (match !== null) {
+    weekday = HTTP_WEEKDAYS.indexOf(match[1]);
+    day = Number(match[2]);
+    month = HTTP_MONTHS.indexOf(match[3]);
+    year = Number(match[4]);
+    hour = Number(match[5]);
+    minute = Number(match[6]);
+    second = Number(match[7]);
+  } else {
+    match = new RegExp(
+      `^${HTTP_WEEKDAY_LONG}, (\\d{2})-${HTTP_MONTH}-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2}) GMT$`,
+    ).exec(value);
+    if (match !== null) {
+      weekday = HTTP_WEEKDAYS_LONG.indexOf(match[1]);
+      day = Number(match[2]);
+      month = HTTP_MONTHS.indexOf(match[3]);
+      const nowYear = new Date(nowMs).getUTCFullYear();
+      if (!Number.isFinite(nowYear)) return undefined;
+      year = Math.floor(nowYear / 100) * 100 + Number(match[4]);
+      if (year > nowYear + 50) year -= 100;
+      hour = Number(match[5]);
+      minute = Number(match[6]);
+      second = Number(match[7]);
+    } else {
+      match = new RegExp(
+        `^${HTTP_WEEKDAY} ${HTTP_MONTH} ( [1-9]|[12]\\d|3[01]) (\\d{2}):(\\d{2}):(\\d{2}) (\\d{4})$`,
+      ).exec(value);
+      if (match === null) return undefined;
+      weekday = HTTP_WEEKDAYS.indexOf(match[1]);
+      month = HTTP_MONTHS.indexOf(match[2]);
+      day = Number(match[3].trim());
+      hour = Number(match[4]);
+      minute = Number(match[5]);
+      second = Number(match[6]);
+      year = Number(match[7]);
+    }
+  }
+
+  if (hour > 23 || minute > 59 || second > 59) return undefined;
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  date.setUTCHours(hour, minute, second, 0);
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() !== day ||
+    date.getUTCDay() !== weekday) {
+    return undefined;
+  }
+  return date.getTime();
+}
+
+export function parseRetryAfterMs(value: string | null, nowMs: number): number | undefined {
+  if (value === null) return undefined;
+  const trimmed = value.replace(/^[ \t]+|[ \t]+$/g, "");
+  if (trimmed.length === 0) return undefined;
+
+  if (/^\d+$/.test(trimmed)) {
+    const significant = trimmed.replace(/^0+/, "") || "0";
+    const capSeconds = String(Math.ceil(MAX_RETRY_AFTER_MS / 1_000));
+    if (significant.length > capSeconds.length ||
+      (significant.length === capSeconds.length && significant >= capSeconds)) {
+      return MAX_RETRY_AFTER_MS;
+    }
+    return Number(significant) * 1_000;
+  }
+
+  if (!Number.isFinite(nowMs)) return undefined;
+  const dateMs = httpDateEpochMs(trimmed, nowMs);
+  if (dateMs === undefined) return undefined;
+  return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, dateMs - nowMs));
+}
+
 async function cancelBody(body: ReadableStream<Uint8Array> | null, reason?: unknown): Promise<void> {
   if (body === null || body.locked) return;
   try {
@@ -532,6 +625,41 @@ function isUsefulTransportError(error: unknown): error is Error {
     ));
 }
 
+function abortableDelay(
+  milliseconds: number,
+  signal: AbortSignal,
+  setTimer: (callback: () => void, milliseconds: number) => TimerHandle,
+  clearTimer: (handle: TimerHandle) => void,
+): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+
+  return new Promise((resolve, reject) => {
+    let timer: TimerHandle | undefined;
+    let settled = false;
+
+    const settle = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      if (error !== undefined) {
+        if (timer !== undefined) clearTimer(timer);
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
+    const onAbort = () => settle(signal.reason ?? new DOMException("Aborted", "AbortError"));
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    timer = setTimer(() => settle(), milliseconds);
+    if (signal.aborted) onAbort();
+  });
+}
+
 export async function searchExa(
   input: SearchInput,
   callerSignal?: AbortSignal,
@@ -558,49 +686,70 @@ export async function searchExa(
     timeoutMs,
   );
 
+  const fetchImpl = testOptions.fetch ?? fetch;
+  const now = testOptions.now ?? Date.now;
+  const requestInit: RequestInit = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify(request),
+    signal: controller.signal,
+  };
+
   try {
     if (abortKind !== undefined) throw abortError(abortKind);
 
-    let response: Response;
-    try {
-      response = await (testOptions.fetch ?? fetch)(EXA_MCP_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json, text/event-stream",
-        },
-        body: JSON.stringify(request),
-        signal: controller.signal,
-      });
-    } catch (error) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      let response: Response;
+      try {
+        response = await fetchImpl(EXA_MCP_URL, requestInit);
+      } catch (error) {
+        if (abortKind !== undefined) throw abortError(abortKind);
+        const detail = errorDetail(error);
+        throw new Error(`Web search network failure${detail.length === 0 ? "" : `: ${detail}`}`);
+      }
+
+      if (abortKind !== undefined) {
+        await cancelBody(response.body, controller.signal.reason);
+        throw abortError(abortKind);
+      }
+
+      if (response.status === 429 && attempt < MAX_ATTEMPTS - 1) {
+        await cancelBody(response.body, "HTTP 429 response will be retried");
+        if (abortKind !== undefined) throw abortError(abortKind);
+
+        const retryAfter = parseRetryAfterMs(response.headers.get("Retry-After"), now());
+        const delay = retryAfter ?? RETRY_FALLBACK_DELAYS_MS[attempt];
+        if (delay > 0) {
+          await abortableDelay(delay, controller.signal, setTimer, clearTimer);
+        }
+        if (abortKind !== undefined) throw abortError(abortKind);
+        continue;
+      }
+
+      if (!response.ok) {
+        const excerpt = await collectErrorExcerpt(response.body, controller.signal);
+        const suffix = excerpt.length === 0 ? "" : `: ${excerpt}`;
+        throw new Error(`Exa request failed with HTTP ${response.status}${suffix}`);
+      }
+
+      const contentLength = validContentLength(response.headers.get("Content-Length"));
+      if (contentLength !== undefined && contentLength > BigInt(MAX_RESPONSE_BYTES)) {
+        await cancelBody(response.body, "response Content-Length exceeds limit");
+        throw new Error("Exa response exceeded 256 KiB");
+      }
+
+      const collected = await collectBody(response.body, MAX_RESPONSE_BYTES, controller.signal);
       if (abortKind !== undefined) throw abortError(abortKind);
-      const detail = errorDetail(error);
-      throw new Error(`Web search network failure${detail.length === 0 ? "" : `: ${detail}`}`);
+      return {
+        text: parseMcpResponse(collected.text),
+        responseBytes: collected.bytes,
+      };
     }
 
-    if (abortKind !== undefined) {
-      await cancelBody(response.body, controller.signal.reason);
-      throw abortError(abortKind);
-    }
-
-    if (!response.ok) {
-      const excerpt = await collectErrorExcerpt(response.body, controller.signal);
-      const suffix = excerpt.length === 0 ? "" : `: ${excerpt}`;
-      throw new Error(`Exa request failed with HTTP ${response.status}${suffix}`);
-    }
-
-    const contentLength = validContentLength(response.headers.get("Content-Length"));
-    if (contentLength !== undefined && contentLength > BigInt(MAX_RESPONSE_BYTES)) {
-      await cancelBody(response.body, "response Content-Length exceeds limit");
-      throw new Error("Exa response exceeded 256 KiB");
-    }
-
-    const collected = await collectBody(response.body, MAX_RESPONSE_BYTES, controller.signal);
-    if (abortKind !== undefined) throw abortError(abortKind);
-    return {
-      text: parseMcpResponse(collected.text),
-      responseBytes: collected.bytes,
-    };
+    throw new Error("Web search failed: retry attempts exhausted without a response");
   } catch (error) {
     if (abortKind !== undefined) throw abortError(abortKind);
     if (isUsefulTransportError(error)) throw error;
