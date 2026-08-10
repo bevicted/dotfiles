@@ -1,22 +1,41 @@
 # Skill mechanics
 
-The skill-specific branch of [`writing-for-agents`](SKILL.md): what changes when the document is a skill — frontmatter, the invocation choice, and router skills. Everything else about writing it is the universal reference in `SKILL.md`.
+Apply this file with [`SKILL.md`](SKILL.md) when creating or editing a skill.
 
 ## Invocation
 
-Two choices, trading the two loads:
+Choose invocation before writing the description:
 
-- A **model-invoked** skill keeps a `description`, so the agent can fire it autonomously — and other skills can reach it. You can still type its name: model-invocation always _includes_ user reach; a description only ever adds agent discovery, never removes the human's. The description is the skill's top-level context pointer, forced to stay loaded at all times — permanent context load in exchange for discoverability. A model-invoked skill whose content is all reference is also one home for shared reference: another skill can invoke it, so reference needed by several skills lives in one place. Mechanics: omit `disable-model-invocation`, and write a model-facing description carrying the trigger branches (the pointer-writing rules in `SKILL.md` apply in full).
-- A **user-invoked** skill strips the description from the agent's reach: only the human typing its name can invoke it, and no other skill can. Zero context load, but it spends cognitive load — you are the index that must remember it exists. Mechanics: set `disable-model-invocation: true`; the `description` becomes human-facing — a one-line summary, trigger lists stripped.
+- **Model-invoked:** Use when the agent should discover the skill from a task. Omit `disable-model-invocation`. Write a model-facing description that states what the skill does and the distinct conditions that trigger it.
+- **User-invoked:** Use when a human will invoke the skill explicitly. Set `disable-model-invocation: true`. Keep the required description to a one-line summary.
 
-Pick model-invocation only when the agent must reach the skill on its own, or another skill must. If it only ever fires by hand, make it user-invoked and pay no context load.
+Model-invoked descriptions consume context on every turn. Use them only when autonomous discovery is worth that cost.
 
-Shared reference that two user-invoked skills both need can live in neither — with no descriptions, neither can fire the other. Push it to a plain file outside the skill system: external reference any skill can point at.
+## Frontmatter
 
-## Splitting by invocation
+A skill requires:
 
-The invocation cut of splitting (the sequence cut lives in `SKILL.md`): split off a model-invoked skill when you have a distinct leading word that should trigger it on its own — a trigger word you actually use in your prompts — or another skill must reach it. You pay context load for the new always-loaded description, so that independent reach has to be worth it.
+```yaml
+---
+name: example-skill
+description: What the skill does and when to use it.
+---
+```
 
-## Router skills
+The name must be 1 to 64 characters using lowercase letters, digits, and nonconsecutive hyphens. The description must be present and no longer than 1024 characters. Prefer matching the directory name for compatibility across agent harnesses.
 
-When user-invoked skills multiply past what you can remember, that piled-up cognitive load is cured by a **router skill**: one user-invoked skill that names the others and when to reach for each, so the human has one skill to remember instead of many. It can only hint, never fire them: user-invoked skills have no description, so nothing but the human can reach them.
+Use relative paths for bundled scripts, assets, and reference documents.
+
+## Splitting skills
+
+Create a separate skill only when a branch needs an independent trigger. Put substantial branch-specific reference in a linked file. Keep shared rules in one file and point to it from each consumer.
+
+## Validation
+
+Before completion:
+
+1. Check the frontmatter and name limits.
+2. Resolve every relative link from the skill directory.
+3. Confirm the description covers each real trigger branch once.
+4. Confirm the selected invocation mode matches expected use.
+5. Run the harness's skill validator or loader and resolve every diagnostic.
