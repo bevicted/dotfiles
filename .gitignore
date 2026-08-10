@@ -4,6 +4,10 @@
 # tmux
 .config/tmux/plugins
 
+# herdr: logs, sockets and session state live alongside the config
+.config/herdr/*
+!.config/herdr/config.toml
+
 # nvim
 .config/nvim/tt.*
 .config/nvim/.tests

@@ -1,0 +1,20 @@
+# herdr config, ported from .config/tmux/tmux.conf.
+# Documented defaults: herdr --default-config
+
+onboarding = false
+
+[theme]
+name = "catppuccin-mocha"
+
+[keys]
+# Not ctrl+a: herdr has no send-prefix action, so it would eat readline
+# beginning-of-line in every pane with no way to type a literal ctrl+a.
+prefix = "ctrl+space"
+
+# tmux: bind -r f display-popup -E -w 80% -h 60% tmux-sessionizer
+[[keys.command]]
+key = "prefix+f"
+type = "popup"
+command = "herdr-sessionizer"
+width = "80%"
+height = "60%"
