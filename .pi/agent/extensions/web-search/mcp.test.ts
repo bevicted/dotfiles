@@ -1,0 +1,288 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  DEFAULT_LIVECRAWL,
+  DEFAULT_NUM_RESULTS,
+  DEFAULT_SEARCH_TYPE,
+  EXA_MCP_TOOL,
+  EXA_MCP_URL,
+  JSON_RPC_VERSION,
+  MAX_CONTEXT_CHARACTERS,
+  MAX_ERROR_EXCERPT_BYTES,
+  MAX_NUM_RESULTS,
+  MAX_OUTPUT_BYTES,
+  MAX_OUTPUT_LINES,
+  MAX_RESPONSE_BYTES,
+  MCP_METHOD,
+  MCP_REQUEST_ID,
+  McpProtocolError,
+  NO_RESULTS_TEXT,
+  REQUEST_TIMEOUT_MS,
+  buildMcpRequest,
+  normalizeSearchInput,
+  parseMcpResponse,
+} from "./mcp.ts";
+import type { SearchInput } from "./mcp.ts";
+
+function success(content: unknown[], extraResult: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    result: { content, ...extraResult },
+  });
+}
+
+function asInput(value: unknown): SearchInput {
+  return value as SearchInput;
+}
+
+test("exports the approved MCP and safety constants", () => {
+  assert.equal(EXA_MCP_URL, "https://mcp.exa.ai/mcp");
+  assert.equal(JSON_RPC_VERSION, "2.0");
+  assert.equal(MCP_REQUEST_ID, 1);
+  assert.equal(MCP_METHOD, "tools/call");
+  assert.equal(EXA_MCP_TOOL, "web_search_exa");
+  assert.equal(NO_RESULTS_TEXT, "No search results found. Please try a different query.");
+  assert.equal(REQUEST_TIMEOUT_MS, 25_000);
+  assert.equal(MAX_RESPONSE_BYTES, 256 * 1024);
+  assert.equal(MAX_OUTPUT_BYTES, 50 * 1024);
+  assert.equal(MAX_OUTPUT_LINES, 2_000);
+  assert.equal(MAX_ERROR_EXCERPT_BYTES, 1_024);
+});
+
+test("normalizes defaults while preserving the query", () => {
+  assert.deepEqual(normalizeSearchInput({ query: "  current Zig release  " }), {
+    query: "  current Zig release  ",
+    type: DEFAULT_SEARCH_TYPE,
+    numResults: DEFAULT_NUM_RESULTS,
+    livecrawl: DEFAULT_LIVECRAWL,
+  });
+});
+
+test("normalizes every supplied field and includes contextMaxCharacters", () => {
+  assert.deepEqual(
+    normalizeSearchInput({
+      query: "test",
+      numResults: MAX_NUM_RESULTS,
+      livecrawl: "preferred",
+      type: "deep",
+      contextMaxCharacters: MAX_CONTEXT_CHARACTERS,
+    }),
+    {
+      query: "test",
+      type: "deep",
+      numResults: 20,
+      livecrawl: "preferred",
+      contextMaxCharacters: 50_000,
+    },
+  );
+});
+
+test("rejects missing, non-string, empty, and whitespace-only queries", () => {
+  for (const input of [null, {}, { query: 42 }, { query: "" }, { query: " \t\n" }]) {
+    assert.throws(() => normalizeSearchInput(asInput(input)), /query|object/);
+  }
+});
+
+test("rejects invalid numResults values", () => {
+  for (const value of [0, 21, 1.5, NaN, Infinity, "8", null]) {
+    assert.throws(
+      () => normalizeSearchInput(asInput({ query: "test", numResults: value })),
+      /numResults must be an integer from 1 through 20/,
+    );
+  }
+});
+
+test("rejects invalid contextMaxCharacters values", () => {
+  for (const value of [0, 50_001, 2.5, NaN, Infinity, "10000", null]) {
+    assert.throws(
+      () => normalizeSearchInput(asInput({ query: "test", contextMaxCharacters: value })),
+      /contextMaxCharacters must be an integer from 1 through 50000/,
+    );
+  }
+});
+
+test("rejects invalid enum values", () => {
+  assert.throws(
+    () => normalizeSearchInput(asInput({ query: "test", livecrawl: "always" })),
+    /livecrawl must be one of: fallback, preferred/,
+  );
+  assert.throws(
+    () => normalizeSearchInput(asInput({ query: "test", type: "slow" })),
+    /type must be one of: auto, fast, deep/,
+  );
+});
+
+test("builds the exact OpenCode-style request and omits absent context", () => {
+  const request = buildMcpRequest({ query: "latest TypeScript release" });
+  assert.deepEqual(request, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: {
+      name: "web_search_exa",
+      arguments: {
+        query: "latest TypeScript release",
+        type: "auto",
+        numResults: 8,
+        livecrawl: "fallback",
+      },
+    },
+  });
+  assert.equal(Object.hasOwn(request.params.arguments, "contextMaxCharacters"), false);
+});
+
+test("builds a request with all explicitly supplied arguments", () => {
+  assert.deepEqual(
+    buildMcpRequest({
+      query: "recent browser changes",
+      numResults: 3,
+      livecrawl: "preferred",
+      type: "fast",
+      contextMaxCharacters: 12_345,
+    }),
+    {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "web_search_exa",
+        arguments: {
+          query: "recent browser changes",
+          type: "fast",
+          numResults: 3,
+          livecrawl: "preferred",
+          contextMaxCharacters: 12_345,
+        },
+      },
+    },
+  );
+});
+
+test("parses direct JSON and returns the first non-empty text unchanged", () => {
+  const expected = "Title: Example\nURL: https://example.com/source\nText: source excerpt\n";
+  const body = success([
+    { type: "image", data: "ignored" },
+    { type: "text", text: "" },
+    { type: "text", text: expected },
+    { type: "text", text: "later" },
+  ]);
+  assert.equal(parseMcpResponse(` \n${body}\n`), expected);
+});
+
+test("parses an observed Exa-style SSE response with exact URL text", () => {
+  const expected = [
+    "Title: Zig Programming Language",
+    "URL: https://ziglang.org/",
+    "Text: Zig is a general-purpose programming language and toolchain.",
+  ].join("\n");
+  const payload = success([{ type: "text", text: expected }]);
+  const fixture = `event: message\ndata: ${payload}\n\n`;
+  assert.equal(parseMcpResponse(fixture), expected);
+});
+
+test("accepts LF, CRLF, and data lines with or without one space", () => {
+  const first = success([{ type: "text", text: "LF no space" }]);
+  const second = success([{ type: "text", text: "CRLF space" }]);
+  assert.equal(parseMcpResponse(`event: message\ndata:${first}\n`), "LF no space");
+  assert.equal(parseMcpResponse(`event: message\r\ndata: ${second}\r\n`), "CRLF space");
+});
+
+test("ignores SSE metadata, comments, sentinels, and malformed events before success", () => {
+  const payload = success([{ type: "text", text: "usable" }]);
+  const body = [
+    ": heartbeat",
+    "event: message",
+    "id: 2",
+    "retry: 1000",
+    "data: [DONE]",
+    "data: not-json",
+    "data: {broken",
+    "data: {\"jsonrpc\":\"2.0\",\"result\":{}}",
+    `data: ${payload}`,
+  ].join("\n");
+  assert.equal(parseMcpResponse(body), "usable");
+});
+
+test("continues past valid no-text SSE successes to find text", () => {
+  const empty = success([{ type: "text", text: "" }]);
+  const text = success([{ type: "text", text: "found later" }]);
+  assert.equal(parseMcpResponse(`data: ${empty}\ndata: ${text}\n`), "found later");
+});
+
+test("returns the approved no-results text for empty bodies and valid empty successes", () => {
+  assert.equal(parseMcpResponse(""), NO_RESULTS_TEXT);
+  assert.equal(parseMcpResponse(" \r\n\t"), NO_RESULTS_TEXT);
+  assert.equal(parseMcpResponse(success([])), NO_RESULTS_TEXT);
+  assert.equal(parseMcpResponse(success([{ type: "text", text: "" }, { type: "other" }])), NO_RESULTS_TEXT);
+  assert.equal(parseMcpResponse(`event: message\ndata: ${success([])}\ndata: [DONE]\n`), NO_RESULTS_TEXT);
+});
+
+test("rejects malformed direct JSON and non-protocol bodies", () => {
+  assert.throws(() => parseMcpResponse("{not json"), /Malformed Exa MCP response: invalid JSON/);
+  assert.throws(() => parseMcpResponse("ordinary text"), /Invalid Exa MCP response/);
+  assert.throws(() => parseMcpResponse("event: message\ndata: [DONE]\n"), /no JSON-RPC payload/);
+  assert.throws(() => parseMcpResponse("data: {broken\n"), /Malformed Exa MCP response/);
+});
+
+test("rejects structurally invalid direct and SSE envelopes", () => {
+  const invalidValues = [
+    "[]",
+    JSON.stringify({ result: { content: [] } }),
+    JSON.stringify({ jsonrpc: "1.0", result: { content: [] } }),
+    JSON.stringify({ jsonrpc: "2.0", result: {} }),
+    JSON.stringify({ jsonrpc: "2.0", result: { content: {} } }),
+  ];
+  for (const value of invalidValues) {
+    assert.throws(() => parseMcpResponse(value), McpProtocolError);
+  }
+  assert.throws(
+    () => parseMcpResponse(`data: ${JSON.stringify({ jsonrpc: "2.0", result: {} })}\n`),
+    /Malformed Exa MCP response: no valid JSON-RPC payload/,
+  );
+});
+
+test("surfaces JSON-RPC errors from direct JSON and SSE immediately", () => {
+  const error = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    error: { code: -32603, message: "upstream unavailable" },
+  });
+  assert.throws(() => parseMcpResponse(error), /Exa JSON-RPC error \(-32603\): upstream unavailable/);
+  assert.throws(
+    () => parseMcpResponse(`data: ${success([])}\ndata: ${error}\n`),
+    /Exa JSON-RPC error \(-32603\): upstream unavailable/,
+  );
+});
+
+test("surfaces MCP tool errors with returned text or a generic message", () => {
+  assert.throws(
+    () => parseMcpResponse(success([{ type: "text", text: "query refused" }], { isError: true })),
+    /Exa MCP tool error: query refused/,
+  );
+  assert.throws(
+    () => parseMcpResponse(success([], { isError: true })),
+    /^McpProtocolError: Exa MCP tool error$/,
+  );
+});
+
+test("bounds upstream-controlled protocol error messages at valid UTF-8 boundaries", () => {
+  const marker = "must-not-appear";
+  const longMessage = `${"🙂".repeat(MAX_ERROR_EXCERPT_BYTES)}${marker}`;
+  const jsonRpcError = JSON.stringify({
+    jsonrpc: "2.0",
+    error: { code: "x".repeat(MAX_ERROR_EXCERPT_BYTES), message: longMessage },
+  });
+  const mcpError = success([{ type: "text", text: longMessage }], { isError: true });
+
+  for (const body of [jsonRpcError, mcpError]) {
+    assert.throws(() => parseMcpResponse(body), (error: unknown) => {
+      assert.ok(error instanceof McpProtocolError);
+      assert.equal(error.message.includes(marker), false);
+      assert.equal(error.message.includes("�"), false);
+      assert.ok(new TextEncoder().encode(error.message).byteLength < MAX_ERROR_EXCERPT_BYTES + 100);
+      return true;
+    });
+  }
+});
