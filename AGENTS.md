@@ -12,7 +12,8 @@ The `Makefile` is the canonical entry point — prefer `make <target>` over invo
 
 - `make link` — `stow --restow` everything into `$HOME`, plus `sudo stow` `bin/` into `/usr/local/bin`. Run this after adding/renaming files at the repo root.
 - `make link-delete` — remove all stow symlinks.
-- `make arch-init` — full bootstrap on Arch (`arch-pkgs` + `arch-aur-pkgs` + `tpm` + `gopkgs` + `zsh` + `link` + `gsettings`).
+- `make arch-init` — full bootstrap on Arch (`self-installers` + `pacman` + `aur` + `tpm` + `go-install` + `zsh` + `link` + `agents` + `gsettings`).
+- `make agents` — install the herdr + pi + plannotator stack via their own installers, then wire herdr's agent-state integrations. Ordered after `link` in `arch-init` on purpose; see the target comment.
 - `make arkenfox` — fetch/refresh the arkenfox `user.js` toolchain into `~/.mozilla/firefox/user.arkenfox/` and apply it. Note the comment in the target: the Firefox profile must already exist at that path (create via `firefox -p`) before running.
 - `make arkenfox-apply` — re-apply the existing arkenfox `user-overrides.js` without re-fetching the upstream toolchain.
 - `make osx-packages` / `make osx-shims` — macOS equivalents of the Arch package targets.
@@ -38,3 +39,5 @@ Files under `bin/` are linked into `/usr/local/bin` via the second `stow` invoca
 
 ### `.claude/` in this repo == `~/.claude/`
 Because of the stow layout, `.claude/CLAUDE.md` here becomes `~/.claude/CLAUDE.md` — Claude Code's user-global instructions file. Edits affect all projects on the machine, not just this repo. Only `CLAUDE.md` and `skills/` under `.claude/` are tracked (see `.gitignore`); everything else is local state.
+
+`~/.claude` is the stow symlink itself, so anything that writes into it lands in this working tree. `make agents` does exactly that: the plannotator installer drops `skills/plannotator-*` (gitignored - installer output), and `herdr integration install claude` writes `hooks/herdr-agent-state.sh` (gitignored) plus a `SessionStart` hook block into the *tracked* `settings.json`. That block holds an absolute `$HOME` path, so a first bootstrap on a new machine rewrites it; commit or discard the diff deliberately.

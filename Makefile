@@ -22,7 +22,24 @@ self-installers:
 	command -v rustup >/dev/null 2>&1 || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 .PHONY: arch-init
-arch-init: self-installers pacman aur tpm go-install zsh link gsettings
+arch-init: self-installers pacman aur tpm go-install zsh link agents gsettings
+
+# herdr (terminal workspace manager), pi (coding agent), plannotator
+# (annotate/review UI). Each ships an installer that drops a binary in
+# ~/.local/bin and self-updates afterwards, so only a missing one is fetched.
+# pi needs the nodejs/npm from pkgs/common, hence the ordering after `pacman`.
+#
+# Must run AFTER `link`: ~/.claude is a stow symlink into this repo, and both
+# the plannotator installer and `herdr integration install` write there. Run
+# before `link` they would create real files under ~/.claude and stow would
+# then refuse to link .claude/settings.json.
+.PHONY: agents
+agents:
+	command -v herdr >/dev/null 2>&1 || curl -fsSL https://herdr.dev/install.sh | sh
+	command -v pi >/dev/null 2>&1 || curl -fsSL https://pi.dev/install.sh | sh
+	command -v plannotator >/dev/null 2>&1 || curl -fsSL https://plannotator.ai/install.sh | bash -s -- --non-interactive
+	herdr integration install claude
+	herdr integration install pi
 
 .PHONY: pacman
 pacman:
