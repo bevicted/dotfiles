@@ -13,7 +13,7 @@ patterns over reconstructing from memory. If you change one, re-verify with the 
 
 Re-verify all at once:
 ```sh
-cd "$HOME/.claude/skills/zig-016/examples"
+cd "$HOME/.pi/agent/skills/zig-016/examples"
 for f in hello args_env read_file; do zig build-exe "$f.zig" -femit-bin=/tmp/zx_$f && echo "OK $f"; done
 for f in arraylist_writer meta_types; do zig test "$f.zig" && echo "OK $f"; done
 ```

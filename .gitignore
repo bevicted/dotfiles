@@ -37,12 +37,9 @@
 # claude code
 .claude/*
 !.claude/CLAUDE.md
-!.claude/skills/
 !.claude/commands/
 !.claude/settings.json
 !.claude/statusline.sh
-# plannotator's installer rewrites these on every run - installer output, not ours
-.claude/skills/plannotator-*
 
 # ssh
 .ssh/*

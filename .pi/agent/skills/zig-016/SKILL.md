@@ -4,10 +4,9 @@ description: >
   Write correct Zig 0.16.0 code and offset stale training data (models default to
   0.15/older idioms). Arms the current agent with the ground-truth workflow (grep the
   installed std source, verify with the compiler), the 0.16 breaking-change cheat sheet,
-  verified-compiling exemplars, TigerBeetle's TigerStyle house-style guide, and optional
-  repo-level enforcement templates. Invoke when
-  writing/reviewing Zig, when a build hits a 0.16 API change, or before delegating Zig
-  work to subagents. Trigger: /zig-016, "zig 0.16", "help me write zig".
+  verified-compiling exemplars, and TigerBeetle's TigerStyle house-style guide.
+  Invoke when writing/reviewing Zig or when a build hits a 0.16 API change.
+  Trigger: /skill:zig-016, "zig 0.16", "help me write zig".
 ---
 
 # Zig 0.16
@@ -42,24 +41,12 @@ Everything below is a fast-path so you grep/compile *less*, not a replacement fo
 
 1. Confirm the target: `zig version` (this skill assumes 0.16.x). If the project is on a
    different version, say so and stop applying these deltas.
-2. Load the cheat sheet into your working context:
-   read `$HOME/.claude/skills/zig-016/reference/api-deltas.md`.
-3. Prefer patterns from the verified exemplars in
-   `$HOME/.claude/skills/zig-016/examples/` (every file compiles/tests green on 0.16; see
-   `examples/README.md`). Pattern-match these instead of reconstructing from memory.
-4. For anything not covered, grep std and/or the vendored release notes
-   (`reference/release-notes.md`; grep it, do not read the whole 150KB file), then compile.
-
-## Delegating to subagents (they are stale too)
-
-Subagents start fresh and will revert to 0.15. When you spawn one for Zig work, paste this
-into its prompt (built-in Explore/Plan agents also skip CLAUDE.md, so never trust their Zig
-API specifics):
-
-> Target is Zig 0.16.0. Do not trust trained-in Zig knowledge; it is likely 0.15 or older.
-> Before presenting any Zig code as correct: grep the real signature in `/usr/lib/zig/std`
-> and compile with `zig ast-check`/`zig build`. Read `$HOME/.claude/skills/zig-016/reference/api-deltas.md`
-> and prefer patterns from `$HOME/.claude/skills/zig-016/examples/`.
+2. Load the [API delta cheat sheet](reference/api-deltas.md) into your working context.
+3. Prefer patterns from the [verified exemplars](examples/README.md). Every file compiles
+   or tests green on 0.16. Pattern-match these instead of reconstructing from memory.
+4. For anything not covered, grep std and/or the vendored
+   [release notes](reference/release-notes.md). Grep the release notes; do not read the
+   whole 150KB file. Then compile.
 
 ## Banned 0.15 patterns (quick lint)
 
@@ -89,20 +76,6 @@ developer experience, in that order. When writing new Zig or reviewing it beyond
 load `reference/tiger-style.md` (vendored; epigraph quotes cut, rest verbatim) and grep it for the
 topic at hand (assertions, the 70-line function limit, naming, batching, off-by-one) rather than
 reading the whole file.
-
-## Optional: repo-level hard enforcement
-
-The skill above arms *this* agent on demand. To make a specific repo enforce 0.16 on **every**
-agent (main + custom subagents + teammates) without invoking the skill, install the templates in
-`$HOME/.claude/skills/zig-016/enforcement/` (see `enforcement/README.md`):
-
-- `CLAUDE.snippet.md`: paste into the repo `CLAUDE.md` (auto-loaded context).
-- `rules-zig-016.md`: drop at `.claude/rules/zig-016.md`; path-scoped to `**/*.zig`.
-- `validate-zig.sh` + `settings.hook.json`: a `PreToolUse` hook that blocks the banned
-  patterns above on Write/Edit of `.zig` files. Fires inside subagents too (hard backstop).
-- `zig-016-builder.agent.md`: a `.claude/agents/` subagent with the cheat sheet baked in.
-
-Offer these when the user wants durability across sessions; do not install them unprompted.
 
 ## Maintenance
 

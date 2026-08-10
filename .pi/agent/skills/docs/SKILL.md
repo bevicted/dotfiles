@@ -6,7 +6,7 @@ description: >
   docs/ tree; writing a design doc, ADR, specification, requirement, error
   catalog, or CLI grammar; or deciding whether content is normative spec vs
   design rationale, how to phrase RFC-2119 requirements, or terminology vs
-  glossary. Language-agnostic. Trigger: /docs, "write a spec",
+  glossary. Language-agnostic. Trigger: /skill:docs, "write a spec",
   "add an ADR", "set up docs".
 ---
 
