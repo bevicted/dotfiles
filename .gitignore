@@ -8,6 +8,11 @@
 .config/herdr/*
 !.config/herdr/config.toml
 
+# opencode: it manages node_modules/package.json itself, and installers drop
+# plugins/ and commands/ beside the config
+.config/opencode/*
+!.config/opencode/opencode.jsonc
+
 # nvim
 .config/nvim/tt.*
 .config/nvim/.tests

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // plannotator's opencode plugin. Its standard installer only writes the
+  // command stubs under ~/.config/opencode/commands; the plugin itself is
+  // declared here and opencode installs it into its own node_modules.
+  "plugin": ["@plannotator/opencode@latest"]
+}
