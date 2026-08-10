@@ -11,6 +11,7 @@
 # opencode: it manages node_modules/package.json itself, and installers drop
 # plugins/ and commands/ beside the config
 .config/opencode/*
+!.config/opencode/AGENTS.md
 !.config/opencode/opencode.jsonc
 
 # nvim
@@ -63,5 +64,5 @@ work.sh
 vanity/node_modules/
 
 # other
-AGENTS.md
+/AGENTS.md
 

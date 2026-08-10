@@ -37,8 +37,18 @@ Files under `bin/` are linked into `/usr/local/bin` via the second `stow` invoca
 ### Firefox config is selectively tracked
 `.gitignore` excludes nearly everything under `.mozilla/firefox/` except the arkenfox toolchain inputs: `user.arkenfox/user-overrides.js` and `user.arkenfox/chrome/userChrome.css`. Don't add other files under that path expecting them to be tracked — check `.gitignore` first.
 
+### Global agent instructions
+`.config/agents/AGENTS.md` is the canonical user-global instruction file. Agent harnesses do not yet share one global lookup path, so tracked relative symlinks expose it at each supported location:
+
+- `.claude/CLAUDE.md` for Claude Code
+- `.config/opencode/AGENTS.md` for opencode
+- `.pi/agent/AGENTS.md` for pi
+- `.codex/AGENTS.md` for Codex
+
+Edit only the canonical file. Keep the symlinks relative so they remain portable when stowed.
+
 ### `.claude/` in this repo == `~/.claude/`
-Because of the stow layout, `.claude/CLAUDE.md` here becomes `~/.claude/CLAUDE.md` — Claude Code's user-global instructions file. Edits affect all projects on the machine, not just this repo. Only `CLAUDE.md` and `skills/` under `.claude/` are tracked (see `.gitignore`); everything else is local state.
+Because of the stow layout, `.claude/CLAUDE.md` here becomes Claude Code's user-global instructions file. Only `CLAUDE.md`, `settings.json`, `statusline.sh`, `commands/`, and selected `skills/` content under `.claude/` are tracked (see `.gitignore`); everything else is local state.
 
 `~/.claude` is the stow symlink itself, so anything that writes into it lands in this working tree. `make agents` does exactly that: the plannotator installer drops `skills/plannotator-*` (gitignored - installer output), and `herdr integration install claude` writes `hooks/herdr-agent-state.sh` (gitignored) plus a `SessionStart` hook block into the *tracked* `settings.json`. That block holds an absolute `$HOME` path, so a first bootstrap on a new machine rewrites it; commit or discard the diff deliberately.
 
