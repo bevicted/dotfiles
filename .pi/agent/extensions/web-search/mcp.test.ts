@@ -382,6 +382,7 @@ class FakeClock {
   private nextHandle = 1;
   private records = new Map<ReturnType<typeof setTimeout>, FakeTimerRecord>();
   readonly scheduledDelays: number[] = [];
+  readonly clearedDelays: number[] = [];
   clearCount = 0;
 
   constructor(nowMs = 0) {
@@ -403,6 +404,8 @@ class FakeClock {
   };
 
   readonly clearTimeout = (handle: ReturnType<typeof setTimeout>): void => {
+    const record = this.records.get(handle);
+    if (record !== undefined) this.clearedDelays.push(record.delay);
     this.records.delete(handle);
     this.clearCount++;
   };
@@ -411,12 +414,20 @@ class FakeClock {
     return this.records.size;
   }
 
-  fireDelay(milliseconds: number): void {
+  pendingDelays(): number[] {
+    return [...this.records.values()].map((record) => record.delay);
+  }
+
+  takeDelay(milliseconds: number): () => void {
     const record = [...this.records.values()].find((candidate) => candidate.delay === milliseconds);
     assert.ok(record, `expected a pending ${milliseconds} ms timer`);
     this.records.delete(record.handle);
     this.nowMs = Math.max(this.nowMs, record.due);
-    record.callback();
+    return record.callback;
+  }
+
+  fireDelay(milliseconds: number): void {
+    this.takeDelay(milliseconds)();
   }
 
   async advanceBy(milliseconds: number): Promise<void> {
@@ -463,6 +474,30 @@ function transportOptions(
   };
 }
 
+interface AbortListenerTracker {
+  additions: () => number;
+  removals: () => number;
+}
+
+function trackAbortListeners(signal: AbortSignal): AbortListenerTracker {
+  const originalAdd = signal.addEventListener.bind(signal);
+  const originalRemove = signal.removeEventListener.bind(signal);
+  let additions = 0;
+  let removals = 0;
+  signal.addEventListener = ((...args: Parameters<AbortSignal["addEventListener"]>) => {
+    if (args[0] === "abort") additions++;
+    return originalAdd(...args);
+  }) as AbortSignal["addEventListener"];
+  signal.removeEventListener = ((...args: Parameters<AbortSignal["removeEventListener"]>) => {
+    if (args[0] === "abort") removals++;
+    return originalRemove(...args);
+  }) as AbortSignal["removeEventListener"];
+  return {
+    additions: () => additions,
+    removals: () => removals,
+  };
+}
+
 async function waitUntil(predicate: () => boolean, message: string): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt++) {
     if (predicate()) return;
@@ -484,12 +519,17 @@ test("a first-attempt success posts one exact keyless request and returns parsed
   const body = `event: message\ndata: ${success([{ type: "text", text: "URL: https://example.com/" }])}\n`;
   const fixture = streamResponse([encoded(body)]);
   const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+  const caller = new AbortController();
+  const callerListeners = trackAbortListeners(caller.signal);
+  let combinedListeners: AbortListenerTracker | undefined;
   const lifecycle = transportOptions(async (input, init) => {
     calls.push({ input, init });
+    assert.ok(init?.signal);
+    combinedListeners = trackAbortListeners(init.signal);
     return fixture.response;
   });
 
-  const result = await searchExa({ query: "current example", numResults: 1 }, undefined, lifecycle.options);
+  const result = await searchExa({ query: "current example", numResults: 1 }, caller.signal, lifecycle.options);
 
   assert.deepEqual(result, {
     text: "URL: https://example.com/",
@@ -511,15 +551,25 @@ test("a first-attempt success posts one exact keyless request and returns parsed
   assert.equal(fixture.cancellations(), 0);
   assert.equal(lifecycle.timeoutDelay(), REQUEST_TIMEOUT_MS);
   assert.equal(lifecycle.clearCount(), 1);
+  assert.deepEqual(lifecycle.clock.clearedDelays, [REQUEST_TIMEOUT_MS]);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.equal(callerListeners.additions(), 1);
+  assert.equal(callerListeners.removals(), 1);
+  assert.equal(combinedListeners?.additions(), 1);
+  assert.equal(combinedListeners?.removals(), 1);
 });
 
 test("retries one 429 after the fallback delay and reuses the exact request", async () => {
   const throttled = streamResponse([encoded("discarded detail")], { status: 429 }, false);
   const succeeded = streamResponse([encoded(success([{ type: "text", text: "retry worked" }]))]);
   const calls: RequestInit[] = [];
+  const caller = new AbortController();
+  const callerListeners = trackAbortListeners(caller.signal);
+  let combinedListeners: AbortListenerTracker | undefined;
   const lifecycle = transportOptions(async (_input, init) => {
-    assert.ok(init);
+    assert.ok(init?.signal);
     calls.push(init);
+    combinedListeners ??= trackAbortListeners(init.signal);
     if (calls.length === 2) {
       assert.equal(throttled.cancellations(), 1);
       assert.equal(throttled.body.locked, false);
@@ -527,7 +577,7 @@ test("retries one 429 after the fallback delay and reuses the exact request", as
     return calls.length === 1 ? throttled.response : succeeded.response;
   });
 
-  const promise = searchExa({ query: "transient throttle" }, undefined, lifecycle.options);
+  const promise = searchExa({ query: "transient throttle" }, caller.signal, lifecycle.options);
   await waitUntil(
     () => lifecycle.clock.scheduledDelays.includes(RETRY_FALLBACK_DELAYS_MS[0]),
     "expected the first retry delay",
@@ -548,7 +598,12 @@ test("retries one 429 after the fallback delay and reuses the exact request", as
   assert.strictEqual(calls[1].signal, calls[0].signal);
   assert.deepEqual(lifecycle.clock.scheduledDelays, [REQUEST_TIMEOUT_MS, 500]);
   assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.deepEqual(lifecycle.clock.clearedDelays, [REQUEST_TIMEOUT_MS]);
   assert.equal(succeeded.body.locked, false);
+  assert.equal(callerListeners.additions(), 1);
+  assert.equal(callerListeners.removals(), 1);
+  assert.equal(combinedListeners?.additions(), 2);
+  assert.equal(combinedListeners?.removals(), 2);
 });
 
 test("retries two 429 responses with indexed fallbacks under one deadline", async () => {
@@ -593,10 +648,17 @@ test("three 429 responses report only the bounded final detail without a third w
     false,
   );
   const responses = [first.response, second.response, third.response];
+  const caller = new AbortController();
+  const callerListeners = trackAbortListeners(caller.signal);
+  let combinedListeners: AbortListenerTracker | undefined;
   let fetchCalls = 0;
-  const lifecycle = transportOptions(async () => responses[fetchCalls++]);
+  const lifecycle = transportOptions(async (_input, init) => {
+    assert.ok(init?.signal);
+    combinedListeners ??= trackAbortListeners(init.signal);
+    return responses[fetchCalls++];
+  });
 
-  const promise = searchExa({ query: "exhausted throttle" }, undefined, lifecycle.options);
+  const promise = searchExa({ query: "exhausted throttle" }, caller.signal, lifecycle.options);
   await waitUntil(() => lifecycle.clock.scheduledDelays.includes(500), "expected the first fallback");
   await lifecycle.clock.advanceBy(500);
   await waitUntil(() => lifecycle.clock.scheduledDelays.includes(1_000), "expected the second fallback");
@@ -617,6 +679,11 @@ test("three 429 responses report only the bounded final detail without a third w
     assert.equal(fixture.body.locked, false);
   }
   assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.deepEqual(lifecycle.clock.clearedDelays, [REQUEST_TIMEOUT_MS]);
+  assert.equal(callerListeners.additions(), 1);
+  assert.equal(callerListeners.removals(), 1);
+  assert.equal(combinedListeners?.additions(), 3);
+  assert.equal(combinedListeners?.removals(), 3);
 });
 
 test("honors numeric and dated Retry-After values, caps them, and skips zero waits", async () => {
@@ -627,6 +694,7 @@ test("honors numeric and dated Retry-After values, caps them, and skips zero wai
     { header: "999999999999999999999999", delay: MAX_RETRY_AFTER_MS },
     { header: "Wed, 21 Oct 2015 07:29:00 GMT", delay: MAX_RETRY_AFTER_MS },
     { header: "invalid", delay: RETRY_FALLBACK_DELAYS_MS[0] },
+    { header: "1, 2", delay: RETRY_FALLBACK_DELAYS_MS[0] },
     { header: "0", delay: 0 },
     { header: "Wed, 21 Oct 2015 07:27:59 GMT", delay: 0 },
   ];
@@ -662,16 +730,21 @@ test("honors numeric and dated Retry-After values, caps them, and skips zero wai
   }
 });
 
-test("deadline expiry during backoff prevents the next attempt", async () => {
+test("deadline expiry during fallback backoff prevents the next attempt", async () => {
   const throttled = streamResponse([], { status: 429 }, false);
+  const caller = new AbortController();
+  const callerListeners = trackAbortListeners(caller.signal);
+  let combinedListeners: AbortListenerTracker | undefined;
   let fetchCalls = 0;
-  const lifecycle = transportOptions(async () => {
+  const lifecycle = transportOptions(async (_input, init) => {
+    assert.ok(init?.signal);
+    combinedListeners ??= trackAbortListeners(init.signal);
     fetchCalls++;
     return throttled.response;
   });
   lifecycle.options.timeoutMs = 400;
 
-  const promise = searchExa({ query: "deadline during retry" }, undefined, lifecycle.options);
+  const promise = searchExa({ query: "deadline during retry" }, caller.signal, lifecycle.options);
   await waitUntil(() => lifecycle.clock.scheduledDelays.includes(500), "expected a pending backoff");
   await lifecycle.clock.advanceBy(400);
 
@@ -680,13 +753,83 @@ test("deadline expiry during backoff prevents the next attempt", async () => {
   assert.equal(throttled.cancellations(), 1);
   assert.equal(throttled.body.locked, false);
   assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.deepEqual(lifecycle.clock.clearedDelays, [500]);
+  assert.equal(callerListeners.additions(), 1);
+  assert.equal(callerListeners.removals(), 1);
+  assert.equal(combinedListeners?.additions(), 1);
+  assert.equal(combinedListeners?.removals(), 1);
+});
+
+test("deadline expiry during header-directed backoff prevents the next attempt", async () => {
+  const throttled = streamResponse([], {
+    status: 429,
+    headers: { "Retry-After": "2" },
+  }, false);
+  let fetchCalls = 0;
+  const lifecycle = transportOptions(async () => {
+    fetchCalls++;
+    return throttled.response;
+  });
+  lifecycle.options.timeoutMs = 750;
+
+  const promise = searchExa({ query: "header wait deadline" }, undefined, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(2_000), "expected a header-directed backoff");
+  assert.deepEqual(lifecycle.clock.pendingDelays(), [750, 2_000]);
+  await lifecycle.clock.advanceBy(750);
+
+  await assert.rejects(promise, /^Error: Web search timed out after 25 seconds$/);
+  assert.equal(fetchCalls, 1);
+  assert.equal(throttled.cancellations(), 1);
+  assert.equal(throttled.body.locked, false);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.deepEqual(lifecycle.clock.clearedDelays, [2_000]);
+});
+
+test("a started retry retains only the original deadline remainder", async () => {
+  const throttled = streamResponse([], {
+    status: 429,
+    headers: { "Retry-After": "1" },
+  }, false);
+  const attemptStartedAt: number[] = [];
+  let fetchCalls = 0;
+  const lifecycle = transportOptions((_input, init) => {
+    attemptStartedAt.push(lifecycle.clock.nowMs);
+    fetchCalls++;
+    if (fetchCalls === 1) return Promise.resolve(throttled.response);
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    });
+  });
+  lifecycle.options.timeoutMs = 1_500;
+
+  const promise = searchExa({ query: "remaining deadline" }, undefined, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(1_000), "expected the first backoff");
+  await lifecycle.clock.advanceBy(1_000);
+  await waitUntil(() => fetchCalls === 2, "expected the retry to start");
+  assert.deepEqual(attemptStartedAt, [0, 1_000]);
+  assert.deepEqual(lifecycle.clock.scheduledDelays, [1_500, 1_000]);
+
+  await lifecycle.clock.advanceBy(499);
+  assert.equal(fetchCalls, 2);
+  assert.equal(lifecycle.clock.pendingCount(), 1);
+  await lifecycle.clock.advanceBy(1);
+
+  await assert.rejects(promise, /^Error: Web search timed out after 25 seconds$/);
+  assert.equal(fetchCalls, 2);
+  assert.equal(lifecycle.clock.nowMs, 1_500);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.equal(throttled.body.locked, false);
 });
 
 test("caller cancellation during backoff clears the wait and prevents another attempt", async () => {
   const throttled = streamResponse([], { status: 429 }, false);
   const caller = new AbortController();
+  const callerListeners = trackAbortListeners(caller.signal);
+  let combinedListeners: AbortListenerTracker | undefined;
   let fetchCalls = 0;
-  const lifecycle = transportOptions(async () => {
+  const lifecycle = transportOptions(async (_input, init) => {
+    assert.ok(init?.signal);
+    combinedListeners ??= trackAbortListeners(init.signal);
     fetchCalls++;
     return throttled.response;
   });
@@ -700,6 +843,73 @@ test("caller cancellation during backoff clears the wait and prevents another at
   assert.equal(throttled.cancellations(), 1);
   assert.equal(throttled.body.locked, false);
   assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.deepEqual(lifecycle.clock.clearedDelays.sort((a, b) => a - b), [500, REQUEST_TIMEOUT_MS]);
+  assert.equal(callerListeners.additions(), 1);
+  assert.equal(callerListeners.removals(), 1);
+  assert.equal(combinedListeners?.additions(), 1);
+  assert.equal(combinedListeners?.removals(), 1);
+});
+
+test("deadline wins when it is due at the same instant as a fallback backoff", async () => {
+  const throttled = streamResponse([], { status: 429 }, false);
+  let fetchCalls = 0;
+  const lifecycle = transportOptions(async () => {
+    fetchCalls++;
+    return throttled.response;
+  });
+  lifecycle.options.timeoutMs = RETRY_FALLBACK_DELAYS_MS[0];
+
+  const promise = searchExa({ query: "simultaneous deadline" }, undefined, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.pendingCount() === 2, "expected deadline and backoff timers");
+  assert.deepEqual(lifecycle.clock.pendingDelays(), [500, 500]);
+  await lifecycle.clock.advanceBy(500);
+
+  await assert.rejects(promise, /^Error: Web search timed out after 25 seconds$/);
+  assert.equal(fetchCalls, 1);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.equal(throttled.body.locked, false);
+});
+
+test("caller cancellation wins after a backoff timer settles but before retry continuation", async () => {
+  const throttled = streamResponse([], { status: 429 }, false);
+  const caller = new AbortController();
+  let fetchCalls = 0;
+  const lifecycle = transportOptions(async () => {
+    fetchCalls++;
+    return throttled.response;
+  });
+
+  const promise = searchExa({ query: "timer first race" }, caller.signal, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(500), "expected a pending backoff");
+  const fireBackoff = lifecycle.clock.takeDelay(500);
+  fireBackoff();
+  caller.abort("boundary cancellation");
+
+  await assert.rejects(promise, /^Error: Web search cancelled by caller$/);
+  assert.equal(fetchCalls, 1);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.equal(throttled.body.locked, false);
+});
+
+test("a queued backoff callback is harmless when caller cancellation settles first", async () => {
+  const throttled = streamResponse([], { status: 429 }, false);
+  const caller = new AbortController();
+  let fetchCalls = 0;
+  const lifecycle = transportOptions(async () => {
+    fetchCalls++;
+    return throttled.response;
+  });
+
+  const promise = searchExa({ query: "abort first race" }, caller.signal, lifecycle.options);
+  await waitUntil(() => lifecycle.clock.scheduledDelays.includes(500), "expected a pending backoff");
+  const queuedBackoff = lifecycle.clock.takeDelay(500);
+  caller.abort("boundary cancellation");
+  queuedBackoff();
+
+  await assert.rejects(promise, /^Error: Web search cancelled by caller$/);
+  assert.equal(fetchCalls, 1);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.equal(throttled.body.locked, false);
 });
 
 test("accepts exactly 256 KiB and rejects the first byte beyond it", async () => {
@@ -873,6 +1083,8 @@ test("caller cancellation while reading cancels and releases the body reader", a
 });
 
 test("timeout aborts fetch with its distinct fixed message", async () => {
+  const caller = new AbortController();
+  const callerListeners = trackAbortListeners(caller.signal);
   let fetchCalls = 0;
   let fetchSignal: AbortSignal | undefined;
   const lifecycle = transportOptions((_input, init) => {
@@ -882,13 +1094,16 @@ test("timeout aborts fetch with its distinct fixed message", async () => {
       init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
     });
   });
-  const promise = searchExa({ query: "timeout" }, undefined, lifecycle.options);
+  const promise = searchExa({ query: "timeout" }, caller.signal, lifecycle.options);
   lifecycle.fireTimeout();
 
   await assert.rejects(promise, /^Error: Web search timed out after 25 seconds$/);
   assert.equal(fetchCalls, 1);
   assert.equal(fetchSignal?.aborted, true);
   assert.equal(lifecycle.clearCount(), 1);
+  assert.equal(lifecycle.clock.pendingCount(), 0);
+  assert.equal(callerListeners.additions(), 1);
+  assert.equal(callerListeners.removals(), 1);
 });
 
 test("removes the caller listener and clears the timer on success and failure", async () => {
@@ -924,22 +1139,134 @@ test("removes the caller listener and clears the timer on success and failure", 
   }
 });
 
-test("maps fetch failures and preserves protocol error categories", async () => {
-  await assert.rejects(
-    searchExa({ query: "network" }, undefined, {
-      fetch: async () => {
-        throw new TypeError("DNS lookup\nfailed");
+test("non-429 transport and protocol failures never retry or schedule backoff", async (context) => {
+  interface FailureFixture {
+    fetch: () => Promise<Response>;
+    bodies?: ReadableStream<Uint8Array>[];
+  }
+  const streamedOverLimit = () => {
+    const fixture = streamResponse(
+      [paddedSuccess(MAX_RESPONSE_BYTES), new Uint8Array([0x20])],
+      {},
+      false,
+    );
+    return {
+      fetch: async () => fixture.response,
+      bodies: [fixture.body],
+    };
+  };
+  const cases: Array<{
+    name: string;
+    expected: RegExp;
+    make: () => FailureFixture;
+  }> = [
+    {
+      name: "network rejection",
+      expected: /^Error: Web search network failure: DNS lookup failed$/,
+      make: () => ({
+        fetch: async () => {
+          throw new TypeError("DNS lookup\nfailed");
+        },
+      }),
+    },
+    {
+      name: "HTTP 400 with Retry-After",
+      expected: /^Error: Exa request failed with HTTP 400: bad request$/,
+      make: () => {
+        const response = new Response("bad request", {
+          status: 400,
+          headers: { "Retry-After": "0" },
+        });
+        return { fetch: async () => response, bodies: [response.body!] };
       },
-    }),
-    /^Error: Web search network failure: DNS lookup failed$/,
-  );
+    },
+    {
+      name: "HTTP 503 with Retry-After",
+      expected: /^Error: Exa request failed with HTTP 503: unavailable$/,
+      make: () => {
+        const response = new Response("unavailable", {
+          status: 503,
+          headers: { "Retry-After": "5" },
+        });
+        return { fetch: async () => response, bodies: [response.body!] };
+      },
+    },
+    {
+      name: "declared oversized response",
+      expected: /^Error: Exa response exceeded 256 KiB$/,
+      make: () => {
+        const response = new Response("not read", {
+          headers: { "Content-Length": String(MAX_RESPONSE_BYTES + 1) },
+        });
+        return { fetch: async () => response, bodies: [response.body!] };
+      },
+    },
+    {
+      name: "streamed oversized response",
+      expected: /^Error: Exa response exceeded 256 KiB$/,
+      make: streamedOverLimit,
+    },
+    {
+      name: "malformed JSON",
+      expected: /^McpProtocolError: Malformed Exa MCP response: invalid JSON$/,
+      make: () => {
+        const response = new Response("{broken");
+        return { fetch: async () => response, bodies: [response.body!] };
+      },
+    },
+    {
+      name: "malformed SSE",
+      expected: /^McpProtocolError: Malformed Exa MCP response: no valid JSON-RPC payload$/,
+      make: () => {
+        const response = new Response("data: {broken\n");
+        return { fetch: async () => response, bodies: [response.body!] };
+      },
+    },
+    {
+      name: "JSON-RPC error",
+      expected: /^McpProtocolError: Exa JSON-RPC error \(-32603\): upstream unavailable$/,
+      make: () => {
+        const response = new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          error: { code: -32603, message: "upstream unavailable" },
+        }));
+        return { fetch: async () => response, bodies: [response.body!] };
+      },
+    },
+    {
+      name: "MCP tool error",
+      expected: /^McpProtocolError: Exa MCP tool error: query refused$/,
+      make: () => {
+        const response = new Response(success(
+          [{ type: "text", text: "query refused" }],
+          { isError: true },
+        ));
+        return { fetch: async () => response, bodies: [response.body!] };
+      },
+    },
+  ];
 
-  await assert.rejects(
-    searchExa({ query: "protocol" }, undefined, {
-      fetch: async () => new Response("not JSON or SSE"),
-    }),
-    (error: unknown) => error instanceof McpProtocolError && /Invalid Exa MCP response/.test(error.message),
-  );
+  for (const failureCase of cases) {
+    await context.test(failureCase.name, async () => {
+      const fixture = failureCase.make();
+      let fetchCalls = 0;
+      const lifecycle = transportOptions(async () => {
+        fetchCalls++;
+        return fixture.fetch();
+      });
+
+      await assert.rejects(
+        searchExa({ query: failureCase.name }, undefined, lifecycle.options),
+        failureCase.expected,
+      );
+      assert.equal(fetchCalls, 1);
+      assert.deepEqual(lifecycle.clock.scheduledDelays, [REQUEST_TIMEOUT_MS]);
+      assert.deepEqual(lifecycle.clock.clearedDelays, [REQUEST_TIMEOUT_MS]);
+      assert.equal(lifecycle.clock.pendingCount(), 0);
+      for (const body of fixture.bodies ?? []) assert.equal(body.locked, false);
+    });
+  }
 });
 
 function outputLineCount(value: string): number {
