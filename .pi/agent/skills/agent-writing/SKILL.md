@@ -1,9 +1,9 @@
 ---
-name: writing-for-agents
+name: agent-writing
 description: Write and revise instructions consumed by coding agents, including skills, AGENTS.md, CLAUDE.md, and linked guidance. Use when creating or reviewing agent-facing instructions.
 ---
 
-# Writing for agents
+# Agent writing
 
 Write instructions that produce consistent decisions and actions. Match all governing instructions, including their style rules.
 
