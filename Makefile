@@ -28,6 +28,8 @@ arch-init: self-installers pacman aur tpm go-install zsh link agents gsettings
 # (annotate/review UI). Each ships an installer that drops a binary in
 # ~/.local/bin and self-updates afterwards, so only a missing one is fetched.
 # pi needs the nodejs/npm from pkgs/common, hence the ordering after `pacman`.
+# opencode is packaged (pacman extra + homebrew core) so it rides pkgs/common
+# instead; only its herdr integration is wired here.
 #
 # Must run AFTER `link`: ~/.claude is a stow symlink into this repo, and both
 # the plannotator installer and `herdr integration install` write there. Run
@@ -40,6 +42,7 @@ agents:
 	command -v plannotator >/dev/null 2>&1 || curl -fsSL https://plannotator.ai/install.sh | bash -s -- --non-interactive
 	herdr integration install claude
 	herdr integration install pi
+	herdr integration install opencode
 
 .PHONY: pacman
 pacman:
