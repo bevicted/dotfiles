@@ -3,8 +3,12 @@ import { Buffer } from "node:buffer";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const PROVIDER = "openai-codex";
+const OFFICIAL_PROVIDER_NAME = "OpenAI Codex";
+const OFFICIAL_OAUTH_NAME = "OpenAI (ChatGPT Plus/Pro)";
+const OFFICIAL_BASE_URL = "https://chatgpt.com/backend-api";
+const OFFICIAL_API = "openai-codex-responses";
 const STATUS_KEY = "rate-limits";
-const USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+const USAGE_URL = `${OFFICIAL_BASE_URL}/wham/usage`;
 const REQUEST_TIMEOUT_MS = 5_000;
 const REFRESH_INTERVAL_MS = 5 * 60_000;
 
@@ -74,6 +78,46 @@ type RequestAuth = {
 	accountId: string;
 };
 
+class UnofficialProviderError extends Error {}
+
+function isOfficialBaseUrl(value: string | undefined): boolean {
+	if (!value) return false;
+
+	try {
+		const url = new URL(value);
+		return (
+			url.origin === "https://chatgpt.com" &&
+			url.pathname.replace(/\/+$/, "") === "/backend-api" &&
+			!url.username &&
+			!url.password &&
+			!url.search &&
+			!url.hash
+		);
+	} catch {
+		return false;
+	}
+}
+
+export function isOfficialOpenAICodexProvider(
+	ctx: ExtensionContext,
+	model = ctx.model,
+): boolean {
+	if (!model || model.provider !== PROVIDER || model.api !== OFFICIAL_API) return false;
+	if (!isOfficialBaseUrl(model.baseUrl)) return false;
+	if (ctx.modelRegistry.getRegisteredProviderIds().includes(PROVIDER)) return false;
+	if (!ctx.modelRegistry.isUsingOAuth(model)) return false;
+
+	const provider = ctx.modelRegistry.getProvider(PROVIDER);
+	return (
+		provider?.id === PROVIDER &&
+		provider.name === OFFICIAL_PROVIDER_NAME &&
+		isOfficialBaseUrl(provider.baseUrl) &&
+		provider.auth.apiKey === undefined &&
+		provider.auth.oauth?.name === OFFICIAL_OAUTH_NAME &&
+		provider.auth.oauth.isSubscription === true
+	);
+}
+
 export function extractChatGPTAccountId(bearerToken: string): string | undefined {
 	try {
 		const parts = bearerToken.split(".");
@@ -90,9 +134,20 @@ export function extractChatGPTAccountId(bearerToken: string): string | undefined
 
 async function resolveRequestAuth(ctx: ExtensionContext): Promise<RequestAuth | undefined> {
 	const model = ctx.model;
-	if (!model || model.provider !== PROVIDER) return undefined;
+	if (!isOfficialOpenAICodexProvider(ctx, model)) {
+		throw new UnofficialProviderError("OpenAI Codex provider identity could not be established");
+	}
 
 	const resolved = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+	const currentModel = ctx.model;
+	if (
+		!currentModel ||
+		currentModel.provider !== model.provider ||
+		currentModel.id !== model.id ||
+		!isOfficialOpenAICodexProvider(ctx, currentModel)
+	) {
+		throw new UnofficialProviderError("OpenAI Codex provider changed during authentication");
+	}
 	if (!resolved.ok || !resolved.apiKey) return undefined;
 
 	const accountId = extractChatGPTAccountId(resolved.apiKey);
@@ -101,7 +156,7 @@ async function resolveRequestAuth(ctx: ExtensionContext): Promise<RequestAuth | 
 	return { bearerToken: resolved.apiKey, accountId };
 }
 
-async function fetchUsageSnapshot(
+export async function fetchUsageSnapshot(
 	ctx: ExtensionContext,
 	parentSignal: AbortSignal,
 ): Promise<UsageSnapshot> {
@@ -208,9 +263,14 @@ export default function openAIRateLimits(pi: ExtensionAPI): void {
 				if (requestGeneration !== generation || !canRefresh(ctx)) return;
 				lastGood = snapshot;
 				renderStatus(ctx, snapshot, false);
-			} catch {
+			} catch (error) {
 				if (requestGeneration !== generation || !canRefresh(ctx)) return;
-				if (lastGood) renderStatus(ctx, lastGood, true);
+				if (error instanceof UnofficialProviderError) {
+					lastGood = undefined;
+					ctx.ui.setStatus(STATUS_KEY, undefined);
+				} else if (lastGood) {
+					renderStatus(ctx, lastGood, true);
+				}
 			} finally {
 				if (inFlight === request) inFlight = undefined;
 				if (fetchController === controller) fetchController = undefined;
@@ -247,7 +307,7 @@ export default function openAIRateLimits(pi: ExtensionAPI): void {
 		if (
 			!sessionActive ||
 			ctx.mode !== "tui" ||
-			ctx.model?.provider !== PROVIDER ||
+			!isOfficialOpenAICodexProvider(ctx) ||
 			/^(1|true|yes)$/i.test(process.env.PI_OFFLINE ?? "")
 		) {
 			leaveProvider(ctx);
