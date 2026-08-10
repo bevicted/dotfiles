@@ -4,7 +4,9 @@
 ^/CLAUDE\.md$
 LICENSE.md
 Makefile
+PLAN.md
 README.md
+TICKETS.md
 bin
 docs
 etc
