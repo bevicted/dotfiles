@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# herdr port of tmux-sessionizer. tmux sessions become herdr workspaces:
+# pick a project dir, focus its workspace if one already carries that label,
+# otherwise create it.
+
+for cmd in fd fzf jq herdr; do
+	if ! command -v "$cmd" >/dev/null 2>&1; then
+		echo "Error: command not found: $cmd" >&2
+		exit 1
+	fi
+done
+
+if [[ "${HERDR_ENV:-}" != 1 ]]; then
+	echo "Error: not inside a herdr pane; run 'herdr' first." >&2
+	exit 1
+fi
+
+if [[ ! -d "$HOME/dev" ]]; then
+	echo "Error: Development directory '$HOME/dev' does not exist." >&2
+	exit 1
+fi
+
+# Mirrors [worktrees] directory in ~/.config/herdr/config.toml.
+worktree_dir="$HOME/.herdr/worktrees"
+
+if [[ $# -eq 1 ]]; then
+	if [[ ! -d "$1" ]]; then
+		echo "Error: Directory '$1' does not exist." >&2
+		exit 1
+	fi
+	selected_path=$1
+else
+	# Linked worktrees carry .git as a file, so the same marker search finds
+	# them whatever nesting herdr uses under worktree_dir.
+	worktrees_cmd=(true)
+	if [[ -d "$worktree_dir" ]]; then
+		worktrees_cmd=(fd --max-depth 3 --unrestricted --follow --prune '^\.git$' "$worktree_dir" --exec dirname {})
+	fi
+	# do not break this line, could introduce weird behaviour
+	selected_path=$({ fd --max-depth 4 --unrestricted --follow --prune '^(\.git|\.sessionize)$' "$HOME/dev" --exec dirname {}; "${worktrees_cmd[@]}"; echo "$HOME/dev/"; } | fzf)
+fi
+
+if [[ -z $selected_path ]]; then
+	exit 0
+fi
+
+selected_name=$(basename "$selected_path" | tr . _)
+
+workspace_id=$(
+	herdr workspace list \
+		| jq -r --arg label "$selected_name" \
+			'.result.workspaces[] | select(.label == $label) | .workspace_id' \
+		| head -n 1
+)
+
+if [[ -n $workspace_id ]]; then
+	herdr workspace focus "$workspace_id" >/dev/null || {
+		echo "Error: Failed to focus workspace '$workspace_id'." >&2
+		exit 1
+	}
+	exit 0
+fi
+
+herdr workspace create --cwd "$selected_path" --label "$selected_name" --focus >/dev/null || {
+	echo "Error: Failed to create workspace '$selected_name'." >&2
+	exit 1
+}
