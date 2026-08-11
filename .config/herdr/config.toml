@@ -7,9 +7,8 @@ onboarding = false
 name = "catppuccin-mocha"
 
 [keys]
-# Not ctrl+a: herdr has no send-prefix action, so it would eat readline
-# beginning-of-line in every pane with no way to type a literal ctrl+a.
-prefix = "ctrl+space"
+# Physical Ctrl+Space is translated to Ctrl+B in Ghostty for macOS.
+prefix = "ctrl+b"
 
 # tmux: bind -r f display-popup -E -w 80% -h 60% tmux-sessionizer
 [[keys.command]]
