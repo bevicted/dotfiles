@@ -1,109 +1,114 @@
 ---
 name: docs
 description: >
-  Spec-driven docs: split project documentation into rationale (design docs,
-  ADRs; frozen) and contract (specs; normative, living). Use when setting up a
-  docs/ tree; writing a design doc, ADR, specification, requirement, error
-  catalog, or CLI grammar; or deciding whether content is normative spec vs
-  design rationale, how to phrase RFC-2119 requirements, or terminology vs
-  glossary. Language-agnostic. Trigger: /skill:docs, "write a spec",
-  "add an ADR", "set up docs".
+  Write architecture rationale, ADRs, and normative product specifications,
+  including requirements, grammars, error contracts, and terminology. Use when
+  creating or separating design and specification content. Do not use for
+  implementation plans, roadmaps, task lists, READMEs, guides, or research notes.
 ---
 
-# Spec-driven docs
+# Rationale and contract documentation
 
-Documentation splits into two kinds; keep them distinct.
+## Workflow
 
-| Kind | Answers | Lives in | Voice | Tense | Lifecycle | Binds code? |
-| - | - | - | - | - | - | - |
-| **Rationale** | why a choice was made | `design/`, `design/adr/` | narrative | past | frozen once decided | no, explains only |
-| **Contract** | what must hold, how it must behave | `spec/` | normative | present | living, tracks real behaviour | yes, code/users/scripts conform |
+1. Read the repository's documentation policy, indexes, and nearby examples.
+   Identify its layout, terminology, notation, identifiers, and lifecycle rules.
+2. Check scope before editing. Apply this skill only to architecture rationale,
+   ADRs, and normative product specifications. If the primary deliverable is an
+   implementation plan, roadmap, task list, README, guide, research note, or
+   other general documentation, stop applying this skill and use the workflow
+   appropriate to that artifact.
+3. Classify each claim before placing it:
+   - **Rationale** records context, alternatives, a decision, or consequences. It
+     explains but does not bind the implementation.
+   - **Contract** states required current behavior, interfaces, formats, or
+     constraints. Implementations and consumers conform to it.
+   - **Evidence** records experiments, external observations, source notes, or
+     open questions. Keep it informative under the repository's research or
+     reference convention; do not turn an observation into a requirement without
+     an explicit decision.
+4. Follow existing repository conventions. Do not restructure documentation or
+   introduce a notation merely because this skill contains a template. When the
+   repository has no conventions and the user asks to establish them, use the
+   layout guidance below.
+5. Write only the requested artifacts. Apply the lifecycle and contract rules
+   below. Open [reference/patterns.md](reference/patterns.md) only when writing
+   BCP 14 conventions, EARS requirements, ISO EBNF, an ADR, an error catalog, or
+   normative terminology.
+6. Connect related documents without manufacturing links: cite rationale from a
+   contract when a specific decision explains the requirement, and link a design
+   decision forward when a resulting contract exists. Reference each normative
+   definition from one authoritative location.
+7. Verify every modified document: confirm its classification and lifecycle,
+   check links and identifiers, separate normative from informative text, and
+   account for each unresolved placeholder or open question.
 
-An **ADR** is the **seam**: one frozen decision that feeds the contract.
+## Optional bootstrap profile
 
-## Tree
+Use this profile only when the user asks to establish documentation conventions
+and the repository has none. Adapt names and numbering to the project rather than
+replacing an existing structure.
 
-```
+```text
 docs/
-  design/            rationale (see table)
-    00-*.md          index
-    NN-*.md
-    adr/             one decision each, immutable, Status header
-      00-*.md        index
-      template.md    Nygard skeleton, copy-me, unnumbered
-      NN-*.md        a decision record
-  spec/              contract (see table)
-    00-*.md          index + RFC 2119 conventions block (governs all spec/)
-    NN-terminology   domain nouns the clauses bind to (normative)
-    NN-*.md          requirements, grammar, errors, ...
+  design/          # architecture rationale
+    00-*.md         # section index
+    NN-*.md         # ordered design documents
+    adr/            # one decision record per file
+      00-*.md       # section index
+      template.md   # unnumbered ADR template
+      NN-*.md       # ordered decision records
+  spec/             # normative product contracts
+    00-*.md         # section index
+    NN-*.md         # ordered specifications
+  research/         # optional, non-binding evidence
 ```
 
-`NN-` orders files; `00-` is the section index/TOC. The ADR `template.md` is the
-sole unnumbered file (neither a record nor an index).
+Use `00-` for section indexes. `NN-` denotes a zero-padded, monotonically
+increasing numeric prefix; select one width, such as `01-` or `0001-`, and use it
+consistently. Never reuse an ADR number. Keep the ADR template unnumbered.
 
-## The sorting test: which kind owns a piece of content
+Add a terminology specification only when the user requests one or repository
+policy selects it. If repository-wide documentation rules need their own
+contract, record the layout, lifecycle, naming, and selected notations in the
+repository's chosen policy location. Do not create a documentation meta-spec
+unless the user asks to govern those conventions.
 
-Apply per sentence:
+## Lifecycle
 
-- Becomes wrong when reality changes -> spec (living contract).
-- Stays true as "what we thought then" -> design (frozen rationale).
-- Holds "because / considered / rejected / vs" -> design.
-- Holds "MUST / SHALL / exit 2 / output is X" (present normative) -> spec.
-- Alternatives live in design only. A spec states the answer, not the debate.
+Follow repository policy for the tense and lifecycle of design documents. A
+living architecture overview may describe the present system; a historical
+design document may preserve the reasoning at a stated point in time. When
+repository policy freezes a design document, record its status or snapshot date
+using the repository's metadata convention.
 
-Term test: if defining a term wrong would make a MUST-clause mean the wrong
-thing, it is **terminology** (normative, in spec). Reader-convenience terms are
-informative glossary.
+Keep an ADR to one decision and give it the repository's required status
+metadata. Edit a proposed ADR while evaluating the decision. After acceptance,
+preserve its decision body; supersede it with a new ADR and update only status or
+relationship metadata allowed by repository policy.
 
-## Writing the contract (spec/)
+Keep a normative specification aligned with the intended current contract. When
+the intended contract changes, update the specification and affected
+implementation together.
 
-- **Normative keywords** per RFC 2119 / 8174: MUST/SHOULD/MAY bind only in
-  UPPERCASE. Paste the boilerplate once in `spec/00`; state it governs all of
-  `spec/`, so every spec file inherits it.
-- Spend keywords sparingly (RFC 2119 section 6): reserve them for genuine interop
-  constraints; ordinary prose for everything else.
-- **Requirements**: one **EARS** pattern each; atomic, singular, verifiable (one
-  testable obligation per statement). Stable ID `REQ-n`; a retired ID is never
-  reused.
-- **Grammar / CLI syntax**: **EBNF** (ISO/IEC 14977), with the symbol legend at
-  point-of-use beside the first grammar block.
-- **Errors**: a separate tabular catalog (`trigger -> code -> message`) with
-  mnemonic IDs (`ERR_*`) that map 1:1 to the code's error type. The table is the
-  compiled form of EARS unwanted-behaviour requirements; keep it out of the prose
-  requirement list.
-- **Terminology**: define each domain noun once, normatively; reference it
-  everywhere else.
+## Contract rules
 
-## ADRs (design/adr/)
-
-One atomic decision per record. **Immutable** once accepted, except its Status
-line: supersede with a new ADR rather than editing the body. Carry a **Status**:
-proposed | accepted | superseded. The copy-me skeleton is an unnumbered
-`template.md`; the directory is indexed by its `00-*.md`.
-
-## Cross-linking the seam
-
-- Spec clause cites its origin: `REQ-7 (rationale: design/03)`.
-- Design links forward to the spec section it produced.
-- Every term is defined once (spec terminology); linked, not restated.
-
-## Keep the contract true (anti-drift)
-
-A living spec's main failure is **drift** from code. Bind them: cite `REQ-n` /
-`ERR_*` in test names. A spec-vs-behaviour mismatch is then a bug on exactly one
-of them; fix that one.
-
-## The documentation-spec (meta)
-
-The repo's own doc rules are themselves a contract, so write them as a spec that
-governs `design/`, `adr/`, and `spec/`. Its payload is the taxonomy table above
-plus naming rules and the notation mandates (EBNF for grammar, EARS for
-behaviour, the keyword rule). Meta-notation terms (EBNF, EARS, "normative") are
-defined here, not in product terminology.
-
-## Templates
-
-For verbatim skeletons (RFC 2119 boilerplate, the five EARS patterns, the EBNF
-symbol legend, the Nygard ADR template, the error-table shape, exit-code and
-NDJSON conventions, and authoritative source links) open
-[reference/patterns.md](reference/patterns.md).
+- If the repository adopts BCP 14, use RFC 2119/8174 keywords only in uppercase
+  and reserve them for requirements that need normative force.
+- Give each requirement one independently verifiable obligation. Use EARS only
+  when the repository selects it. Assign a stable, repository-unique identifier;
+  use a namespace such as `REQ-CLI-1` when requirements span multiple domains.
+  Never reuse a retired identifier.
+- Use the repository's selected grammar notation. If it selects ISO/IEC 14977
+  EBNF, place a symbol legend beside the first governed grammar block.
+- Create an error catalog only when the interface exposes stable error conditions.
+  Choose fields for that interface; use exit-status, stdout, or stderr columns
+  only for a CLI contract. Assign stable error IDs when callers or tests need to
+  reference them.
+- Define each normative domain term once. Keep reader-convenience definitions in
+  an informative glossary.
+- Carry requirement or error identifiers into tests and implementation only when
+  the repository uses that traceability scheme.
+- When implementation and specification disagree, determine the intended
+  contract before editing either side. Correct the side that is wrong; existing
+  behavior does not become normative merely because it is implemented.
