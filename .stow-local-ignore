@@ -3,6 +3,9 @@
 ^/AGENTS\.md$
 ^/CLAUDE\.md$
 ^/\.agents$
+^/\.config/opencode/internal\.jsonc$
+^/\.pi/agent/models\.json$
+^/scripts/internal\.sh$
 LICENSE.md
 Makefile
 PLAN.md

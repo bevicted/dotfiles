@@ -35,9 +35,6 @@ gbmv() {
     fi
 }
 
-bob() {
-    BOBSHELL_API_KEY=$(op read "op://Employee/ekglcf3lx5qidh7qg47dommsae/credential") command opencode "$@"
-}
 
 get_subcommands() {
     help_text=$("$@" --help)
@@ -75,3 +72,7 @@ map_command() {
 get_alias() {
     alias "$1" | cut -d\' -f2
 }
+
+if [ -f "$HOME/scripts/internal.sh" ]; then
+    source "$HOME/scripts/internal.sh"
+fi

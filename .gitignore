@@ -9,10 +9,19 @@
 !.config/herdr/config.toml
 
 # opencode: it manages node_modules/package.json itself, and installers drop
-# plugins/ and commands/ beside the config
+# plugins/ and commands/ beside the config. Local provider overrides belong in
+# ignored sibling files and can be loaded with OPENCODE_CONFIG.
 .config/opencode/*
 !.config/opencode/AGENTS.md
 !.config/opencode/opencode.jsonc
+
+# pi: local provider/model credentials and state should not be tracked.
+.pi/agent/models.json
+.pi/agent/settings.json
+.pi/agent/auth.json
+
+# shell: local helper functions may contain private item paths.
+scripts/internal.sh
 
 # nvim
 .config/nvim/tt.*
