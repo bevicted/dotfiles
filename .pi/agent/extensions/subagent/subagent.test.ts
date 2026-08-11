@@ -9,13 +9,17 @@ import {
 	ABORT_GRACE_MS,
 	CHILD_DEPTH_ENV,
 	assertCanDelegate,
+	boundParallelOutput,
 	boundTailOutput,
+	cloneProgressResults,
 	findNearestAgentsDirectory,
+	mapWithConcurrencyLimit,
 	normalizeAgentMetadata,
 	resolveWorkingDirectory,
 	runChild,
 	selectChildTools,
 	type SpawnChild,
+	validateDispatchMode,
 } from "./runner.ts";
 
 async function temporaryDirectory(): Promise<string> {
@@ -124,6 +128,68 @@ test("intersects requested tools with parent tools and always removes subagent",
 	assert.deepEqual(selectChildTools(["read", "bash", "subagent", "read"], ["read", "grep", "subagent"]), ["read"]);
 	assert.deepEqual(selectChildTools(undefined, ["read", "subagent", "edit"]), ["read", "edit"]);
 	assert.deepEqual(selectChildTools(["bash"], ["read", "subagent"]), []);
+});
+
+test("validates exactly one bounded dispatch mode", () => {
+	assert.deepEqual(validateDispatchMode({ agent: "scout", task: "inspect" }), { mode: "single" });
+	assert.deepEqual(validateDispatchMode({ tasks: [{ agent: "scout", task: "inspect" }] }), { mode: "parallel" });
+	assert.match(validateDispatchMode({}).error ?? "", /exactly one mode/);
+	assert.match(validateDispatchMode({ agent: "scout", task: "inspect", tasks: [] }).error ?? "", /exactly one mode/);
+	assert.match(validateDispatchMode({ tasks: [] }).error ?? "", /1 through 8/);
+	assert.match(
+		validateDispatchMode({ tasks: Array.from({ length: 9 }, () => ({ agent: "scout", task: "inspect" })) }).error ?? "",
+		/Max is 8/,
+	);
+	assert.match(validateDispatchMode({ agent: "scout" }).error ?? "", /requires non-empty agent and task/);
+});
+
+test("parallel scheduling caps concurrency, preserves order, and isolates progress snapshots", async () => {
+	let active = 0;
+	let maximumActive = 0;
+	const completions: number[] = [];
+	const results = await mapWithConcurrencyLimit([0, 1, 2, 3, 4, 5], 4, async (item) => {
+		active++;
+		maximumActive = Math.max(maximumActive, active);
+		await new Promise((resolve) => setTimeout(resolve, (6 - item) * 2));
+		active--;
+		completions.push(item);
+		return item === 2 ? `failed-${item}` : `completed-${item}`;
+	});
+	assert.equal(maximumActive, 4);
+	assert.notDeepEqual(completions, [0, 1, 2, 3, 4, 5]);
+	assert.deepEqual(results, ["completed-0", "completed-1", "failed-2", "completed-3", "completed-4", "completed-5"]);
+
+	const live = [{ status: "queued", messages: [{ text: "first" }] }];
+	const snapshot = cloneProgressResults(live);
+	live[0].status = "running";
+	live[0].messages[0].text = "changed";
+	assert.deepEqual(snapshot, [{ status: "queued", messages: [{ text: "first" }] }]);
+});
+
+test("parallel sections share one bounded output budget while retaining every status header", () => {
+	const maxLines = 100;
+	const maxBytes = 4_000;
+	const truncate = (value: string, limits: { maxLines: number; maxBytes: number }) => {
+		const allLines = value.split("\n");
+		let content = allLines.slice(-limits.maxLines).join("\n");
+		while (Buffer.byteLength(content, "utf8") > limits.maxBytes) content = content.slice(1);
+		return {
+			content,
+			truncated: content !== value,
+			totalLines: allLines.length,
+			totalBytes: Buffer.byteLength(value, "utf8"),
+		};
+	};
+	const sections = Array.from({ length: 8 }, (_, index) => ({
+		header: `### Task ${index + 1}: [agent-${index + 1}] ${index === 3 ? "failed" : "completed"}`,
+		output: Array.from({ length: 200 }, (__, line) => `task ${index + 1} line ${line} ${"x".repeat(30)}`).join("\n"),
+	}));
+	const output = boundParallelOutput("Parallel: 7/8 succeeded", sections, { maxLines, maxBytes }, truncate, (bytes) => `${bytes}B`);
+	assert.ok(output.split("\n").length <= maxLines);
+	assert.ok(Buffer.byteLength(output, "utf8") <= maxBytes);
+	for (let index = 1; index <= 8; index++) assert.match(output, new RegExp(`### Task ${index}:`));
+	assert.match(output, /Task 4: \[agent-4\] failed/);
+	assert.match(output, /Full messages remain in tool details/);
 });
 
 test("keeps the truncation notice inside the total line and byte limits", () => {

@@ -20,26 +20,34 @@ import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
 import {
 	assertCanDelegate,
+	boundParallelOutput,
 	boundTailOutput,
 	type ChildRunResult,
+	cloneProgressResults,
+	mapWithConcurrencyLimit,
+	MAX_PARALLEL_CONCURRENCY,
+	MAX_PARALLEL_TASKS,
 	resolveWorkingDirectory,
 	runChild,
 	selectChildTools,
 	type UsageStats,
+	validateDispatchMode,
 } from "./runner.ts";
 
 const COLLAPSED_ITEM_COUNT = 10;
+
+type TaskStatus = "queued" | "running" | "completed" | "failed";
 
 interface SingleResult extends Omit<ChildRunResult, "messages"> {
 	agent: string;
 	agentSource: "user" | "project" | "unknown";
 	task: string;
 	messages: Message[];
-	running: boolean;
+	status: TaskStatus;
 }
 
 interface SubagentDetails {
-	mode: "single";
+	mode: "single" | "parallel";
 	agentScope: AgentScope;
 	projectAgentsDir: string | null;
 	results: SingleResult[];
@@ -68,7 +76,7 @@ function makeFailure(agent: string, task: string, failureMessage: string): Singl
 		malformedStdout: "",
 		usage: emptyUsage(),
 		failureMessage,
-		running: false,
+		status: "failed",
 	};
 }
 
@@ -85,12 +93,14 @@ function getFinalOutput(messages: Message[]): string {
 
 function isFailedResult(result: SingleResult): boolean {
 	return (
-		!result.running &&
-		(Boolean(result.failureMessage) ||
-			result.exitCode !== 0 ||
-			result.stopReason === "error" ||
-			result.stopReason === "aborted" ||
-			result.stopReason === "length")
+		result.status === "failed" ||
+		(result.status !== "queued" &&
+			result.status !== "running" &&
+			(Boolean(result.failureMessage) ||
+				result.exitCode !== 0 ||
+				result.stopReason === "error" ||
+				result.stopReason === "aborted" ||
+				result.stopReason === "length"))
 	);
 }
 
@@ -211,8 +221,27 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 	return { command: "pi", args };
 }
 
-function combineResult(base: Pick<SingleResult, "agent" | "agentSource" | "task">, child: ChildRunResult, running: boolean): SingleResult {
-	return { ...base, ...child, messages: child.messages as unknown as Message[], running };
+function combineResult(
+	base: Pick<SingleResult, "agent" | "agentSource" | "task">,
+	child: ChildRunResult,
+	status: "running" | "completed" | "failed",
+): SingleResult {
+	return { ...base, ...child, messages: child.messages as unknown as Message[], status };
+}
+
+function makePendingResult(agent: AgentConfig | undefined, agentName: string, task: string, status: "queued" | "running"): SingleResult {
+	return {
+		agent: agentName,
+		agentSource: agent?.source ?? "unknown",
+		task,
+		exitCode: 0,
+		messages: [],
+		stderr: "",
+		malformedStdout: "",
+		usage: emptyUsage(),
+		model: agent?.model,
+		status,
+	};
 }
 
 async function runSingleAgent(
@@ -264,7 +293,7 @@ async function runSingleAgent(
 			signal,
 			onUpdate: onUpdate
 				? (snapshot) => {
-						const result = combineResult(base, snapshot, true);
+						const result = combineResult(base, snapshot, "running");
 						onUpdate({
 							content: [{ type: "text", text: boundModelOutput(getFinalOutput(result.messages) || "(running...)") }],
 							details: makeDetails([result]),
@@ -272,9 +301,10 @@ async function runSingleAgent(
 					}
 				: undefined,
 		});
-		const result = combineResult(base, child, false);
-		if (!result.model) result.model = model;
-		return result;
+		const completed = combineResult(base, child, "completed");
+		if (!completed.model) completed.model = model;
+		if (isFailedResult(completed)) completed.status = "failed";
+		return completed;
 	} catch (error) {
 		return makeFailure(agentName, task, error instanceof Error ? error.message : String(error));
 	} finally {
@@ -282,15 +312,73 @@ async function runSingleAgent(
 	}
 }
 
+function aggregateUsage(results: readonly SingleResult[]): UsageStats {
+	return results.reduce(
+		(total, result) => ({
+			input: total.input + result.usage.input,
+			output: total.output + result.usage.output,
+			cacheRead: total.cacheRead + result.usage.cacheRead,
+			cacheWrite: total.cacheWrite + result.usage.cacheWrite,
+			cost: total.cost + result.usage.cost,
+			contextTokens: total.contextTokens + result.usage.contextTokens,
+			turns: total.turns + result.usage.turns,
+		}),
+		emptyUsage(),
+	);
+}
+
+function parallelProgress(results: readonly SingleResult[]): string {
+	const completed = results.filter((result) => result.status === "completed").length;
+	const failed = results.filter((result) => result.status === "failed").length;
+	const running = results.filter((result) => result.status === "running").length;
+	const queued = results.filter((result) => result.status === "queued").length;
+	return `Parallel: ${completed + failed}/${results.length} done, ${running} running, ${queued} queued, ${failed} failed`;
+}
+
+function parallelSectionHeader(result: SingleResult, index: number): string {
+	const label = result.agent.replace(/\s+/g, " ").trim().slice(0, 160) || "unknown";
+	const status = isFailedResult(result)
+		? `failed${result.stopReason && result.stopReason !== "end" ? ` (${result.stopReason})` : ""}`
+		: "completed";
+	return `### Task ${index + 1}: [${label}] ${status}`;
+}
+
+function formatParallelModelOutput(results: readonly SingleResult[]): string {
+	const successCount = results.filter((result) => !isFailedResult(result)).length;
+	return boundParallelOutput(
+		`Parallel: ${successCount}/${results.length} succeeded`,
+		results.map((result, index) => ({
+			header: parallelSectionHeader(result, index),
+			output: getResultOutput(result),
+		})),
+		{ maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES },
+		truncateTail,
+		formatSize,
+	);
+}
+
 const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
 	description: 'Agent discovery scope. Default: "user". Project agents require explicit "project" or "both".',
 	default: "user",
 });
 
-const SubagentParams = Type.Object({
-	agent: Type.String({ description: "Name of the agent to invoke" }),
-	task: Type.String({ description: "Task to delegate" }),
+const TaskItem = Type.Object({
+	agent: Type.String({ description: "Name of the agent to invoke", minLength: 1 }),
+	task: Type.String({ description: "Task to delegate", minLength: 1 }),
 	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd" })),
+});
+
+const SubagentParams = Type.Object({
+	agent: Type.Optional(Type.String({ description: "Name of the agent to invoke (single mode)", minLength: 1 })),
+	task: Type.Optional(Type.String({ description: "Task to delegate (single mode)", minLength: 1 })),
+	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd (single mode)" })),
+	tasks: Type.Optional(
+		Type.Array(TaskItem, {
+			description: "Tasks to execute in parallel, with at most four children running concurrently",
+			minItems: 1,
+			maxItems: MAX_PARALLEL_TASKS,
+		}),
+	),
 	agentScope: Type.Optional(AgentScopeSchema),
 	confirmProjectAgents: Type.Optional(
 		Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
@@ -302,7 +390,8 @@ export default function (pi: ExtensionAPI) {
 		name: "subagent",
 		label: "Subagent",
 		description: [
-			"Delegate one task to a specialized agent in an isolated context.",
+			"Delegate one task, or 1 through 8 parallel tasks, to specialized agents in isolated contexts.",
+			"Provide exactly one mode: agent + task, or tasks.",
 			`User agents come from ${path.join(getAgentDir(), "agents")}.`,
 			`Set agentScope to "project" or "both" to include ${CONFIG_DIR_NAME}/agents.`,
 		].join(" "),
@@ -310,46 +399,61 @@ export default function (pi: ExtensionAPI) {
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const agentScope: AgentScope = params.agentScope ?? "user";
-			const emptyDetails = (): SubagentDetails => ({
-				mode: "single",
+			const selectedMode = validateDispatchMode(params);
+			const emptyDetails = (mode: "single" | "parallel"): SubagentDetails => ({
+				mode,
 				agentScope,
 				projectAgentsDir: null,
 				results: [],
 			});
+			if ("error" in selectedMode) {
+				return {
+					content: [{ type: "text", text: selectedMode.error }],
+					details: emptyDetails(selectedMode.mode),
+					isError: true,
+				};
+			}
 			try {
 				assertCanDelegate();
 			} catch (error) {
 				return {
 					content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
-					details: emptyDetails(),
+					details: emptyDetails(selectedMode.mode),
 					isError: true,
 				};
 			}
 
 			const discovery = discoverAgents(ctx.cwd, agentScope);
-			const makeDetails = (results: SingleResult[]): SubagentDetails => ({
-				mode: "single",
-				agentScope,
-				projectAgentsDir: discovery.projectAgentsDir,
-				results,
-			});
-			const agent = discovery.agents.find((candidate) => candidate.name === params.agent);
-			if (agent?.source === "project" && (params.confirmProjectAgents ?? true)) {
+			const makeDetails =
+				(mode: "single" | "parallel") =>
+				(results: SingleResult[]): SubagentDetails => ({
+					mode,
+					agentScope,
+					projectAgentsDir: discovery.projectAgentsDir,
+					results,
+				});
+			const requestedNames = new Set(
+				selectedMode.mode === "parallel" ? params.tasks!.map((task) => task.agent) : [params.agent!],
+			);
+			const projectAgents = [...requestedNames]
+				.map((name) => discovery.agents.find((candidate) => candidate.name === name))
+				.filter((agent): agent is AgentConfig => agent?.source === "project");
+			if (projectAgents.length > 0 && (params.confirmProjectAgents ?? true)) {
 				if (!ctx.hasUI) {
 					return {
 						content: [{ type: "text", text: "Denied: project-local agents require confirmation, but no UI is available." }],
-						details: makeDetails([]),
+						details: makeDetails(selectedMode.mode)([]),
 						isError: true,
 					};
 				}
 				const approved = await ctx.ui.confirm(
-					"Run project-local agent?",
-					`Agent: ${agent.name}\nSource: ${discovery.projectAgentsDir ?? "(unknown)"}\n\nOnly continue for a trusted repository.`,
+					projectAgents.length === 1 ? "Run project-local agent?" : "Run project-local agents?",
+					`Agents: ${projectAgents.map((agent) => agent.name).join(", ")}\nSource: ${discovery.projectAgentsDir ?? "(unknown)"}\n\nOnly continue for a trusted repository.`,
 				);
 				if (!approved) {
 					return {
-						content: [{ type: "text", text: "Canceled: project-local agent not approved." }],
-						details: makeDetails([]),
+						content: [{ type: "text", text: "Canceled: project-local agents not approved." }],
+						details: makeDetails(selectedMode.mode)([]),
 						isError: true,
 					};
 				}
@@ -359,31 +463,97 @@ export default function (pi: ExtensionAPI) {
 				model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
 				thinkingLevel: ctx.thinkingLevel,
 			};
+			const parentActiveTools = pi.getActiveTools();
+
+			if (selectedMode.mode === "parallel") {
+				const tasks = params.tasks!;
+				const allResults = tasks.map((task) =>
+					makePendingResult(
+						discovery.agents.find((agent) => agent.name === task.agent),
+						task.agent,
+						task.task,
+						"queued",
+					),
+				);
+				const emitParallelUpdate = () => {
+					if (!onUpdate) return;
+					const snapshot = cloneProgressResults(allResults);
+					onUpdate({
+						content: [{ type: "text", text: boundModelOutput(parallelProgress(snapshot)) }],
+						details: makeDetails("parallel")(snapshot),
+					});
+				};
+				emitParallelUpdate();
+
+				const results = await mapWithConcurrencyLimit(tasks, MAX_PARALLEL_CONCURRENCY, async (task, index) => {
+					allResults[index] = { ...allResults[index], status: "running" };
+					emitParallelUpdate();
+					const result = await runSingleAgent(
+						ctx.cwd,
+						dispatchDefaults,
+						parentActiveTools,
+						discovery.agents,
+						task.agent,
+						task.task,
+						task.cwd,
+						signal,
+						(partial) => {
+							const current = partial.details?.results[0];
+							if (!current) return;
+							allResults[index] = current;
+							emitParallelUpdate();
+						},
+						makeDetails("parallel"),
+					);
+					allResults[index] = result;
+					emitParallelUpdate();
+					return result;
+				});
+				return {
+					content: [{ type: "text", text: formatParallelModelOutput(results) }],
+					details: makeDetails("parallel")(results),
+				};
+			}
+
 			const result = await runSingleAgent(
 				ctx.cwd,
 				dispatchDefaults,
-				pi.getActiveTools(),
+				parentActiveTools,
 				discovery.agents,
-				params.agent,
-				params.task,
+				params.agent!,
+				params.task!,
 				params.cwd,
 				signal,
 				onUpdate,
-				makeDetails,
+				makeDetails("single"),
 			);
 			const failed = isFailedResult(result);
 			return {
 				content: [{ type: "text", text: boundModelOutput(getResultOutput(result)) }],
-				details: makeDetails([result]),
+				details: makeDetails("single")([result]),
 				isError: failed,
 			};
 		},
 
 		renderCall(args, theme) {
 			const scope: AgentScope = args.agentScope ?? "user";
-			const task = args.task.length > 60 ? `${args.task.slice(0, 60)}...` : args.task;
+			if (args.tasks) {
+				let text =
+					theme.fg("toolTitle", theme.bold("subagent ")) +
+					theme.fg("accent", `parallel (${args.tasks.length} tasks)`) +
+					theme.fg("muted", ` [${scope}]`);
+				for (const task of args.tasks.slice(0, 3)) {
+					const preview = task.task.length > 40 ? `${task.task.slice(0, 40)}...` : task.task;
+					text += `\n  ${theme.fg("accent", task.agent)}${theme.fg("dim", ` ${preview}`)}`;
+				}
+				if (args.tasks.length > 3) text += `\n  ${theme.fg("muted", `... +${args.tasks.length - 3} more`)}`;
+				return new Text(text, 0, 0);
+			}
+			const agent = args.agent ?? "...";
+			const rawTask = args.task ?? "...";
+			const task = rawTask.length > 60 ? `${rawTask.slice(0, 60)}...` : rawTask;
 			return new Text(
-				`${theme.fg("toolTitle", theme.bold("subagent "))}${theme.fg("accent", args.agent)}${theme.fg("muted", ` [${scope}]`)}\n  ${theme.fg("dim", task)}`,
+				`${theme.fg("toolTitle", theme.bold("subagent "))}${theme.fg("accent", agent)}${theme.fg("muted", ` [${scope}]`)}\n  ${theme.fg("dim", task)}`,
 				0,
 				0,
 			);
@@ -395,9 +565,102 @@ export default function (pi: ExtensionAPI) {
 				const content = result.content[0];
 				return new Text(content?.type === "text" ? content.text : "(no output)", 0, 0);
 			}
+			if (details.mode === "parallel") {
+				const running = details.results.filter((item) => item.status === "running").length;
+				const queued = details.results.filter((item) => item.status === "queued").length;
+				const completed = details.results.filter((item) => item.status === "completed").length;
+				const failed = details.results.filter((item) => item.status === "failed").length;
+				const inProgress = running + queued > 0;
+				const icon = inProgress ? theme.fg("warning", "...") : failed ? theme.fg("warning", "!") : theme.fg("success", "ok");
+				const summary = inProgress
+					? `${completed + failed}/${details.results.length} done, ${running} running, ${queued} queued`
+					: `${completed}/${details.results.length} succeeded`;
+
+				if (expanded && !inProgress) {
+					const container = new Container();
+					container.addChild(
+						new Text(`${icon} ${theme.fg("toolTitle", theme.bold("parallel "))}${theme.fg("accent", summary)}`, 0, 0),
+					);
+					for (const item of details.results) {
+						const itemIcon = isFailedResult(item) ? theme.fg("error", "x") : theme.fg("success", "ok");
+						const displayItems = getDisplayItems(item.messages);
+						const finalOutput = getFinalOutput(item.messages);
+						const diagnostic = getFailureDiagnostic(item);
+						container.addChild(new Spacer(1));
+						container.addChild(
+							new Text(`${theme.fg("muted", "--- ")}${theme.fg("accent", item.agent)} ${itemIcon}`, 0, 0),
+						);
+						container.addChild(new Text(theme.fg("muted", "Task: ") + theme.fg("dim", item.task), 0, 0));
+						for (const displayItem of displayItems) {
+							if (displayItem.type === "toolCall") {
+								container.addChild(
+									new Text(
+										theme.fg("muted", "-> ") + formatToolCall(displayItem.name, displayItem.args, theme.fg.bind(theme)),
+										0,
+										0,
+									),
+								);
+							}
+						}
+						if (finalOutput) {
+							container.addChild(new Spacer(1));
+							container.addChild(new Markdown(finalOutput.trim(), 0, 0, getMarkdownTheme()));
+						} else if (!diagnostic) container.addChild(new Text(theme.fg("muted", "(no output)"), 0, 0));
+						if (diagnostic) container.addChild(new Text(theme.fg("error", diagnostic), 0, 0));
+						const taskUsage = formatUsageStats(item.usage, item.model);
+						if (taskUsage) container.addChild(new Text(theme.fg("dim", taskUsage), 0, 0));
+					}
+					const totalUsage = formatUsageStats(aggregateUsage(details.results));
+					if (totalUsage) {
+						container.addChild(new Spacer(1));
+						container.addChild(new Text(theme.fg("dim", `Total: ${totalUsage}`), 0, 0));
+					}
+					return container;
+				}
+
+				let text = `${icon} ${theme.fg("toolTitle", theme.bold("parallel "))}${theme.fg("accent", summary)}`;
+				for (const item of details.results) {
+					const itemIcon =
+						item.status === "queued"
+							? theme.fg("muted", "queued")
+							: item.status === "running"
+								? theme.fg("warning", "...")
+								: isFailedResult(item)
+									? theme.fg("error", "x")
+									: theme.fg("success", "ok");
+					const displayItems = getDisplayItems(item.messages);
+					const visibleItems = displayItems.slice(-5);
+					const diagnostic = getFailureDiagnostic(item);
+					text += `\n\n${theme.fg("muted", "--- ")}${theme.fg("accent", item.agent)} ${itemIcon}`;
+					if (displayItems.length > visibleItems.length) {
+						text += `\n${theme.fg("muted", `... ${displayItems.length - visibleItems.length} earlier items`)}`;
+					}
+					for (const displayItem of visibleItems) {
+						if (displayItem.type === "text") {
+							text += `\n${theme.fg("toolOutput", displayItem.text.split("\n").slice(0, 3).join("\n"))}`;
+						} else {
+							text += `\n${theme.fg("muted", "-> ")}${formatToolCall(displayItem.name, displayItem.args, theme.fg.bind(theme))}`;
+						}
+					}
+					if (diagnostic) text += `\n${theme.fg("error", diagnostic)}`;
+					else if (!visibleItems.length) {
+						const empty = item.status === "queued" ? "(queued)" : item.status === "running" ? "(running...)" : "(no output)";
+						text += `\n${theme.fg("muted", empty)}`;
+					}
+					const taskUsage = formatUsageStats(item.usage, item.model);
+					if (taskUsage) text += `\n${theme.fg("dim", taskUsage)}`;
+				}
+				if (!inProgress) {
+					const totalUsage = formatUsageStats(aggregateUsage(details.results));
+					if (totalUsage) text += `\n\n${theme.fg("dim", `Total: ${totalUsage}`)}`;
+				}
+				if (!expanded) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
+				return new Text(text, 0, 0);
+			}
 			const agent = details.results[0];
 			const failed = isFailedResult(agent);
-			const status = isPartial || agent.running ? theme.fg("warning", "...") : failed ? theme.fg("error", "x") : theme.fg("success", "ok");
+			const inProgress = agent.status === "queued" || agent.status === "running";
+			const status = isPartial || inProgress ? theme.fg("warning", "...") : failed ? theme.fg("error", "x") : theme.fg("success", "ok");
 			const header = `${status} ${theme.fg("toolTitle", theme.bold(agent.agent))}${theme.fg("muted", ` (${agent.agentSource})`)}`;
 			const displayItems = getDisplayItems(agent.messages);
 			const finalOutput = getFinalOutput(agent.messages);
@@ -420,7 +683,7 @@ export default function (pi: ExtensionAPI) {
 				if (finalOutput) {
 					container.addChild(new Spacer(1));
 					container.addChild(new Markdown(finalOutput.trim(), 0, 0, getMarkdownTheme()));
-				} else if (!diagnostic) container.addChild(new Text(theme.fg("muted", agent.running ? "(running...)" : "(no output)"), 0, 0));
+				} else if (!diagnostic) container.addChild(new Text(theme.fg("muted", inProgress ? "(running...)" : "(no output)"), 0, 0));
 				if (diagnostic) {
 					container.addChild(new Spacer(1));
 					container.addChild(new Text(theme.fg("error", diagnostic), 0, 0));
@@ -440,9 +703,9 @@ export default function (pi: ExtensionAPI) {
 				else text += `\n${theme.fg("muted", "-> ")}${formatToolCall(item.name, item.args, theme.fg.bind(theme))}`;
 			}
 			if (diagnostic) text += `\n${theme.fg("error", diagnostic)}`;
-			else if (!visibleItems.length) text += `\n${theme.fg("muted", agent.running ? "(running...)" : "(no output)")}`;
+			else if (!visibleItems.length) text += `\n${theme.fg("muted", inProgress ? "(running...)" : "(no output)")}`;
 			if (usage) text += `\n${theme.fg("dim", usage)}`;
-			if (!agent.running) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
+			if (!inProgress) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
 			return new Text(text, 0, 0);
 		},
 	});

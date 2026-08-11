@@ -4,6 +4,8 @@ import * as path from "node:path";
 
 export const CHILD_DEPTH_ENV = "PI_SUBAGENT_DEPTH";
 export const ABORT_GRACE_MS = 5_000;
+export const MAX_PARALLEL_TASKS = 8;
+export const MAX_PARALLEL_CONCURRENCY = 4;
 
 export interface NormalizedAgentMetadata {
 	name: string;
@@ -95,6 +97,118 @@ interface TailTruncation {
 	truncated: boolean;
 	totalLines: number;
 	totalBytes: number;
+}
+
+export interface ParallelOutputSection {
+	header: string;
+	output: string;
+}
+
+export type DispatchMode = "single" | "parallel";
+
+export function validateDispatchMode(params: {
+	agent?: unknown;
+	task?: unknown;
+	cwd?: unknown;
+	tasks?: unknown;
+}): { mode: DispatchMode } | { error: string; mode: DispatchMode } {
+	const hasSingleFields = params.agent !== undefined || params.task !== undefined || params.cwd !== undefined;
+	const hasParallelFields = params.tasks !== undefined;
+	const fallbackMode: DispatchMode = hasParallelFields ? "parallel" : "single";
+	if (Number(hasSingleFields) + Number(hasParallelFields) !== 1) {
+		return { error: "Invalid parameters. Provide exactly one mode: agent + task, or tasks.", mode: fallbackMode };
+	}
+	if (hasParallelFields) {
+		if (!Array.isArray(params.tasks) || params.tasks.length === 0) {
+			return { error: "Parallel mode requires 1 through 8 tasks.", mode: "parallel" };
+		}
+		if (params.tasks.length > MAX_PARALLEL_TASKS) {
+			return {
+				error: `Too many parallel tasks (${params.tasks.length}). Max is ${MAX_PARALLEL_TASKS}.`,
+				mode: "parallel",
+			};
+		}
+		return { mode: "parallel" };
+	}
+	if (typeof params.agent !== "string" || !params.agent.trim() || typeof params.task !== "string" || !params.task.trim()) {
+		return { error: "Single mode requires non-empty agent and task strings.", mode: "single" };
+	}
+	return { mode: "single" };
+}
+
+export async function mapWithConcurrencyLimit<TInput, TOutput>(
+	items: readonly TInput[],
+	concurrency: number,
+	fn: (item: TInput, index: number) => Promise<TOutput>,
+): Promise<TOutput[]> {
+	if (items.length === 0) return [];
+	const limit = Math.max(1, Math.min(concurrency, items.length));
+	const results = new Array<TOutput>(items.length);
+	let nextIndex = 0;
+	const workers = Array.from({ length: limit }, async () => {
+		while (true) {
+			const index = nextIndex++;
+			if (index >= items.length) return;
+			results[index] = await fn(items[index], index);
+		}
+	});
+	await Promise.all(workers);
+	return results;
+}
+
+export function cloneProgressResults<T>(results: readonly T[]): T[] {
+	return structuredClone(results);
+}
+
+function countNewlines(value: string): number {
+	let count = 0;
+	for (const character of value) if (character === "\n") count++;
+	return count;
+}
+
+export function boundParallelOutput(
+	aggregateHeader: string,
+	sections: readonly ParallelOutputSection[],
+	limits: { maxLines: number; maxBytes: number },
+	truncate: (value: string, limits: { maxLines: number; maxBytes: number }) => TailTruncation,
+	formatBytes: (bytes: number) => string,
+): string {
+	if (sections.length === 0) return boundTailOutput(aggregateHeader, limits, truncate, formatBytes);
+	const separator = "\n\n---\n\n";
+	const prefixes = sections.map((section) => `${section.header}\n\n`);
+	const fixed = `${aggregateHeader}\n\n${prefixes.join(separator)}`;
+	const fixedBytes = Buffer.byteLength(fixed, "utf8");
+	const fixedLines = countNewlines(fixed) + 1 - sections.length;
+	let sectionLines = Math.max(1, Math.floor((limits.maxLines - fixedLines) / sections.length));
+	let sectionBytes = Math.max(1, Math.floor((limits.maxBytes - fixedBytes) / sections.length));
+
+	const build = () => {
+		const bounded = sections.map((section) =>
+			`${section.header}\n\n${boundTailOutput(
+				section.output,
+				{ maxLines: sectionLines, maxBytes: sectionBytes },
+				truncate,
+				formatBytes,
+			)}`,
+		);
+		return `${aggregateHeader}\n\n${bounded.join(separator)}`;
+	};
+
+	let output = build();
+	let guard = truncate(output, limits);
+	while (guard.truncated && (sectionLines > 1 || sectionBytes > 1)) {
+		sectionLines = Math.max(1, Math.floor(sectionLines / 2));
+		sectionBytes = Math.max(1, Math.floor(sectionBytes / 2));
+		output = build();
+		guard = truncate(output, limits);
+	}
+	if (!guard.truncated) return output;
+
+	const fallback = `${aggregateHeader}\n\n${sections
+		.map((section) => `${section.header}\n\n(output omitted by aggregate guard; full messages remain in tool details.)`)
+		.join(separator)}`;
+	const fallbackGuard = truncate(fallback, limits);
+	return fallbackGuard.truncated ? fallbackGuard.content : fallback;
 }
 
 export function boundTailOutput(
