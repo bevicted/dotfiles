@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
+import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 
 import {
@@ -56,6 +57,23 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
       const input = normalizeSearchInput(params);
       const result = await searchExa(input, signal);
       return buildSearchToolResult(input.query, result);
+    },
+    renderCall(args, theme, context) {
+      const component = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      const query = typeof args.query === "string" ? ` ${JSON.stringify(args.query)}` : "";
+      component.setText(
+        theme.fg("toolTitle", theme.bold("websearch")) + theme.fg("accent", query),
+      );
+      return component;
+    },
+    renderResult(result, { expanded }, theme, context) {
+      const component = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      const output = result.content
+        .filter((item) => item.type === "text")
+        .map((item) => item.text)
+        .join("\n");
+      component.setText(expanded || context.isError ? `\n${theme.fg("toolOutput", output)}` : "");
+      return component;
     },
   });
 }
