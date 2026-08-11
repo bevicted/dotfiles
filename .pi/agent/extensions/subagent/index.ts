@@ -24,11 +24,14 @@ import {
 	boundTailOutput,
 	type ChildRunResult,
 	cloneProgressResults,
+	getFinalAssistantText,
 	mapWithConcurrencyLimit,
+	MAX_CHAIN_STEPS,
 	MAX_PARALLEL_CONCURRENCY,
 	MAX_PARALLEL_TASKS,
 	resolveWorkingDirectory,
 	runChild,
+	runSequentialChain,
 	selectChildTools,
 	type UsageStats,
 	validateDispatchMode,
@@ -47,10 +50,12 @@ interface SingleResult extends Omit<ChildRunResult, "messages"> {
 }
 
 interface SubagentDetails {
-	mode: "single" | "parallel";
+	mode: "single" | "parallel" | "chain";
 	agentScope: AgentScope;
 	projectAgentsDir: string | null;
 	results: SingleResult[];
+	totalSteps?: number;
+	failed?: boolean;
 }
 
 interface DispatchDefaults {
@@ -81,14 +86,7 @@ function makeFailure(agent: string, task: string, failureMessage: string): Singl
 }
 
 function getFinalOutput(messages: Message[]): string {
-	for (let index = messages.length - 1; index >= 0; index--) {
-		const message = messages[index];
-		if (message.role !== "assistant") continue;
-		for (const part of message.content) {
-			if (part.type === "text") return part.text;
-		}
-	}
-	return "";
+	return getFinalAssistantText(messages);
 }
 
 function isFailedResult(result: SingleResult): boolean {
@@ -335,8 +333,12 @@ function parallelProgress(results: readonly SingleResult[]): string {
 	return `Parallel: ${completed + failed}/${results.length} done, ${running} running, ${queued} queued, ${failed} failed`;
 }
 
+function formatAgentLabel(agent: string): string {
+	return agent.replace(/\s+/g, " ").trim().slice(0, 160) || "unknown";
+}
+
 function parallelSectionHeader(result: SingleResult, index: number): string {
-	const label = result.agent.replace(/\s+/g, " ").trim().slice(0, 160) || "unknown";
+	const label = formatAgentLabel(result.agent);
 	const status = isFailedResult(result)
 		? `failed${result.stopReason && result.stopReason !== "end" ? ` (${result.stopReason})` : ""}`
 		: "completed";
@@ -357,19 +359,58 @@ function formatParallelModelOutput(results: readonly SingleResult[]): string {
 	);
 }
 
+function formatChainSection(
+	aggregateHeader: string,
+	result: SingleResult,
+	index: number,
+	status: "running" | "failed",
+): string {
+	return boundParallelOutput(
+		aggregateHeader,
+		[
+			{
+				header: `### Step ${index + 1}: [${formatAgentLabel(result.agent)}] ${status}`,
+				output: status === "running" ? getFinalOutput(result.messages) || "(running...)" : getResultOutput(result),
+			},
+		],
+		{ maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES },
+		truncateTail,
+		formatSize,
+	);
+}
+
+function formatChainUpdate(result: SingleResult, index: number, totalSteps: number): string {
+	return formatChainSection(`Chain: step ${index + 1}/${totalSteps} running`, result, index, "running");
+}
+
+function formatChainFailure(result: SingleResult, index: number, totalSteps: number): string {
+	return formatChainSection(
+		`Chain failed at step ${index + 1}/${totalSteps} (${formatAgentLabel(result.agent)})`,
+		result,
+		index,
+		"failed",
+	);
+}
+
 const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
 	description: 'Agent discovery scope. Default: "user". Project agents require explicit "project" or "both".',
 	default: "user",
 });
 
 const TaskItem = Type.Object({
-	agent: Type.String({ description: "Name of the agent to invoke", minLength: 1 }),
+	agent: Type.String({ description: "Name of the agent to invoke", minLength: 1, maxLength: 160 }),
 	task: Type.String({ description: "Task to delegate", minLength: 1 }),
 	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd" })),
 });
 
+const ChainItem = Type.Object({
+	agent: Type.String({ description: "Name of the agent to invoke", minLength: 1, maxLength: 160 }),
+	task: Type.String({ description: "Task with optional {previous} placeholders for the prior output", minLength: 1 }),
+	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd" })),
+});
+
 const SubagentParams = Type.Object({
-	agent: Type.Optional(Type.String({ description: "Name of the agent to invoke (single mode)", minLength: 1 })),
+	agent: Type.Optional(Type.String({ description: "Name of the agent to invoke (single mode)", minLength: 1, maxLength: 160 })),
 	task: Type.Optional(Type.String({ description: "Task to delegate (single mode)", minLength: 1 })),
 	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd (single mode)" })),
 	tasks: Type.Optional(
@@ -379,6 +420,13 @@ const SubagentParams = Type.Object({
 			maxItems: MAX_PARALLEL_TASKS,
 		}),
 	),
+	chain: Type.Optional(
+		Type.Array(ChainItem, {
+			description: "Steps to execute sequentially; {previous} receives the immediately preceding final output",
+			minItems: 1,
+			maxItems: MAX_CHAIN_STEPS,
+		}),
+	),
 	agentScope: Type.Optional(AgentScopeSchema),
 	confirmProjectAgents: Type.Optional(
 		Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
@@ -386,12 +434,18 @@ const SubagentParams = Type.Object({
 });
 
 export default function (pi: ExtensionAPI) {
+	pi.on("tool_result", (event) => {
+		if (event.toolName !== "subagent") return;
+		const details = event.details as SubagentDetails | undefined;
+		if (details?.failed) return { isError: true };
+	});
+
 	pi.registerTool({
 		name: "subagent",
 		label: "Subagent",
 		description: [
-			"Delegate one task, or 1 through 8 parallel tasks, to specialized agents in isolated contexts.",
-			"Provide exactly one mode: agent + task, or tasks.",
+			"Delegate one task, 1 through 8 parallel tasks, or 1 through 8 sequential steps to specialized agents in isolated contexts.",
+			"Provide exactly one mode: agent + task, tasks, or chain. Chain tasks may use {previous} for the immediately preceding final output.",
 			`User agents come from ${path.join(getAgentDir(), "agents")}.`,
 			`Set agentScope to "project" or "both" to include ${CONFIG_DIR_NAME}/agents.`,
 		].join(" "),
@@ -400,17 +454,17 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const agentScope: AgentScope = params.agentScope ?? "user";
 			const selectedMode = validateDispatchMode(params);
-			const emptyDetails = (mode: "single" | "parallel"): SubagentDetails => ({
+			const emptyDetails = (mode: "single" | "parallel" | "chain"): SubagentDetails => ({
 				mode,
 				agentScope,
 				projectAgentsDir: null,
 				results: [],
+				totalSteps: mode === "chain" && Array.isArray(params.chain) ? params.chain.length : undefined,
 			});
 			if ("error" in selectedMode) {
 				return {
 					content: [{ type: "text", text: selectedMode.error }],
-					details: emptyDetails(selectedMode.mode),
-					isError: true,
+					details: { ...emptyDetails(selectedMode.mode), failed: true },
 				};
 			}
 			try {
@@ -418,22 +472,26 @@ export default function (pi: ExtensionAPI) {
 			} catch (error) {
 				return {
 					content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
-					details: emptyDetails(selectedMode.mode),
-					isError: true,
+					details: { ...emptyDetails(selectedMode.mode), failed: true },
 				};
 			}
 
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const makeDetails =
-				(mode: "single" | "parallel") =>
+				(mode: "single" | "parallel" | "chain", totalSteps?: number) =>
 				(results: SingleResult[]): SubagentDetails => ({
 					mode,
 					agentScope,
 					projectAgentsDir: discovery.projectAgentsDir,
 					results,
+					totalSteps,
 				});
 			const requestedNames = new Set(
-				selectedMode.mode === "parallel" ? params.tasks!.map((task) => task.agent) : [params.agent!],
+				selectedMode.mode === "parallel"
+					? params.tasks!.map((task) => task.agent)
+					: selectedMode.mode === "chain"
+						? params.chain!.map((step) => step.agent)
+						: [params.agent!],
 			);
 			const projectAgents = [...requestedNames]
 				.map((name) => discovery.agents.find((candidate) => candidate.name === name))
@@ -442,8 +500,7 @@ export default function (pi: ExtensionAPI) {
 				if (!ctx.hasUI) {
 					return {
 						content: [{ type: "text", text: "Denied: project-local agents require confirmation, but no UI is available." }],
-						details: makeDetails(selectedMode.mode)([]),
-						isError: true,
+						details: { ...makeDetails(selectedMode.mode)([]), failed: true },
 					};
 				}
 				const approved = await ctx.ui.confirm(
@@ -453,8 +510,7 @@ export default function (pi: ExtensionAPI) {
 				if (!approved) {
 					return {
 						content: [{ type: "text", text: "Canceled: project-local agents not approved." }],
-						details: makeDetails(selectedMode.mode)([]),
-						isError: true,
+						details: { ...makeDetails(selectedMode.mode)([]), failed: true },
 					};
 				}
 			}
@@ -464,6 +520,51 @@ export default function (pi: ExtensionAPI) {
 				thinkingLevel: ctx.thinkingLevel,
 			};
 			const parentActiveTools = pi.getActiveTools();
+
+			if (selectedMode.mode === "chain") {
+				const chain = params.chain!;
+				const chainDetails = makeDetails("chain", chain.length);
+				const execution = await runSequentialChain(
+					chain,
+					async (step, resolvedTask, index, completedResults) =>
+						runSingleAgent(
+							ctx.cwd,
+							dispatchDefaults,
+							parentActiveTools,
+							discovery.agents,
+							step.agent,
+							resolvedTask,
+							step.cwd,
+							signal,
+							onUpdate
+								? (partial) => {
+										const current = partial.details?.results[0];
+										if (!current) return;
+										const snapshot = cloneProgressResults([...completedResults, current]);
+										onUpdate({
+											content: [{ type: "text", text: formatChainUpdate(current, index, chain.length) }],
+											details: chainDetails(snapshot),
+										});
+									}
+								: undefined,
+							chainDetails,
+						),
+					isFailedResult,
+					(result) => getFinalOutput(result.messages),
+				);
+				if (execution.failedIndex !== undefined) {
+					const failed = execution.results[execution.failedIndex];
+					return {
+						content: [{ type: "text", text: formatChainFailure(failed, execution.failedIndex, chain.length) }],
+						details: { ...chainDetails(execution.results), failed: true },
+					};
+				}
+				const final = execution.results.at(-1)!;
+				return {
+					content: [{ type: "text", text: boundModelOutput(getResultOutput(final)) }],
+					details: chainDetails(execution.results),
+				};
+			}
 
 			if (selectedMode.mode === "parallel") {
 				const tasks = params.tasks!;
@@ -486,6 +587,12 @@ export default function (pi: ExtensionAPI) {
 				emitParallelUpdate();
 
 				const results = await mapWithConcurrencyLimit(tasks, MAX_PARALLEL_CONCURRENCY, async (task, index) => {
+					if (signal?.aborted) {
+						const aborted = makeFailure(task.agent, task.task, "Subagent was aborted before spawn.");
+						allResults[index] = aborted;
+						emitParallelUpdate();
+						return aborted;
+					}
 					allResults[index] = { ...allResults[index], status: "running" };
 					emitParallelUpdate();
 					const result = await runSingleAgent(
@@ -511,7 +618,7 @@ export default function (pi: ExtensionAPI) {
 				});
 				return {
 					content: [{ type: "text", text: formatParallelModelOutput(results) }],
-					details: makeDetails("parallel")(results),
+					details: { ...makeDetails("parallel")(results), failed: results.some(isFailedResult) || undefined },
 				};
 			}
 
@@ -530,13 +637,26 @@ export default function (pi: ExtensionAPI) {
 			const failed = isFailedResult(result);
 			return {
 				content: [{ type: "text", text: boundModelOutput(getResultOutput(result)) }],
-				details: makeDetails("single")([result]),
-				isError: failed,
+				details: { ...makeDetails("single")([result]), failed },
 			};
 		},
 
 		renderCall(args, theme) {
 			const scope: AgentScope = args.agentScope ?? "user";
+			if (args.chain) {
+				let text =
+					theme.fg("toolTitle", theme.bold("subagent ")) +
+					theme.fg("accent", `chain (${args.chain.length} steps)`) +
+					theme.fg("muted", ` [${scope}]`);
+				for (let index = 0; index < Math.min(args.chain.length, 3); index++) {
+					const step = args.chain[index];
+					const cleanTask = step.task.replaceAll("{previous}", "").trim();
+					const preview = cleanTask.length > 40 ? `${cleanTask.slice(0, 40)}...` : cleanTask;
+					text += `\n  ${theme.fg("muted", `${index + 1}.`)} ${theme.fg("accent", step.agent)}${theme.fg("dim", ` ${preview}`)}`;
+				}
+				if (args.chain.length > 3) text += `\n  ${theme.fg("muted", `... +${args.chain.length - 3} more`)}`;
+				return new Text(text, 0, 0);
+			}
 			if (args.tasks) {
 				let text =
 					theme.fg("toolTitle", theme.bold("subagent ")) +
@@ -564,6 +684,106 @@ export default function (pi: ExtensionAPI) {
 			if (!details?.results.length) {
 				const content = result.content[0];
 				return new Text(content?.type === "text" ? content.text : "(no output)", 0, 0);
+			}
+			if (details.mode === "chain") {
+				const totalSteps = details.totalSteps ?? details.results.length;
+				const completed = details.results.filter((item) => item.status === "completed").length;
+				const failedIndex = details.results.findIndex(isFailedResult);
+				const inProgress = details.results.some((item) => item.status === "queued" || item.status === "running");
+				const icon = inProgress
+					? theme.fg("warning", "...")
+					: failedIndex >= 0
+						? theme.fg("error", "x")
+						: theme.fg("success", "ok");
+				const summary = inProgress
+					? `${completed}/${totalSteps} completed, step ${details.results.length} running`
+					: failedIndex >= 0
+						? `${completed}/${totalSteps} completed, stopped at step ${failedIndex + 1}`
+						: `${completed}/${totalSteps} completed`;
+
+				if (expanded && !inProgress) {
+					const container = new Container();
+					container.addChild(
+						new Text(`${icon} ${theme.fg("toolTitle", theme.bold("chain "))}${theme.fg("accent", summary)}`, 0, 0),
+					);
+					for (let index = 0; index < details.results.length; index++) {
+						const item = details.results[index];
+						const itemIcon = isFailedResult(item) ? theme.fg("error", "x") : theme.fg("success", "ok");
+						const displayItems = getDisplayItems(item.messages);
+						const finalOutput = getFinalOutput(item.messages);
+						const diagnostic = getFailureDiagnostic(item);
+						container.addChild(new Spacer(1));
+						container.addChild(
+							new Text(
+								`${theme.fg("muted", `--- Step ${index + 1}: `)}${theme.fg("accent", item.agent)} ${itemIcon}`,
+								0,
+								0,
+							),
+						);
+						container.addChild(new Text(theme.fg("muted", "Task: ") + theme.fg("dim", item.task), 0, 0));
+						for (const displayItem of displayItems) {
+							if (displayItem.type === "toolCall") {
+								container.addChild(
+									new Text(
+										theme.fg("muted", "-> ") + formatToolCall(displayItem.name, displayItem.args, theme.fg.bind(theme)),
+										0,
+										0,
+									),
+								);
+							}
+						}
+						if (finalOutput) {
+							container.addChild(new Spacer(1));
+							container.addChild(new Markdown(finalOutput.trim(), 0, 0, getMarkdownTheme()));
+						} else if (!diagnostic) container.addChild(new Text(theme.fg("muted", "(no output)"), 0, 0));
+						if (diagnostic) container.addChild(new Text(theme.fg("error", diagnostic), 0, 0));
+						const stepUsage = formatUsageStats(item.usage, item.model);
+						if (stepUsage) container.addChild(new Text(theme.fg("dim", stepUsage), 0, 0));
+					}
+					const totalUsage = formatUsageStats(aggregateUsage(details.results));
+					if (totalUsage) {
+						container.addChild(new Spacer(1));
+						container.addChild(new Text(theme.fg("dim", `Total: ${totalUsage}`), 0, 0));
+					}
+					return container;
+				}
+
+				let text = `${icon} ${theme.fg("toolTitle", theme.bold("chain "))}${theme.fg("accent", summary)}`;
+				for (let index = 0; index < details.results.length; index++) {
+					const item = details.results[index];
+					const itemIcon =
+						item.status === "running"
+							? theme.fg("warning", "...")
+							: isFailedResult(item)
+								? theme.fg("error", "x")
+								: theme.fg("success", "ok");
+					const displayItems = getDisplayItems(item.messages);
+					const visibleItems = displayItems.slice(-5);
+					const diagnostic = getFailureDiagnostic(item);
+					const taskPreview = item.task.length > 120 ? `${item.task.slice(0, 120)}...` : item.task;
+					text += `\n\n${theme.fg("muted", `--- Step ${index + 1}: `)}${theme.fg("accent", item.agent)} ${itemIcon}`;
+					text += `\n${theme.fg("muted", "Task: ")}${theme.fg("dim", taskPreview)}`;
+					if (displayItems.length > visibleItems.length) {
+						text += `\n${theme.fg("muted", `... ${displayItems.length - visibleItems.length} earlier items`)}`;
+					}
+					for (const displayItem of visibleItems) {
+						if (displayItem.type === "text") {
+							text += `\n${theme.fg("toolOutput", displayItem.text.split("\n").slice(0, 3).join("\n"))}`;
+						} else {
+							text += `\n${theme.fg("muted", "-> ")}${formatToolCall(displayItem.name, displayItem.args, theme.fg.bind(theme))}`;
+						}
+					}
+					if (diagnostic) text += `\n${theme.fg("error", diagnostic)}`;
+					else if (!visibleItems.length) text += `\n${theme.fg("muted", item.status === "running" ? "(running...)" : "(no output)")}`;
+					const stepUsage = formatUsageStats(item.usage, item.model);
+					if (stepUsage) text += `\n${theme.fg("dim", stepUsage)}`;
+				}
+				if (!inProgress) {
+					const totalUsage = formatUsageStats(aggregateUsage(details.results));
+					if (totalUsage) text += `\n\n${theme.fg("dim", `Total: ${totalUsage}`)}`;
+				}
+				if (!expanded) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
+				return new Text(text, 0, 0);
 			}
 			if (details.mode === "parallel") {
 				const running = details.results.filter((item) => item.status === "running").length;

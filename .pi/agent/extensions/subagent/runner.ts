@@ -6,6 +6,7 @@ export const CHILD_DEPTH_ENV = "PI_SUBAGENT_DEPTH";
 export const ABORT_GRACE_MS = 5_000;
 export const MAX_PARALLEL_TASKS = 8;
 export const MAX_PARALLEL_CONCURRENCY = 4;
+export const MAX_CHAIN_STEPS = 8;
 
 export interface NormalizedAgentMetadata {
 	name: string;
@@ -104,19 +105,24 @@ export interface ParallelOutputSection {
 	output: string;
 }
 
-export type DispatchMode = "single" | "parallel";
+export type DispatchMode = "single" | "parallel" | "chain";
 
 export function validateDispatchMode(params: {
 	agent?: unknown;
 	task?: unknown;
 	cwd?: unknown;
 	tasks?: unknown;
+	chain?: unknown;
 }): { mode: DispatchMode } | { error: string; mode: DispatchMode } {
 	const hasSingleFields = params.agent !== undefined || params.task !== undefined || params.cwd !== undefined;
 	const hasParallelFields = params.tasks !== undefined;
-	const fallbackMode: DispatchMode = hasParallelFields ? "parallel" : "single";
-	if (Number(hasSingleFields) + Number(hasParallelFields) !== 1) {
-		return { error: "Invalid parameters. Provide exactly one mode: agent + task, or tasks.", mode: fallbackMode };
+	const hasChainFields = params.chain !== undefined;
+	const fallbackMode: DispatchMode = hasChainFields ? "chain" : hasParallelFields ? "parallel" : "single";
+	if (Number(hasSingleFields) + Number(hasParallelFields) + Number(hasChainFields) !== 1) {
+		return {
+			error: "Invalid parameters. Provide exactly one mode: agent + task, tasks, or chain.",
+			mode: fallbackMode,
+		};
 	}
 	if (hasParallelFields) {
 		if (!Array.isArray(params.tasks) || params.tasks.length === 0) {
@@ -130,10 +136,66 @@ export function validateDispatchMode(params: {
 		}
 		return { mode: "parallel" };
 	}
+	if (hasChainFields) {
+		if (!Array.isArray(params.chain) || params.chain.length === 0) {
+			return { error: "Chain mode requires 1 through 8 steps.", mode: "chain" };
+		}
+		if (params.chain.length > MAX_CHAIN_STEPS) {
+			return {
+				error: `Too many chain steps (${params.chain.length}). Max is ${MAX_CHAIN_STEPS}.`,
+				mode: "chain",
+			};
+		}
+		return { mode: "chain" };
+	}
 	if (typeof params.agent !== "string" || !params.agent.trim() || typeof params.task !== "string" || !params.task.trim()) {
 		return { error: "Single mode requires non-empty agent and task strings.", mode: "single" };
 	}
 	return { mode: "single" };
+}
+
+export interface SequentialChainResult<TResult> {
+	results: TResult[];
+	failedIndex?: number;
+}
+
+export function getFinalAssistantText(messages: readonly unknown[]): string {
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const message = messages[index];
+		if (!message || typeof message !== "object" || Array.isArray(message)) continue;
+		const record = message as Record<string, unknown>;
+		if (record.role !== "assistant" || !Array.isArray(record.content)) continue;
+		return record.content
+			.filter(
+				(part): part is Record<string, unknown> =>
+					Boolean(part) && typeof part === "object" && !Array.isArray(part) && part.type === "text",
+			)
+			.map((part) => (typeof part.text === "string" ? part.text : ""))
+			.join("");
+	}
+	return "";
+}
+
+export function replacePreviousOutput(task: string, previousOutput: string): string {
+	return task.replaceAll("{previous}", previousOutput);
+}
+
+export async function runSequentialChain<TStep extends { task: string }, TResult>(
+	steps: readonly TStep[],
+	execute: (step: TStep, resolvedTask: string, index: number, completedResults: readonly TResult[]) => Promise<TResult>,
+	isFailure: (result: TResult) => boolean,
+	getFinalOutput: (result: TResult) => string,
+): Promise<SequentialChainResult<TResult>> {
+	const results: TResult[] = [];
+	let previousOutput = "";
+	for (let index = 0; index < steps.length; index++) {
+		const step = steps[index];
+		const result = await execute(step, replacePreviousOutput(step.task, previousOutput), index, results);
+		results.push(result);
+		if (isFailure(result)) return { results, failedIndex: index };
+		previousOutput = getFinalOutput(result);
+	}
+	return { results };
 }
 
 export async function mapWithConcurrencyLimit<TInput, TOutput>(
@@ -315,9 +377,6 @@ function modelFailure(stopReason: string | undefined): boolean {
 
 export async function runChild(options: RunChildOptions): Promise<ChildRunResult> {
 	assertCanDelegate();
-	const spawn = options.spawn ?? (nodeSpawn as unknown as SpawnChild);
-	const schedule = options.setTimeout ?? setTimeout;
-	const cancelTimer = options.clearTimeout ?? clearTimeout;
 	const result: ChildRunResult = {
 		exitCode: 0,
 		messages: [],
@@ -325,6 +384,12 @@ export async function runChild(options: RunChildOptions): Promise<ChildRunResult
 		malformedStdout: "",
 		usage: emptyUsage(),
 	};
+	if (options.signal?.aborted) {
+		return { ...result, exitCode: 1, failureMessage: "Subagent was aborted before spawn." };
+	}
+	const spawn = options.spawn ?? (nodeSpawn as unknown as SpawnChild);
+	const schedule = options.setTimeout ?? setTimeout;
+	const cancelTimer = options.clearTimeout ?? clearTimeout;
 	let child: SpawnedChild;
 	try {
 		child = spawn(options.command, options.args, {

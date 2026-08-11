@@ -13,10 +13,14 @@ import {
 	boundTailOutput,
 	cloneProgressResults,
 	findNearestAgentsDirectory,
+	getFinalAssistantText,
 	mapWithConcurrencyLimit,
+	MAX_CHAIN_STEPS,
 	normalizeAgentMetadata,
+	replacePreviousOutput,
 	resolveWorkingDirectory,
 	runChild,
+	runSequentialChain,
 	selectChildTools,
 	type SpawnChild,
 	validateDispatchMode,
@@ -133,14 +137,88 @@ test("intersects requested tools with parent tools and always removes subagent",
 test("validates exactly one bounded dispatch mode", () => {
 	assert.deepEqual(validateDispatchMode({ agent: "scout", task: "inspect" }), { mode: "single" });
 	assert.deepEqual(validateDispatchMode({ tasks: [{ agent: "scout", task: "inspect" }] }), { mode: "parallel" });
+	assert.deepEqual(validateDispatchMode({ chain: [{ agent: "scout", task: "inspect" }] }), { mode: "chain" });
 	assert.match(validateDispatchMode({}).error ?? "", /exactly one mode/);
 	assert.match(validateDispatchMode({ agent: "scout", task: "inspect", tasks: [] }).error ?? "", /exactly one mode/);
+	assert.match(validateDispatchMode({ tasks: [], chain: [] }).error ?? "", /exactly one mode/);
+	assert.match(validateDispatchMode({ chain: [], agent: "scout", task: "inspect" }).error ?? "", /exactly one mode/);
 	assert.match(validateDispatchMode({ tasks: [] }).error ?? "", /1 through 8/);
+	assert.match(validateDispatchMode({ chain: [] }).error ?? "", /1 through 8/);
 	assert.match(
 		validateDispatchMode({ tasks: Array.from({ length: 9 }, () => ({ agent: "scout", task: "inspect" })) }).error ?? "",
 		/Max is 8/,
 	);
+	assert.match(
+		validateDispatchMode({ chain: Array.from({ length: MAX_CHAIN_STEPS + 1 }, () => ({ agent: "scout", task: "inspect" })) })
+			.error ?? "",
+		/Max is 8/,
+	);
 	assert.match(validateDispatchMode({ agent: "scout" }).error ?? "", /requires non-empty agent and task/);
+});
+
+test("uses only the final assistant message, including a genuinely empty output", () => {
+	assert.equal(
+		getFinalAssistantText([
+			{ role: "assistant", content: [{ type: "text", text: "stale" }] },
+			{ role: "toolResult", content: [{ type: "text", text: "tool" }] },
+			{ role: "assistant", content: [{ type: "toolCall", name: "read" }] },
+		]),
+		"",
+	);
+	assert.equal(
+		getFinalAssistantText([
+			{ role: "assistant", content: [{ type: "text", text: "old" }] },
+			{ role: "assistant", content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] },
+		]),
+		"ab",
+	);
+});
+
+test("runs chain steps sequentially with global immediate-output replacement, including empty output", async () => {
+	const steps = [
+		{ task: "first" },
+		{ task: "second sees {previous} and again {previous}" },
+		{ task: "third sees [{previous}]" },
+	];
+	const calls: Array<{ index: number; task: string; completed: number }> = [];
+	let active = 0;
+	const execution = await runSequentialChain(
+		steps,
+		async (_step, resolvedTask, index, completed) => {
+			active++;
+			assert.equal(active, 1);
+			calls.push({ index, task: resolvedTask, completed: completed.length });
+			await Promise.resolve();
+			active--;
+			return { failed: false, output: index === 0 ? "alpha" : "" };
+		},
+		(result) => result.failed,
+		(result) => result.output,
+	);
+	assert.equal(execution.failedIndex, undefined);
+	assert.equal(execution.results.length, 3);
+	assert.deepEqual(calls, [
+		{ index: 0, task: "first", completed: 0 },
+		{ index: 1, task: "second sees alpha and again alpha", completed: 1 },
+		{ index: 2, task: "third sees []", completed: 2 },
+	]);
+	assert.equal(replacePreviousOutput("{previous}/{previous}", "x"), "x/x");
+});
+
+test("stops a chain at the first failure and preserves attempted results", async () => {
+	const calls: number[] = [];
+	const execution = await runSequentialChain(
+		Array.from({ length: MAX_CHAIN_STEPS }, (_, index) => ({ task: `step ${index}: {previous}` })),
+		async (_step, _resolvedTask, index) => {
+			calls.push(index);
+			return { failed: index === 2, output: `output-${index}` };
+		},
+		(result) => result.failed,
+		(result) => result.output,
+	);
+	assert.deepEqual(calls, [0, 1, 2]);
+	assert.equal(execution.failedIndex, 2);
+	assert.deepEqual(execution.results.map((result) => result.output), ["output-0", "output-1", "output-2"]);
 });
 
 test("parallel scheduling caps concurrency, preserves order, and isolates progress snapshots", async () => {
@@ -190,6 +268,40 @@ test("parallel sections share one bounded output budget while retaining every st
 	for (let index = 1; index <= 8; index++) assert.match(output, new RegExp(`### Task ${index}:`));
 	assert.match(output, /Task 4: \[agent-4\] failed/);
 	assert.match(output, /Full messages remain in tool details/);
+});
+
+test("keeps chain progress and failure identity inside one output budget", () => {
+	const maxLines = 60;
+	const maxBytes = 2_000;
+	const truncate = (value: string, limits: { maxLines: number; maxBytes: number }) => {
+		const allLines = value.split("\n");
+		let content = allLines.slice(-limits.maxLines).join("\n");
+		while (Buffer.byteLength(content, "utf8") > limits.maxBytes) content = content.slice(1);
+		return {
+			content,
+			truncated: content !== value,
+			totalLines: allLines.length,
+			totalBytes: Buffer.byteLength(value, "utf8"),
+		};
+	};
+	for (const aggregateHeader of ["Chain: step 2/8 running", "Chain failed at step 2/8 (planner)"]) {
+		const output = boundParallelOutput(
+			aggregateHeader,
+			[
+				{
+					header: "### Step 2: [planner] failed",
+					output: Array.from({ length: 200 }, (_, index) => `diagnostic ${index} ${"x".repeat(40)}`).join("\n"),
+				},
+			],
+			{ maxLines, maxBytes },
+			truncate,
+			(bytes) => `${bytes}B`,
+		);
+		assert.ok(output.split("\n").length <= maxLines);
+		assert.ok(Buffer.byteLength(output, "utf8") <= maxBytes);
+		assert.match(output, new RegExp(aggregateHeader.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+		assert.match(output, /Step 2: \[planner\]/);
+	}
 });
 
 test("keeps the truncation notice inside the total line and byte limits", () => {
@@ -361,6 +473,26 @@ class FakeChild extends EventEmitter {
 		return true;
 	}
 }
+
+test("a pre-aborted child does not spawn", async () => {
+	const controller = new AbortController();
+	controller.abort();
+	let spawned = false;
+	const result = await runChild({
+		command: "fake",
+		args: [],
+		task: "do not run",
+		cwd: process.cwd(),
+		signal: controller.signal,
+		spawn: (() => {
+			spawned = true;
+			return new FakeChild();
+		}) as SpawnChild,
+	});
+	assert.equal(spawned, false);
+	assert.equal(result.exitCode, 1);
+	assert.match(result.failureMessage ?? "", /aborted before spawn/);
+});
 
 test("abort escalates from SIGTERM to SIGKILL and cleans up timer and listener", async () => {
 	const child = new FakeChild();
