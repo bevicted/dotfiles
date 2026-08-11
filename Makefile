@@ -2,6 +2,7 @@ SHELL = /usr/bin/env bash
 
 ARKEN_TMP_REPO_PATH := /tmp/arkenfox
 ARKEN_USER_PATH := $(HOME)/.mozilla/firefox/user.arkenfox
+LOCAL_BIN_PATH := $(HOME)/.local/bin
 
 COMMON_PKGS := $(shell cat pkgs/common)
 ARCH_PKGS   := $(COMMON_PKGS) $(shell cat pkgs/pacman)
@@ -118,7 +119,8 @@ go-install:
 .PHONY: link
 link:
 	stow --verbose --restow --target=$(HOME) .
-	sudo stow --verbose --restow --dir ./bin --target /usr/local/bin .
+	mkdir -p $(LOCAL_BIN_PATH)
+	stow --verbose --restow --dir ./bin --target $(LOCAL_BIN_PATH) .
 	$(MAKE) allowed-signers
 
 # Assemble ~/.ssh/allowed_signers from the tracked public entries plus an
@@ -132,6 +134,11 @@ allowed-signers:
 .PHONY: link-delete
 link-delete:
 	stow --verbose --target=$(HOME) --delete .
+	stow --verbose --dir ./bin --target $(LOCAL_BIN_PATH) --delete .
+
+# One-time cleanup for systems linked before bin moved to ~/.local/bin.
+.PHONY: link-delete-legacy-bin
+link-delete-legacy-bin:
 	sudo stow --verbose --dir ./bin --target /usr/local/bin --delete .
 
 # Firefox profile must already exist at $(ARKEN_USER_PATH) before running.
