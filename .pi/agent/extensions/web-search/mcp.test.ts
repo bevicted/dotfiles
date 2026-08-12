@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_CONTEXT_CHARACTERS,
   DEFAULT_LIVECRAWL,
   DEFAULT_NUM_RESULTS,
   DEFAULT_SEARCH_TYPE,
@@ -59,6 +60,9 @@ test("exports the approved MCP and safety constants", () => {
   assert.equal(MAX_OUTPUT_BYTES, 50 * 1024);
   assert.equal(MAX_OUTPUT_LINES, 2_000);
   assert.equal(MAX_ERROR_EXCERPT_BYTES, 1_024);
+  assert.equal(DEFAULT_NUM_RESULTS, 5);
+  assert.equal(DEFAULT_CONTEXT_CHARACTERS, 4_000);
+  assert.equal(MAX_CONTEXT_CHARACTERS, 10_000);
 });
 
 test("normalizes defaults while preserving the query", () => {
@@ -67,6 +71,7 @@ test("normalizes defaults while preserving the query", () => {
     type: DEFAULT_SEARCH_TYPE,
     numResults: DEFAULT_NUM_RESULTS,
     livecrawl: DEFAULT_LIVECRAWL,
+    contextMaxCharacters: DEFAULT_CONTEXT_CHARACTERS,
   });
 });
 
@@ -84,7 +89,7 @@ test("normalizes every supplied field and includes contextMaxCharacters", () => 
       type: "deep",
       numResults: 20,
       livecrawl: "preferred",
-      contextMaxCharacters: 50_000,
+      contextMaxCharacters: 10_000,
     },
   );
 });
@@ -104,11 +109,17 @@ test("rejects invalid numResults values", () => {
   }
 });
 
+test("accepts contextMaxCharacters values through the provider maximum", () => {
+  for (const value of [1, DEFAULT_CONTEXT_CHARACTERS, MAX_CONTEXT_CHARACTERS]) {
+    assert.equal(normalizeSearchInput({ query: "test", contextMaxCharacters: value }).contextMaxCharacters, value);
+  }
+});
+
 test("rejects invalid contextMaxCharacters values", () => {
-  for (const value of [0, 50_001, 2.5, NaN, Infinity, "10000", null]) {
+  for (const value of [0, 10_001, 2.5, NaN, Infinity, "10000", null]) {
     assert.throws(
       () => normalizeSearchInput(asInput({ query: "test", contextMaxCharacters: value })),
-      /contextMaxCharacters must be an integer from 1 through 50000/,
+      /contextMaxCharacters must be an integer from 1 through 10000/,
     );
   }
 });
@@ -124,7 +135,7 @@ test("rejects invalid enum values", () => {
   );
 });
 
-test("builds the exact OpenCode-style request and omits absent context", () => {
+test("builds the exact default-bounded request", () => {
   const request = buildMcpRequest({ query: "latest TypeScript release" });
   assert.deepEqual(request, {
     jsonrpc: "2.0",
@@ -135,12 +146,13 @@ test("builds the exact OpenCode-style request and omits absent context", () => {
       arguments: {
         query: "latest TypeScript release",
         type: "auto",
-        numResults: 8,
+        numResults: 5,
         livecrawl: "fallback",
+        contextMaxCharacters: 4_000,
       },
     },
   });
-  assert.equal(Object.hasOwn(request.params.arguments, "contextMaxCharacters"), false);
+  assert.equal(Object.hasOwn(request.params.arguments, "contextMaxCharacters"), true);
 });
 
 test("builds a request with all explicitly supplied arguments", () => {
@@ -150,7 +162,7 @@ test("builds a request with all explicitly supplied arguments", () => {
       numResults: 3,
       livecrawl: "preferred",
       type: "fast",
-      contextMaxCharacters: 12_345,
+      contextMaxCharacters: 9_999,
     }),
     {
       jsonrpc: "2.0",
@@ -163,7 +175,7 @@ test("builds a request with all explicitly supplied arguments", () => {
           type: "fast",
           numResults: 3,
           livecrawl: "preferred",
-          contextMaxCharacters: 12_345,
+          contextMaxCharacters: 9_999,
         },
       },
     },

@@ -4,6 +4,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 
 import {
+  DEFAULT_CONTEXT_CHARACTERS,
   DEFAULT_LIVECRAWL,
   DEFAULT_NUM_RESULTS,
   DEFAULT_SEARCH_TYPE,
@@ -24,7 +25,7 @@ const websearchSchema = Type.Object({
     minimum: 1,
     maximum: MAX_NUM_RESULTS,
     default: DEFAULT_NUM_RESULTS,
-    description: "Number of search results",
+    description: "Number of search results. Defaults to 5.",
   })),
   livecrawl: Type.Optional(StringEnum(["fallback", "preferred"] as const, {
     default: DEFAULT_LIVECRAWL,
@@ -37,7 +38,8 @@ const websearchSchema = Type.Object({
   contextMaxCharacters: Type.Optional(Type.Integer({
     minimum: 1,
     maximum: MAX_CONTEXT_CHARACTERS,
-    description: "Maximum characters of context returned by Exa",
+    default: DEFAULT_CONTEXT_CHARACTERS,
+    description: "Maximum Exa context characters. Defaults to 4,000; maximum 10,000.",
   })),
 }, { additionalProperties: false });
 
@@ -47,10 +49,11 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "websearch",
     label: "Web Search",
-    description: "Search the web for current or post-cutoff information. Returns Exa source URLs and excerpts for the agent to analyze, and truncates oversized output.",
+    description: "Search the web for current or post-cutoff information. Returns Exa source URLs and excerpts for the agent to analyze. Defaults to 5 results and 4,000 context characters; context can be increased to 10,000 characters only when the default omits needed evidence. Oversized output is truncated.",
     promptSnippet: "Search the web through Exa and return source URLs and excerpts",
     promptGuidelines: [
       "Use websearch for current facts and research requiring citations.",
+      "Increase websearch result breadth or context only when the default omits evidence needed for the task.",
     ],
     parameters: websearchSchema,
     async execute(_toolCallId, params, signal) {

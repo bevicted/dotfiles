@@ -5,11 +5,12 @@ export const MCP_METHOD = "tools/call";
 export const EXA_MCP_TOOL = "web_search_exa";
 export const NO_RESULTS_TEXT = "No search results found. Please try a different query.";
 
-export const DEFAULT_NUM_RESULTS = 8;
+export const DEFAULT_NUM_RESULTS = 5;
 export const MAX_NUM_RESULTS = 20;
 export const DEFAULT_LIVECRAWL = "fallback";
 export const DEFAULT_SEARCH_TYPE = "auto";
-export const MAX_CONTEXT_CHARACTERS = 50_000;
+export const DEFAULT_CONTEXT_CHARACTERS = 4_000;
+export const MAX_CONTEXT_CHARACTERS = 10_000;
 export const REQUEST_TIMEOUT_MS = 25_000;
 export const MAX_ATTEMPTS = 3;
 export const RETRY_FALLBACK_DELAYS_MS = [500, 1_000] as const;
@@ -35,7 +36,7 @@ export interface NormalizedSearchInput {
   numResults: number;
   livecrawl: Livecrawl;
   type: SearchType;
-  contextMaxCharacters?: number;
+  contextMaxCharacters: number;
 }
 
 export interface McpCallRequest {
@@ -129,21 +130,22 @@ export function normalizeSearchInput(input: SearchInput): NormalizedSearchInput 
     throw new TypeError(`type must be one of: ${SEARCH_TYPE_VALUES.join(", ")}`);
   }
 
-  const normalized: NormalizedSearchInput = {
-    query: input.query,
-    type,
-    numResults,
-    livecrawl,
-  };
-  if (input.contextMaxCharacters !== undefined) {
-    normalized.contextMaxCharacters = requireIntegerInRange(
+  const contextMaxCharacters = input.contextMaxCharacters === undefined
+    ? DEFAULT_CONTEXT_CHARACTERS
+    : requireIntegerInRange(
       "contextMaxCharacters",
       input.contextMaxCharacters,
       1,
       MAX_CONTEXT_CHARACTERS,
     );
-  }
-  return normalized;
+
+  return {
+    query: input.query,
+    type,
+    numResults,
+    livecrawl,
+    contextMaxCharacters,
+  };
 }
 
 export function buildMcpRequest(input: SearchInput): McpCallRequest {
