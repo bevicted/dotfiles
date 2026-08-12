@@ -372,6 +372,9 @@ test("composes deterministic Oracle prompts with only applicable handoff section
 	assert.match(omitted, /source code, official documentation, standards, release notes, issue trackers, and original papers/);
 	assert.match(omitted, /`supported`, `contradicted`, `mixed`, or `insufficient`/);
 	assert.match(omitted, /must cite local evidence or an external source, or be labeled as inference/);
+	assert.match(omitted, /every material factual, absence, or search-coverage statement must cite evidence or be labeled inference/);
+	assert.match(omitted, /based only on supplied context must cite that context as caller-supplied evidence, never as repository absence/);
+	assert.match(omitted, /name the exact inspected repository paths and external URL or search-query targets; describe coverage only as limited or inference/);
 	assert.match(omitted, /Web-search excerpts support only the text they expose/);
 	assert.match(omitted, /Keep advice static unless the caller supplied executable evidence/);
 	assert.match(omitted, /Start with `## Recommendation`/);
@@ -928,6 +931,9 @@ test("the tracked agent definitions have the approved model and tool matrix", as
 	assert.match(oracle, /source code, official documentation, standards, release notes, issue trackers, and original papers/);
 	assert.match(oracle, /`supported`, `contradicted`, `mixed`, or `insufficient`/);
 	assert.match(oracle, /Every material factual statement must cite local evidence or an external source, or be labeled as inference/);
+	assert.match(oracle, /audit every material factual, absence, and search-coverage statement: cite evidence or label it inference/);
+	assert.match(oracle, /based only on supplied context, cite that context as caller-supplied evidence, never as repository absence/);
+	assert.match(oracle, /name exact inspected repository paths and external URL or search-query targets; describe coverage only as limited or inference/);
 	assert.match(oracle, /Web-search excerpts support only the text they expose/);
 	assert.match(oracle, /Account for every supplied claim in Findings/);
 	for (const heading of ["Recommendation", "Findings", "Alternatives", "Verification", "Gaps"]) {

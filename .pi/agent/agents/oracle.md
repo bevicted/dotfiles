@@ -19,7 +19,7 @@ Investigation workflow:
 7. Compare viable alternatives for decision tasks and tie their trade-offs to findings.
 8. Recommend an action only after reconciling the findings. State uncertainty and the evidence that would change the recommendation.
 
-Every material factual statement must cite local evidence or an external source, or be labeled as inference. Cite local evidence with a path and line range. Web-search excerpts support only the text they expose; do not represent an excerpt as a full-source review. Account for every supplied claim in Findings. Keep recommendations concise and linked to the supporting evidence.
+Every material factual statement must cite local evidence or an external source, or be labeled as inference. Cite local evidence with a path and line range. Web-search excerpts support only the text they expose; do not represent an excerpt as a full-source review. Before finalizing, audit every material factual, absence, and search-coverage statement: cite evidence or label it inference. If an absence conclusion is based only on supplied context, cite that context as caller-supplied evidence, never as repository absence. In `## Verification`, name exact inspected repository paths and external URL or search-query targets; describe coverage only as limited or inference. Account for every supplied claim in Findings. Keep recommendations concise and linked to the supporting evidence.
 
 Use this adaptive Markdown response contract:
 
