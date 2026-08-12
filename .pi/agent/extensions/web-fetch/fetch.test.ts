@@ -180,7 +180,7 @@ test("passes raw HTML and non-HTML content through unchanged", async () => {
 });
 
 test("rejects non-textual content types before decoding their bodies", async () => {
-  for (const contentType of ["application/pdf", "image/png", "application/zip", "application/octet-stream"]) {
+  for (const contentType of ["application/pdf", "image/vnd.fastbidsheet", "application/zip", "application/octet-stream"]) {
     const fixture = streamResponse([new Uint8Array([0xff, 0xd8, 0xff])], {
       headers: { "Content-Type": contentType },
     }, false);
@@ -218,6 +218,144 @@ test("retrieves a local HTTP response through the real Fetch transport", async (
   assert.equal(result.finalUrl, `http://127.0.0.1:${address.port}/fixture`);
   assert.equal(result.text, "# Local fixture");
   assert.ok(result.responseBytes > 0);
+});
+
+test("returns raster image blocks and SVG text from a local HTTP fixture", async (context) => {
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><text>hello</text></svg>';
+  const server = createServer((request, response) => {
+    if (request.url === "/image.png") {
+      response.writeHead(200, { "Content-Type": "IMAGE/PNG; charset=binary" });
+      response.end(png);
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "image/svg+xml; charset=utf-8" });
+    response.end(svg);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  context.after(() => server.close());
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const imageInput = normalizeWebFetchInput({ url: `${baseUrl}/image.png` });
+  const image = buildWebFetchToolResult(imageInput, await fetchWeb(imageInput));
+  assert.deepEqual(image.content, [
+    { type: "text", text: "Image fetched successfully" },
+    { type: "image", data: Buffer.from(png).toString("base64"), mimeType: "image/png" },
+  ]);
+  assert.deepEqual(image.details, {
+    url: `${baseUrl}/image.png`,
+    finalUrl: `${baseUrl}/image.png`,
+    format: "markdown",
+    contentType: "IMAGE/PNG; charset=binary",
+    responseBytes: png.byteLength,
+    outputBytes: 26,
+    truncated: false,
+  });
+  assert.equal(JSON.stringify(image.details).includes(Buffer.from(png).toString("base64")), false);
+
+  const textInput = normalizeWebFetchInput({ url: `${baseUrl}/image.svg`, format: "html" });
+  const text = buildWebFetchToolResult(textInput, await fetchWeb(textInput));
+  assert.deepEqual(text.content, [{ type: "text", text: svg }]);
+  assert.equal(text.details.contentType, "image/svg+xml; charset=utf-8");
+});
+
+test("retries exactly one Cloudflare challenge with OpenCode's user agent", async () => {
+  const first = streamResponse([encoded("challenge")], {
+    status: 403,
+    headers: { "cf-mitigated": "challenge" },
+  }, false);
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const second = streamResponse([png], { headers: { "Content-Type": "image/png" } });
+  const requests: RequestInit[] = [];
+  const result = await fetchWeb({ url: "https://example.com/image", format: "markdown" }, undefined, {
+    fetch: async (_input, init) => {
+      requests.push(init!);
+      return requests.length === 1 ? first.response : second.response;
+    },
+  });
+
+  assert.deepEqual(requests.map((request) => request.headers), [
+    { ...REQUEST_HEADERS, Accept: ACCEPT_HEADERS.markdown },
+    { ...REQUEST_HEADERS, "User-Agent": "opencode", Accept: ACCEPT_HEADERS.markdown },
+  ]);
+  assert.equal(requests[0]?.signal, requests[1]?.signal);
+  assert.equal(first.cancellations(), 1);
+  assert.equal(first.body.locked, false);
+  assert.equal(second.body.locked, false);
+  assert.deepEqual(result, {
+    finalUrl: "https://example.com/image",
+    contentType: "image/png",
+    image: { data: Buffer.from(png).toString("base64"), mimeType: "image/png" },
+    responseBytes: png.byteLength,
+  });
+});
+
+test("does not retry non-challenges or a failed challenge retry", async () => {
+  const nonChallenge = streamResponse([encoded("blocked")], { status: 403 });
+  let calls = 0;
+  await assert.rejects(
+    fetchWeb({ url: "https://example.com/" }, undefined, {
+      fetch: async () => {
+        calls++;
+        return nonChallenge.response;
+      },
+    }),
+    /^Error: Web fetch failed with HTTP 403: blocked$/,
+  );
+  assert.equal(calls, 1);
+  assert.equal(nonChallenge.body.locked, false);
+
+  const challenge = streamResponse([encoded("challenge")], {
+    status: 403,
+    headers: { "cf-mitigated": "challenge" },
+  }, false);
+  const failedRetry = streamResponse([encoded("unavailable")], { status: 503 });
+  calls = 0;
+  await assert.rejects(
+    fetchWeb({ url: "https://example.com/" }, undefined, {
+      fetch: async () => {
+        calls++;
+        return calls === 1 ? challenge.response : failedRetry.response;
+      },
+    }),
+    /^Error: Web fetch failed with HTTP 503: unavailable$/,
+  );
+  assert.equal(calls, 2);
+  assert.equal(challenge.cancellations(), 1);
+  assert.equal(challenge.body.locked, false);
+  assert.equal(failedRetry.body.locked, false);
+});
+
+test("preserves caller cancellation and the original deadline during a Cloudflare retry", async () => {
+  for (const kind of ["caller", "timeout"] as const) {
+    const challenge = streamResponse([encoded("challenge")], {
+      status: 403,
+      headers: { "cf-mitigated": "challenge" },
+    }, false);
+    const caller = new AbortController();
+    let calls = 0;
+    const { clock, options } = testOptions((_input, init) => {
+      calls++;
+      if (calls === 1) return Promise.resolve(challenge.response);
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    const promise = fetchWeb({ url: "https://example.com/", timeout: 1 }, caller.signal, options);
+    while (calls < 2) await new Promise<void>((resolve) => setImmediate(resolve));
+
+    if (kind === "caller") caller.abort("stop");
+    else clock.fire(1_000);
+
+    await assert.rejects(
+      promise,
+      kind === "caller" ? /^Error: Web fetch cancelled by caller$/ : /^Error: Web fetch timed out after 1 seconds$/,
+    );
+    assert.equal(challenge.cancellations(), 1);
+    assert.equal(challenge.body.locked, false);
+    assert.equal(clock.pending(), 0);
+  }
 });
 
 test("reports the final URL after a local redirect", async (context) => {

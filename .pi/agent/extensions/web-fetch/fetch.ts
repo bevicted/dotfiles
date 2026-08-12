@@ -33,12 +33,24 @@ export interface NormalizedWebFetchInput {
   timeout: number;
 }
 
-export interface WebFetchResponse {
+interface WebFetchResponseBase {
   finalUrl: string;
   contentType: string;
-  text: string;
   responseBytes: number;
 }
+
+export interface TextWebFetchResponse extends WebFetchResponseBase {
+  text: string;
+}
+
+export interface RasterImageWebFetchResponse extends WebFetchResponseBase {
+  image: {
+    data: string;
+    mimeType: string;
+  };
+}
+
+export type WebFetchResponse = TextWebFetchResponse | RasterImageWebFetchResponse;
 
 export interface BoundedWebFetchOutput {
   text: string;
@@ -60,8 +72,12 @@ export interface WebFetchToolDetails {
   truncated: boolean;
 }
 
+export type WebFetchToolContent =
+  | [{ type: "text"; text: string }]
+  | [{ type: "text"; text: string }, { type: "image"; data: string; mimeType: string }];
+
 export interface WebFetchToolResult {
-  content: [{ type: "text"; text: string }];
+  content: WebFetchToolContent;
   details: WebFetchToolDetails;
 }
 
@@ -258,6 +274,11 @@ function isHtml(contentType: string): boolean {
   return ["text/html", "application/xhtml+xml"].includes(mediaType(contentType));
 }
 
+function isRasterImageContentType(contentType: string): boolean {
+  const mime = mediaType(contentType);
+  return mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet";
+}
+
 function isTextualContentType(contentType: string): boolean {
   const mime = mediaType(contentType);
   return mime.startsWith("text/")
@@ -324,12 +345,11 @@ async function collectBody(
   body: ReadableStream<Uint8Array> | null,
   maximumBytes: number,
   signal: AbortSignal,
-): Promise<{ text: string; bytes: number }> {
-  if (body === null) return { text: "", bytes: 0 };
+): Promise<{ data: Uint8Array; bytes: number }> {
+  if (body === null) return { data: new Uint8Array(), bytes: 0 };
 
   const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const parts: string[] = [];
+  const chunks: Uint8Array[] = [];
   let bytes = 0;
   let cancelPromise: Promise<void> | undefined;
   const cancelReader = (reason?: unknown): Promise<void> => {
@@ -352,10 +372,15 @@ async function collectBody(
         throw new Error("Web fetch response exceeded 5 MiB");
       }
       bytes += value.byteLength;
-      parts.push(decoder.decode(value, { stream: true }));
+      chunks.push(value);
     }
-    parts.push(decoder.decode());
-    return { text: parts.join(""), bytes };
+    const data = new Uint8Array(bytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      data.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return { data, bytes };
   } finally {
     signal.removeEventListener("abort", onAbort);
     if (cancelPromise !== undefined) await cancelPromise;
@@ -426,29 +451,40 @@ export async function fetchWeb(
   );
 
   const fetchImpl = testOptions.fetch ?? fetch;
-  const requestInit: RequestInit = {
-    headers: {
-      ...REQUEST_HEADERS,
-      Accept: ACCEPT_HEADERS[input.format],
-    },
-    signal: controller.signal,
-  };
-
-  try {
-    if (abortKind !== undefined) throw abortError(abortKind, input.timeout);
-
-    let response: Response;
+  const request = async (userAgent = REQUEST_HEADERS["User-Agent"]): Promise<Response> => {
     try {
-      response = await fetchImpl(input.url, requestInit);
+      return await fetchImpl(input.url, {
+        headers: {
+          ...REQUEST_HEADERS,
+          "User-Agent": userAgent,
+          Accept: ACCEPT_HEADERS[input.format],
+        },
+        signal: controller.signal,
+      });
     } catch (error) {
       if (abortKind !== undefined) throw abortError(abortKind, input.timeout);
       const detail = errorDetail(error);
       throw new Error(`Web fetch network failure${detail.length === 0 ? "" : `: ${detail}`}`);
     }
+  };
 
+  try {
+    if (abortKind !== undefined) throw abortError(abortKind, input.timeout);
+
+    let response = await request();
     if (abortKind !== undefined) {
       await cancelBody(response.body, controller.signal.reason);
       throw abortError(abortKind, input.timeout);
+    }
+
+    if (response.status === 403 && response.headers.get("cf-mitigated") === "challenge") {
+      await cancelBody(response.body, "Cloudflare challenge retry");
+      if (abortKind !== undefined) throw abortError(abortKind, input.timeout);
+      response = await request("opencode");
+      if (abortKind !== undefined) {
+        await cancelBody(response.body, controller.signal.reason);
+        throw abortError(abortKind, input.timeout);
+      }
     }
 
     if (!response.ok) {
@@ -458,7 +494,8 @@ export async function fetchWeb(
     }
 
     const contentType = response.headers.get("Content-Type") ?? "";
-    if (!isTextualContentType(contentType)) {
+    const rasterImage = isRasterImageContentType(contentType);
+    if (!rasterImage && !isTextualContentType(contentType)) {
       await cancelBody(response.body, "unsupported content type");
       const detail = sanitizeDetail(contentType);
       throw new Error(`Web fetch unsupported content type${detail.length === 0 ? ": (missing)" : `: ${detail}`}`);
@@ -472,10 +509,21 @@ export async function fetchWeb(
 
     const collected = await collectBody(response.body, MAX_RESPONSE_BYTES, controller.signal);
     if (abortKind !== undefined) throw abortError(abortKind, input.timeout);
+    if (rasterImage) {
+      return {
+        finalUrl: response.url || input.url,
+        contentType,
+        image: {
+          data: Buffer.from(collected.data).toString("base64"),
+          mimeType: mediaType(contentType),
+        },
+        responseBytes: collected.bytes,
+      };
+    }
     return {
       finalUrl: response.url || input.url,
       contentType,
-      text: convertContent(collected.text, contentType, input.format),
+      text: convertContent(new TextDecoder().decode(collected.data), contentType, input.format),
       responseBytes: collected.bytes,
     };
   } catch (error) {
@@ -493,17 +541,21 @@ export function buildWebFetchToolResult(
   input: NormalizedWebFetchInput,
   response: WebFetchResponse,
 ): WebFetchToolResult {
-  const output = boundWebFetchOutput(response.text);
-  return {
-    content: [{ type: "text", text: output.text }],
-    details: {
-      url: input.url,
-      finalUrl: response.finalUrl,
-      format: input.format,
-      contentType: response.contentType,
-      responseBytes: response.responseBytes,
-      outputBytes: output.outputBytes,
-      truncated: output.truncated,
-    },
+  const output = boundWebFetchOutput("image" in response ? "Image fetched successfully" : response.text);
+  const details = {
+    url: input.url,
+    finalUrl: response.finalUrl,
+    format: input.format,
+    contentType: response.contentType,
+    responseBytes: response.responseBytes,
+    outputBytes: output.outputBytes,
+    truncated: output.truncated,
   };
+  if ("image" in response) {
+    return {
+      content: [{ type: "text", text: output.text }, { type: "image", ...response.image }],
+      details,
+    };
+  }
+  return { content: [{ type: "text", text: output.text }], details };
 }
