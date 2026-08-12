@@ -20,6 +20,8 @@ import {
 	withOracleFailureState,
 	type OracleAgentConfig,
 } from "./oracle.ts";
+import { renderGenericSingleCall, renderOracleCall, renderSingleResult, type SingleRenderAdapter } from "./single-render.ts";
+import { registerToolResultMiddleware, type ToolResultEvent } from "./tool-result-middleware.ts";
 import {
 	ABORT_GRACE_MS,
 	CHILD_DEPTH_ENV,
@@ -150,6 +152,145 @@ test("intersects requested tools with parent tools and removes delegation tools"
 	);
 	assert.deepEqual(selectChildTools(undefined, ["read", "subagent", "oracle", "edit", "read"]), ["read", "edit"]);
 	assert.deepEqual(selectChildTools(["bash", "oracle", "subagent"], ["read", "subagent", "oracle"]), []);
+});
+
+type TestRenderNode =
+	| { kind: "text"; text: string }
+	| { kind: "spacer" }
+	| { kind: "markdown"; text: string }
+	| { kind: "container"; children: TestRenderNode[] };
+
+const testRenderAdapter: SingleRenderAdapter<TestRenderNode> = {
+	text: (text) => ({ kind: "text", text }),
+	spacer: () => ({ kind: "spacer" }),
+	markdown: (text) => ({ kind: "markdown", text }),
+	container: (children) => ({ kind: "container", children }),
+};
+
+const testTheme = {
+	fg: (_color: string, text: string) => text,
+	bold: (text: string) => text,
+};
+
+function renderText(node: TestRenderNode): string {
+	if (node.kind === "container") return node.children.map(renderText).join("\n");
+	return node.kind === "spacer" ? "" : node.text;
+}
+
+function renderMarkdown(node: TestRenderNode): string[] {
+	if (node.kind === "markdown") return [node.text];
+	return node.kind === "container" ? node.children.flatMap(renderMarkdown) : [];
+}
+
+function deepFreeze<T>(value: T): T {
+	if (value && typeof value === "object") {
+		Object.freeze(value);
+		for (const child of Object.values(value)) deepFreeze(child);
+	}
+	return value;
+}
+
+function singleRenderFixture(overrides: Record<string, unknown> = {}) {
+	return {
+		agent: "scout",
+		agentSource: "project",
+		task: "Inspect the cache invalidation design",
+		messages: [
+			{
+				role: "assistant",
+				content: [
+					{ type: "toolCall", name: "read", arguments: { path: "/tmp/design.md" } },
+					{ type: "text", text: "## Recommendation\nUse explicit invalidation." },
+				],
+			},
+		],
+		status: "completed" as const,
+		exitCode: 0,
+		stderr: "",
+		malformedStdout: "",
+		usage: { input: 1_500, output: 250, cacheRead: 10, cacheWrite: 5, cost: 0.0123, contextTokens: 2_000, turns: 1 },
+		model: "test/model",
+		...overrides,
+	};
+}
+
+test("shared renderer renders generic and Oracle partial, collapsed, expanded, and failure results", () => {
+	const genericCall = renderGenericSingleCall("scout", "project", "x".repeat(61), testTheme, testRenderAdapter);
+	assert.deepEqual(genericCall, { kind: "text", text: `subagent scout [project]\n  ${"x".repeat(60)}...` });
+	const oracleCall = renderOracleCall("x".repeat(61), testTheme, testRenderAdapter);
+	assert.deepEqual(oracleCall, { kind: "text", text: `oracle\n  ${"x".repeat(60)}...` });
+	assert.doesNotMatch(renderText(oracleCall), /\[user\]/);
+
+	for (const oracle of [false, true]) {
+		const label = oracle ? "oracle" : "scout";
+		const partial = singleRenderFixture({ agent: label, agentSource: oracle ? "user" : "project", status: "running", messages: [] });
+		const before = structuredClone(partial);
+		deepFreeze(partial);
+		const partialNode = renderSingleResult(partial, { expanded: false, isPartial: true, failed: false, oracle }, testTheme, testRenderAdapter);
+		assert.match(renderText(partialNode), new RegExp(`\\.\\.\\. ${label}`));
+		assert.match(renderText(partialNode), /\(running\.\.\.\)/);
+		assert.deepEqual(partial, before, "rendering a partial must not mutate its details");
+
+		const final = singleRenderFixture({ agent: label, agentSource: oracle ? "user" : "project" });
+		const collapsed = renderSingleResult(final, { expanded: false, isPartial: false, failed: false, oracle }, testTheme, testRenderAdapter);
+		assert.match(renderText(collapsed), new RegExp(`ok ${label}`));
+		if (oracle) assert.doesNotMatch(renderText(collapsed), /\(user\)/);
+		else assert.match(renderText(collapsed), /\(project\)/);
+		assert.match(renderText(collapsed), /read \/tmp\/design.md/);
+		assert.match(renderText(collapsed), /test\/model/);
+		assert.match(renderText(collapsed), /1 turn in:1\.5k out:250/);
+		assert.match(renderText(collapsed), /Ctrl\+O to expand/);
+
+		const expanded = renderSingleResult(final, { expanded: true, isPartial: false, failed: false, oracle }, testTheme, testRenderAdapter);
+		assert.equal(expanded.kind, "container");
+		assert.match(renderText(expanded), /--- Task ---/);
+		assert.match(renderText(expanded), /read \/tmp\/design.md/);
+		assert.deepEqual(renderMarkdown(expanded), ["## Recommendation\nUse explicit invalidation."]);
+
+		const failed = singleRenderFixture({
+			agent: label,
+			agentSource: oracle ? "user" : "project",
+			status: "failed",
+			messages: [],
+			failureMessage: "Child stopped",
+			stderr: "network unavailable",
+			malformedStdout: "not json",
+		});
+		const failedNode = renderSingleResult(failed, { expanded: false, isPartial: false, failed: true, oracle }, testTheme, testRenderAdapter);
+		assert.match(renderText(failedNode), new RegExp(`x ${label}`));
+		assert.match(renderText(failedNode), /Child stopped\nnetwork unavailable\nNon-JSON stdout:\nnot json/);
+	}
+});
+
+test("shared Oracle renderer preserves bounded recommendations in Markdown", () => {
+	const source = ["## Recommendation", "Choose A.", ...Array.from({ length: 100 }, (_, index) => `finding ${index}: ${"x".repeat(30)}`)].join("\n");
+	const bounded = boundOracleOutput(
+		source,
+		{ maxLines: 20, maxBytes: 1_000 },
+		(value, limits) => {
+			let content = value.split("\n").slice(0, limits.maxLines).join("\n");
+			while (Buffer.byteLength(content, "utf8") > limits.maxBytes) content = content.slice(0, -1);
+			return { content, truncated: content !== value, totalLines: value.split("\n").length, totalBytes: Buffer.byteLength(value, "utf8") };
+		},
+		(bytes) => `${bytes}B`,
+	);
+	const rendered = renderSingleResult(
+		singleRenderFixture({ agent: "oracle", agentSource: "user", messages: [{ role: "assistant", content: [{ type: "text", text: bounded }] }] }),
+		{ expanded: true, isPartial: false, failed: false, oracle: true },
+		testTheme,
+		testRenderAdapter,
+	);
+	assert.match(renderMarkdown(rendered)[0], /^## Recommendation\nChoose A\./);
+});
+
+test("registered tool_result middleware preserves only Oracle and generic single errors", () => {
+	let handler: ((event: ToolResultEvent) => { isError: true } | undefined) | undefined;
+	registerToolResultMiddleware({ on: (_event, registered) => (handler = registered) });
+	assert.ok(handler);
+	assert.deepEqual(handler({ toolName: "oracle", details: { failed: true } }), { isError: true });
+	assert.deepEqual(handler({ toolName: "subagent", details: { mode: "single", failed: true } }), { isError: true });
+	assert.equal(handler({ toolName: "subagent", details: { mode: "parallel", failed: true } }), undefined);
+	assert.equal(handler({ toolName: "subagent", details: { mode: "chain", failed: true } }), undefined);
 });
 
 test("validates and deterministically normalizes the strict Oracle handoff", () => {

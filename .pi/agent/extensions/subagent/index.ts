@@ -20,10 +20,21 @@ import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
 import {
+	formatToolCall,
+	formatUsageStats,
+	getDisplayItems,
+	getFailureDiagnostic,
+	getFinalOutput,
+	renderGenericSingleCall,
+	renderOracleCall,
+	renderSingleResult,
+	type SingleRenderAdapter,
+} from "./single-render.ts";
+import { registerToolResultMiddleware } from "./tool-result-middleware.ts";
+import {
 	boundOracleOutput,
 	cloneOracleAgent,
 	composeOraclePrompt,
-	isFailedToolResult,
 	normalizeOracleInput,
 	ORACLE_AGENT_NAME,
 	ORACLE_MODEL,
@@ -40,7 +51,6 @@ import {
 	boundTailOutput,
 	type ChildRunResult,
 	cloneProgressResults,
-	getFinalAssistantText,
 	mapWithConcurrencyLimit,
 	MAX_CHAIN_STEPS,
 	MAX_PARALLEL_CONCURRENCY,
@@ -52,8 +62,6 @@ import {
 	type UsageStats,
 	validateDispatchMode,
 } from "./runner.ts";
-
-const COLLAPSED_ITEM_COUNT = 10;
 
 type TaskStatus = "queued" | "running" | "completed" | "failed";
 
@@ -93,7 +101,6 @@ interface OracleDetails {
 }
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
-type DisplayItem = { type: "text"; text: string } | { type: "toolCall"; name: string; args: Record<string, any> };
 
 function emptyUsage(): UsageStats {
 	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 };
@@ -114,10 +121,6 @@ function makeFailure(agent: string, task: string, failureMessage: string): Singl
 	};
 }
 
-function getFinalOutput(messages: Message[]): string {
-	return getFinalAssistantText(messages);
-}
-
 function isFailedResult(result: SingleResult): boolean {
 	return (
 		result.status === "failed" ||
@@ -129,12 +132,6 @@ function isFailedResult(result: SingleResult): boolean {
 				result.stopReason === "aborted" ||
 				result.stopReason === "length"))
 	);
-}
-
-function getFailureDiagnostic(result: SingleResult): string {
-	const parts = [result.failureMessage, result.errorMessage, result.stderr.trim() || undefined];
-	if (result.malformedStdout.trim()) parts.push(`Non-JSON stdout:\n${result.malformedStdout.trim()}`);
-	return parts.filter((part): part is string => Boolean(part)).join("\n");
 }
 
 function getResultOutput(result: SingleResult): string {
@@ -178,78 +175,6 @@ function makeOracleDetails(
 		results,
 		failed,
 	};
-}
-
-function getDisplayItems(messages: Message[]): DisplayItem[] {
-	const items: DisplayItem[] = [];
-	for (const message of messages) {
-		if (message.role !== "assistant") continue;
-		for (const part of message.content) {
-			if (part.type === "text") items.push({ type: "text", text: part.text });
-			else if (part.type === "toolCall") {
-				items.push({ type: "toolCall", name: part.name, args: part.arguments });
-			}
-		}
-	}
-	return items;
-}
-
-function formatTokens(count: number): string {
-	if (count < 1_000) return count.toString();
-	if (count < 10_000) return `${(count / 1_000).toFixed(1)}k`;
-	if (count < 1_000_000) return `${Math.round(count / 1_000)}k`;
-	return `${(count / 1_000_000).toFixed(1)}M`;
-}
-
-function formatUsageStats(usage: UsageStats, model?: string): string {
-	const parts: string[] = [];
-	if (usage.turns) parts.push(`${usage.turns} turn${usage.turns === 1 ? "" : "s"}`);
-	if (usage.input) parts.push(`in:${formatTokens(usage.input)}`);
-	if (usage.output) parts.push(`out:${formatTokens(usage.output)}`);
-	if (usage.cacheRead) parts.push(`cache-read:${formatTokens(usage.cacheRead)}`);
-	if (usage.cacheWrite) parts.push(`cache-write:${formatTokens(usage.cacheWrite)}`);
-	if (usage.cost) parts.push(`$${usage.cost.toFixed(4)}`);
-	if (usage.contextTokens) parts.push(`ctx:${formatTokens(usage.contextTokens)}`);
-	if (model) parts.push(model);
-	return parts.join(" ");
-}
-
-function formatToolCall(
-	toolName: string,
-	args: Record<string, unknown>,
-	themeFg: (color: any, text: string) => string,
-): string {
-	const shortenPath = (value: string) => {
-		const home = os.homedir();
-		return value.startsWith(home) ? `~${value.slice(home.length)}` : value;
-	};
-	if (toolName === "read") {
-		const file = shortenPath(String(args.file_path ?? args.path ?? "..."));
-		return themeFg("muted", "read ") + themeFg("accent", file);
-	}
-	if (toolName === "grep") {
-		return (
-			themeFg("muted", "grep ") +
-			themeFg("accent", `/${String(args.pattern ?? "")}/`) +
-			themeFg("dim", ` in ${shortenPath(String(args.path ?? "."))}`)
-		);
-	}
-	if (toolName === "find") {
-		return (
-			themeFg("muted", "find ") +
-			themeFg("accent", String(args.pattern ?? "*")) +
-			themeFg("dim", ` in ${shortenPath(String(args.path ?? "."))}`)
-		);
-	}
-	if (toolName === "ls") {
-		return themeFg("muted", "ls ") + themeFg("accent", shortenPath(String(args.path ?? ".")));
-	}
-	if (toolName === "bash") {
-		const command = String(args.command ?? "...");
-		return themeFg("muted", "$ ") + themeFg("toolOutput", command.length > 60 ? `${command.slice(0, 60)}...` : command);
-	}
-	const serialized = JSON.stringify(args);
-	return themeFg("accent", toolName) + themeFg("dim", ` ${serialized.length > 50 ? `${serialized.slice(0, 50)}...` : serialized}`);
 }
 
 async function writePromptToTempFile(agentName: string, prompt: string): Promise<{ dir: string; filePath: string }> {
@@ -450,6 +375,17 @@ function formatChainFailure(result: SingleResult, index: number, totalSteps: num
 	);
 }
 
+const singleRenderAdapter: SingleRenderAdapter<Text | Spacer | Markdown | Container> = {
+	text: (text) => new Text(text, 0, 0),
+	spacer: () => new Spacer(1),
+	markdown: (text) => new Markdown(text, 0, 0, getMarkdownTheme()),
+	container: (children) => {
+		const container = new Container();
+		for (const child of children) container.addChild(child);
+		return container;
+	},
+};
+
 const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
 	description: 'Agent discovery scope. Default: "user". Project agents require explicit "project" or "both".',
 	default: "user",
@@ -505,9 +441,7 @@ const SubagentParams = Type.Object({
 });
 
 export default function (pi: ExtensionAPI) {
-	pi.on("tool_result", (event) => {
-		if (isFailedToolResult(event.toolName, event.details)) return { isError: true };
-	});
+	registerToolResultMiddleware(pi);
 
 	pi.registerTool({
 		name: "oracle",
@@ -596,6 +530,25 @@ export default function (pi: ExtensionAPI) {
 					details: makeOracleDetails(input, effectiveTools, [], true),
 				};
 			}
+		},
+
+		renderCall(args, theme) {
+			return renderOracleCall(args.task ?? "...", theme, singleRenderAdapter);
+		},
+
+		renderResult(result, options, theme) {
+			const details = result.details as OracleDetails | undefined;
+			if (!details?.results.length) {
+				const content = result.content[0];
+				const text = content?.type === "text" ? content.text : "(no output)";
+				return new Text(details?.failed ? theme.fg("error", text) : text, 0, 0);
+			}
+			return renderSingleResult(
+				details.results[0],
+				{ ...options, failed: isFailedResult(details.results[0]), oracle: true },
+				theme,
+				singleRenderAdapter,
+			);
 		},
 	});
 
@@ -828,14 +781,7 @@ export default function (pi: ExtensionAPI) {
 				if (args.tasks.length > 3) text += `\n  ${theme.fg("muted", `... +${args.tasks.length - 3} more`)}`;
 				return new Text(text, 0, 0);
 			}
-			const agent = args.agent ?? "...";
-			const rawTask = args.task ?? "...";
-			const task = rawTask.length > 60 ? `${rawTask.slice(0, 60)}...` : rawTask;
-			return new Text(
-				`${theme.fg("toolTitle", theme.bold("subagent "))}${theme.fg("accent", agent)}${theme.fg("muted", ` [${scope}]`)}\n  ${theme.fg("dim", task)}`,
-				0,
-				0,
-			);
+			return renderGenericSingleCall(args.agent ?? "...", scope, args.task ?? "...", theme, singleRenderAdapter);
 		},
 
 		renderResult(result, { expanded, isPartial }, theme) {
@@ -1036,56 +982,12 @@ export default function (pi: ExtensionAPI) {
 				if (!expanded) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
 				return new Text(text, 0, 0);
 			}
-			const agent = details.results[0];
-			const failed = isFailedResult(agent);
-			const inProgress = agent.status === "queued" || agent.status === "running";
-			const status = isPartial || inProgress ? theme.fg("warning", "...") : failed ? theme.fg("error", "x") : theme.fg("success", "ok");
-			const header = `${status} ${theme.fg("toolTitle", theme.bold(agent.agent))}${theme.fg("muted", ` (${agent.agentSource})`)}`;
-			const displayItems = getDisplayItems(agent.messages);
-			const finalOutput = getFinalOutput(agent.messages);
-			const diagnostic = getFailureDiagnostic(agent);
-			const usage = formatUsageStats(agent.usage, agent.model);
-
-			if (expanded) {
-				const container = new Container();
-				container.addChild(new Text(header, 0, 0));
-				container.addChild(new Spacer(1));
-				container.addChild(new Text(theme.fg("muted", "--- Task ---"), 0, 0));
-				container.addChild(new Text(theme.fg("dim", agent.task), 0, 0));
-				container.addChild(new Spacer(1));
-				container.addChild(new Text(theme.fg("muted", "--- Output ---"), 0, 0));
-				for (const item of displayItems) {
-					if (item.type === "toolCall") {
-						container.addChild(new Text(theme.fg("muted", "-> ") + formatToolCall(item.name, item.args, theme.fg.bind(theme)), 0, 0));
-					}
-				}
-				if (finalOutput) {
-					container.addChild(new Spacer(1));
-					container.addChild(new Markdown(finalOutput.trim(), 0, 0, getMarkdownTheme()));
-				} else if (!diagnostic) container.addChild(new Text(theme.fg("muted", inProgress ? "(running...)" : "(no output)"), 0, 0));
-				if (diagnostic) {
-					container.addChild(new Spacer(1));
-					container.addChild(new Text(theme.fg("error", diagnostic), 0, 0));
-				}
-				if (usage) {
-					container.addChild(new Spacer(1));
-					container.addChild(new Text(theme.fg("dim", usage), 0, 0));
-				}
-				return container;
-			}
-
-			let text = header;
-			const visibleItems = displayItems.slice(-COLLAPSED_ITEM_COUNT);
-			if (displayItems.length > visibleItems.length) text += `\n${theme.fg("muted", `... ${displayItems.length - visibleItems.length} earlier items`)}`;
-			for (const item of visibleItems) {
-				if (item.type === "text") text += `\n${theme.fg("toolOutput", item.text.split("\n").slice(0, 3).join("\n"))}`;
-				else text += `\n${theme.fg("muted", "-> ")}${formatToolCall(item.name, item.args, theme.fg.bind(theme))}`;
-			}
-			if (diagnostic) text += `\n${theme.fg("error", diagnostic)}`;
-			else if (!visibleItems.length) text += `\n${theme.fg("muted", inProgress ? "(running...)" : "(no output)")}`;
-			if (usage) text += `\n${theme.fg("dim", usage)}`;
-			if (!inProgress) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
-			return new Text(text, 0, 0);
+			return renderSingleResult(
+				details.results[0],
+				{ expanded, isPartial, failed: isFailedResult(details.results[0]) },
+				theme,
+				singleRenderAdapter,
+			);
 		},
 	});
 }
