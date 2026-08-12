@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { registerHooks } from "node:module";
+import { gzipSync } from "node:zlib";
 import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
@@ -46,6 +47,10 @@ interface RegisteredWebfetchTool {
   name: string;
   description: string;
   promptSnippet: string;
+  parameters: {
+    required?: string[];
+    properties?: Record<string, { description?: string }>;
+  };
   execute(toolCallId: string, params: unknown, signal: AbortSignal): Promise<unknown>;
 }
 
@@ -124,6 +129,22 @@ function testOptions(fetch: FetchTestOptions["fetch"], clock = new FakeClock()) 
     clock,
     options: { fetch, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout },
   };
+}
+
+function trackAbortListeners(signal: AbortSignal): { additions: () => number; removals: () => number } {
+  const originalAdd = signal.addEventListener.bind(signal);
+  const originalRemove = signal.removeEventListener.bind(signal);
+  let additions = 0;
+  let removals = 0;
+  signal.addEventListener = ((...args: Parameters<AbortSignal["addEventListener"]>) => {
+    if (args[0] === "abort") additions++;
+    return originalAdd(...args);
+  }) as AbortSignal["addEventListener"];
+  signal.removeEventListener = ((...args: Parameters<AbortSignal["removeEventListener"]>) => {
+    if (args[0] === "abort") removals++;
+    return originalRemove(...args);
+  }) as AbortSignal["removeEventListener"];
+  return { additions: () => additions, removals: () => removals };
 }
 
 test("normalizes defaults and permits HTTP(S), localhost, and private destinations", () => {
@@ -282,6 +303,10 @@ test("registered tool returns raster image blocks and SVG text from a local HTTP
   assert.equal(tool.name, "webfetch");
   assert.match(tool.description, /raster image/);
   assert.match(tool.promptSnippet, /raster image/);
+  assert.deepEqual(tool.parameters.required, ["url"]);
+  for (const parameter of ["url", "format", "timeout"]) {
+    assert.equal(typeof tool.parameters.properties?.[parameter]?.description, "string");
+  }
 
   const image = await tool.execute("image-fixture", { url: `${baseUrl}/image.png` }, new AbortController().signal);
   assert.deepEqual(image, {
@@ -625,27 +650,258 @@ test("timeout while reading cancels and unlocks the body", async () => {
 
 test("cleans up the deadline and caller listener after a successful streamed response", async () => {
   const caller = new AbortController();
-  const signal = caller.signal;
-  const originalAdd = signal.addEventListener.bind(signal);
-  const originalRemove = signal.removeEventListener.bind(signal);
-  let additions = 0;
-  let removals = 0;
-  signal.addEventListener = ((...args: Parameters<AbortSignal["addEventListener"]>) => {
-    if (args[0] === "abort") additions++;
-    return originalAdd(...args);
-  }) as AbortSignal["addEventListener"];
-  signal.removeEventListener = ((...args: Parameters<AbortSignal["removeEventListener"]>) => {
-    if (args[0] === "abort") removals++;
-    return originalRemove(...args);
-  }) as AbortSignal["removeEventListener"];
-
+  const callerListeners = trackAbortListeners(caller.signal);
   const fixture = streamResponse([encoded("ok")], { headers: { "Content-Type": "text/plain" } });
   const { clock, options } = testOptions(async () => fixture.response);
   const result = await fetchWeb({ url: "https://example.com/" }, caller.signal, options);
   assert.equal(result.text, "ok");
   assert.equal(fixture.body.locked, false);
-  assert.equal(additions, 1);
-  assert.equal(removals, 1);
+  assert.equal(callerListeners.additions(), 1);
+  assert.equal(callerListeners.removals(), 1);
   assert.deepEqual(clock.cleared, [DEFAULT_TIMEOUT_SECONDS * 1_000]);
   assert.equal(clock.pending(), 0);
+});
+
+test("accepts exact declared and streamed 5 MiB bodies and stops at the first extra byte", async () => {
+  const exact = streamResponse([new Uint8Array(MAX_RESPONSE_BYTES)], {
+    headers: {
+      "Content-Type": "text/plain",
+      "Content-Length": String(MAX_RESPONSE_BYTES),
+    },
+  });
+  const exactResult = await fetchWeb({ url: "https://example.com/exact" }, undefined, {
+    fetch: async () => exact.response,
+  });
+  assert.equal(exactResult.responseBytes, MAX_RESPONSE_BYTES);
+  assert.equal(exact.cancellations(), 0);
+  assert.equal(exact.body.locked, false);
+
+  let reads = 0;
+  let cancellations = 0;
+  let released = 0;
+  const chunks = [new Uint8Array(MAX_RESPONSE_BYTES), new Uint8Array([1]), new Uint8Array([2])];
+  const body = {
+    locked: false,
+    getReader() {
+      body.locked = true;
+      return {
+        async read() {
+          const value = chunks[reads++];
+          return value === undefined ? { done: true, value: undefined } : { done: false, value };
+        },
+        async cancel() { cancellations++; },
+        releaseLock() { body.locked = false; released++; },
+      };
+    },
+  };
+  const response = {
+    ok: true,
+    status: 200,
+    headers: new Headers({ "Content-Type": "text/plain" }),
+    body,
+    url: "https://example.com/over",
+  } as unknown as Response;
+  await assert.rejects(
+    fetchWeb({ url: "https://example.com/over" }, undefined, { fetch: async () => response }),
+    /^Error: Web fetch response exceeded 5 MiB$/,
+  );
+  assert.equal(reads, 2);
+  assert.equal(cancellations, 1);
+  assert.equal(released, 1);
+  assert.equal(body.locked, false);
+});
+
+test("enforces the decoded 5 MiB boundary after gzip decompression", async (context) => {
+  const server = createServer((request, response) => {
+    const size = request.url === "/exact" ? MAX_RESPONSE_BYTES : MAX_RESPONSE_BYTES + 1;
+    const compressed = gzipSync(Buffer.alloc(size, 0x78));
+    response.writeHead(200, {
+      "Content-Type": "text/plain",
+      "Content-Encoding": "gzip",
+      "Content-Length": compressed.byteLength,
+    });
+    response.end(compressed);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  context.after(() => server.close());
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  const exact = await fetchWeb({ url: `${baseUrl}/exact`, format: "text" });
+  assert.equal(exact.responseBytes, MAX_RESPONSE_BYTES);
+  await assert.rejects(
+    fetchWeb({ url: `${baseUrl}/over`, format: "text" }),
+    /^Error: Web fetch response exceeded 5 MiB$/,
+  );
+});
+
+test("keeps output byte and line boundaries exact with one notice inside the cap", () => {
+  for (const bytes of [MAX_OUTPUT_BYTES - 1, MAX_OUTPUT_BYTES]) {
+    const output = boundWebFetchOutput("x".repeat(bytes));
+    assert.equal(output.truncated, false);
+    assert.equal(output.outputBytes, bytes);
+  }
+  for (const lines of [MAX_OUTPUT_LINES - 1, MAX_OUTPUT_LINES]) {
+    const output = boundWebFetchOutput(Array.from({ length: lines }, () => "x").join("\n"));
+    assert.equal(output.truncated, false);
+    assert.equal(output.originalLines, lines);
+  }
+
+  const byteOverflow = boundWebFetchOutput("x".repeat(MAX_OUTPUT_BYTES + 1));
+  assert.equal(byteOverflow.truncated, true);
+  assert.ok(byteOverflow.outputBytes <= MAX_OUTPUT_BYTES);
+  assert.equal(byteOverflow.text.match(/\[Web fetch output truncated:/g)?.length, 1);
+  assert.match(byteOverflow.text, /Fetch a narrower URL or request a more specific format/);
+
+  const lineOverflow = boundWebFetchOutput(
+    Array.from({ length: MAX_OUTPUT_LINES + 1 }, (_, index) => `line ${index}`).join("\n"),
+  );
+  assert.equal(lineOverflow.truncated, true);
+  assert.equal(lineOverflow.retainedLines, MAX_OUTPUT_LINES - 2);
+  assert.ok(lineOverflow.outputBytes <= MAX_OUTPUT_BYTES);
+  assert.ok(lineOverflow.text.split(/\r\n|\r|\n/).length <= MAX_OUTPUT_LINES);
+  assert.equal(lineOverflow.text.match(/\[Web fetch output truncated:/g)?.length, 1);
+});
+
+test("follows relative and cross-origin redirects and bounds redirect loops", async (context) => {
+  const finalServer = createServer((_request, response) => {
+    response.writeHead(200, { "Content-Type": "text/plain" });
+    response.end("cross-origin final");
+  });
+  const redirectServer = createServer((request, response) => {
+    if (request.url === "/relative") {
+      response.writeHead(302, { Location: "/cross-origin" });
+    } else if (request.url === "/cross-origin") {
+      const address = finalServer.address();
+      assert.ok(address && typeof address !== "string");
+      response.writeHead(302, { Location: `http://127.0.0.1:${address.port}/final` });
+    } else {
+      response.writeHead(302, { Location: "/loop" });
+    }
+    response.end();
+  });
+  await Promise.all([
+    new Promise<void>((resolve) => finalServer.listen(0, "127.0.0.1", resolve)),
+    new Promise<void>((resolve) => redirectServer.listen(0, "127.0.0.1", resolve)),
+  ]);
+  context.after(() => finalServer.close());
+  context.after(() => redirectServer.close());
+  const redirectAddress = redirectServer.address();
+  const finalAddress = finalServer.address();
+  assert.ok(redirectAddress && typeof redirectAddress !== "string");
+  assert.ok(finalAddress && typeof finalAddress !== "string");
+  const baseUrl = `http://127.0.0.1:${redirectAddress.port}`;
+
+  const result = await fetchWeb({ url: `${baseUrl}/relative`, format: "text" });
+  assert.equal(result.text, "cross-origin final");
+  assert.equal(result.finalUrl, `http://127.0.0.1:${finalAddress.port}/final`);
+  await assert.rejects(
+    fetchWeb({ url: `${baseUrl}/loop`, timeout: 5 }),
+    /^Error: Web fetch network failure:/,
+  );
+});
+
+test("bounds HTTP diagnostics at a valid UTF-8 boundary and leaves empty errors drained", async () => {
+  const marker = "must-not-appear";
+  const partialCodePoint = encoded(`${"x".repeat(MAX_ERROR_EXCERPT_BYTES - 2)}🙂${marker}`);
+  const oversized = streamResponse([partialCodePoint], { status: 502 }, false);
+  await assert.rejects(
+    fetchWeb({ url: "https://example.com/error" }, undefined, { fetch: async () => oversized.response }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /^Web fetch failed with HTTP 502: x+$/);
+      assert.equal(error.message.includes("�"), false);
+      assert.equal(error.message.includes(marker), false);
+      assert.ok(Buffer.byteLength(error.message.slice(error.message.indexOf(": ") + 2)) <= MAX_ERROR_EXCERPT_BYTES);
+      return true;
+    },
+  );
+  assert.equal(oversized.cancellations(), 1);
+  assert.equal(oversized.body.locked, false);
+
+  const empty = streamResponse([], { status: 404 });
+  await assert.rejects(
+    fetchWeb({ url: "https://example.com/empty" }, undefined, { fetch: async () => empty.response }),
+    /^Error: Web fetch failed with HTTP 404$/,
+  );
+  assert.equal(empty.cancellations(), 0);
+  assert.equal(empty.body.locked, false);
+});
+
+test("uses the first abort at fetch and completion boundaries", async () => {
+  for (const winner of ["caller", "timeout"] as const) {
+    const caller = new AbortController();
+    const { clock, options } = testOptions((_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    }));
+    const promise = fetchWeb({ url: "https://example.com/", timeout: 1 }, caller.signal, options);
+    if (winner === "caller") {
+      caller.abort("caller first");
+      clock.fire(1_000);
+    } else {
+      clock.fire(1_000);
+      caller.abort("caller second");
+    }
+    await assert.rejects(
+      promise,
+      winner === "caller" ? /^Error: Web fetch cancelled by caller$/ : /^Error: Web fetch timed out after 1 seconds$/,
+    );
+    assert.equal(clock.pending(), 0);
+  }
+
+  const caller = new AbortController();
+  const fixture = streamResponse([encoded("complete")], { headers: { "Content-Type": "text/plain" } });
+  const result = await fetchWeb({ url: "https://example.com/complete" }, caller.signal, {
+    fetch: async () => fixture.response,
+  });
+  caller.abort("after completion");
+  assert.equal(result.text, "complete");
+  assert.equal(fixture.body.locked, false);
+});
+
+test("cleans timers, caller listeners, body listeners, and locks on each bounded failure", async () => {
+  const cases = [
+    () => streamResponse([encoded("bad request")], { status: 400 }),
+    () => streamResponse([encoded("binary")], { headers: { "Content-Type": "application/pdf" } }, false),
+    () => streamResponse([new Uint8Array(MAX_RESPONSE_BYTES), new Uint8Array([1])], {
+      headers: { "Content-Type": "text/plain" },
+    }, false),
+  ];
+
+  for (const makeFixture of cases) {
+    const caller = new AbortController();
+    const callerListeners = trackAbortListeners(caller.signal);
+    const fixture = makeFixture();
+    let transportListeners: ReturnType<typeof trackAbortListeners> | undefined;
+    const { clock, options } = testOptions(async (_input, init) => {
+      assert.ok(init?.signal);
+      transportListeners = trackAbortListeners(init.signal);
+      return fixture.response;
+    });
+    await assert.rejects(fetchWeb({ url: "https://example.com/failure" }, caller.signal, options));
+    assert.equal(fixture.body.locked, false);
+    assert.equal(clock.pending(), 0);
+    assert.equal(callerListeners.additions(), callerListeners.removals());
+    assert.equal(transportListeners?.additions(), transportListeners?.removals());
+  }
+});
+
+test("live public webfetch smoke test", {
+  skip: process.env.WEBFETCH_LIVE_TEST !== "1" ? "set WEBFETCH_LIVE_TEST=1 to fetch https://example.com/" : false,
+}, async () => {
+  let status: number | undefined;
+  let contentType: string | null | undefined;
+  const result = await fetchWeb({ url: "https://example.com/", format: "markdown" }, undefined, {
+    fetch: async (input, init) => {
+      const response = await fetch(input, init);
+      status = response.status;
+      contentType = response.headers.get("Content-Type");
+      return response;
+    },
+  });
+  assert.equal(status, 200);
+  assert.match(contentType ?? "", /^text\/html(?:;|$)/i);
+  assert.ok(result.responseBytes > 0);
+  assert.ok(result.text.length > 0);
 });

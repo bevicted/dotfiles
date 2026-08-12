@@ -395,6 +395,7 @@ async function collectErrorExcerpt(body: ReadableStream<Uint8Array> | null, sign
   const decoder = new TextDecoder();
   const parts: string[] = [];
   let bytes = 0;
+  let ended = false;
   let cancelPromise: Promise<void> | undefined;
   const cancelReader = (reason?: unknown): Promise<void> => {
     cancelPromise ??= reader.cancel(reason).catch(() => undefined);
@@ -410,18 +411,23 @@ async function collectErrorExcerpt(body: ReadableStream<Uint8Array> | null, sign
     while (bytes < MAX_ERROR_EXCERPT_BYTES) {
       const { done, value } = await reader.read();
       if (signal.aborted) throw signal.reason;
-      if (done) break;
+      if (done) {
+        ended = true;
+        break;
+      }
       const accepted = value.subarray(0, MAX_ERROR_EXCERPT_BYTES - bytes);
       bytes += accepted.byteLength;
-      parts.push(decoder.decode(accepted, { stream: bytes < MAX_ERROR_EXCERPT_BYTES }));
+      // Keep the decoder streaming at the cap so an incomplete final code point
+      // is omitted rather than replaced in the diagnostic.
+      parts.push(decoder.decode(accepted, { stream: true }));
       if (accepted.byteLength < value.byteLength || bytes === MAX_ERROR_EXCERPT_BYTES) break;
     }
-    await cancelReader("HTTP error excerpt collected");
-    parts.push(decoder.decode());
+    if (!ended) await cancelReader("HTTP error excerpt collected");
+    if (ended) parts.push(decoder.decode());
     return sanitizeDetail(parts.join(""));
   } finally {
     signal.removeEventListener("abort", onAbort);
-    await cancelReader("HTTP error response cleanup");
+    if (!ended) await cancelReader("HTTP error response cleanup");
     reader.releaseLock();
   }
 }
