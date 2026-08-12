@@ -342,9 +342,10 @@ export function resolveWorkingDirectory(parentCwd: string, requestedCwd?: string
 }
 
 export function selectChildTools(requestedTools: string[] | undefined, parentActiveTools: readonly string[]): string[] {
-	const parentTools = new Set(parentActiveTools.filter((tool) => tool !== "subagent"));
+	const isDelegationTool = (tool: string) => tool === "subagent" || tool === "oracle";
+	const parentTools = new Set(parentActiveTools.filter((tool) => !isDelegationTool(tool)));
 	const candidates = requestedTools ?? parentActiveTools;
-	return [...new Set(candidates.filter((tool) => tool !== "subagent" && parentTools.has(tool)))];
+	return [...new Set(candidates.filter((tool) => !isDelegationTool(tool) && parentTools.has(tool)))];
 }
 
 export function assertCanDelegate(environment: NodeJS.ProcessEnv = process.env): void {
