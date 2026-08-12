@@ -240,7 +240,7 @@ async function runSingleAgent(
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) {
 		const available = agents.map((candidate) => `"${candidate.name}"`).join(", ") || "none";
-		return makeFailure(agentName, task, `Unknown agent: "${agentName}". Available agents: ${available}.`);
+		return makeFailure(agentName, task, `Unknown agent: "${agentName}". Available agents: ${available}. Omit agentScope to use its "user" default for agents in ${path.join(getAgentDir(), "agents")}; project agents must be in ${CONFIG_DIR_NAME}/agents.`);
 	}
 
 	let resolvedCwd: string;
