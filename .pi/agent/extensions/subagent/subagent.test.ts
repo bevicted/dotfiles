@@ -164,9 +164,35 @@ test("selects only the valid user researcher and clones its tool list", () => {
 	assert.equal(selectUserResearcherAgent([project, user]), user); assert.deepEqual(cloneResearcherAgent(user, ["read"]).tools, ["read"]); assert.deepEqual(user.tools, [...RESEARCH_TOOLS]); assert.throws(() => selectUserResearcherAgent([project]), /missing or malformed/); assert.throws(() => selectUserResearcherAgent([{ ...user, tools: ["read"] }]), /malformed/);
 });
 
-test("bounds Research output at 8 KiB and 400 lines while retaining its head and full-details notice", () => {
-	const truncateHead = (value: string, limits: { maxLines: number; maxBytes: number }) => { const lines = value.split("\n"); let content = lines.slice(0, limits.maxLines).join("\n"); while (Buffer.byteLength(content, "utf8") > limits.maxBytes) content = content.slice(0, -1); return { content, truncated: content !== value, totalLines: lines.length, totalBytes: Buffer.byteLength(value, "utf8") }; };
-	for (const source of [Array.from({ length: RESEARCH_MAX_LINES + 1 }, (_, index) => `## Answer ${index}`).join("\n"), `## Answer\n${"🙂".repeat(RESEARCH_MAX_BYTES)}`]) { const output = boundResearchOutput(source, { maxLines: RESEARCH_MAX_LINES, maxBytes: RESEARCH_MAX_BYTES }, truncateHead, (bytes) => `${bytes}B`); assert.ok(Buffer.byteLength(output, "utf8") <= RESEARCH_MAX_BYTES); assert.ok(output.split("\n").length <= RESEARCH_MAX_LINES); assert.match(output, /^## Answer/); assert.equal(output.match(/\[Research output truncated:/g)?.length, 1); assert.match(output, /Full messages remain in tool details/); assert.equal(output.includes("�"), false); }
+test("bounds Research output with the production head truncator at every byte and line boundary", async () => {
+	const { truncateHead } = await import("@earendil-works/pi-coding-agent");
+	const limits = { maxLines: RESEARCH_MAX_LINES, maxBytes: RESEARCH_MAX_BYTES };
+	const assertBounds = (output: string) => {
+		assert.ok(Buffer.byteLength(output, "utf8") <= RESEARCH_MAX_BYTES);
+		assert.ok(output.split("\n").length <= RESEARCH_MAX_LINES);
+	};
+	const bytePrefix = "## Answer\n";
+	for (const delta of [-1, 0, 1]) {
+		const source = bytePrefix + "x".repeat(RESEARCH_MAX_BYTES - Buffer.byteLength(bytePrefix, "utf8") + delta);
+		const output = boundResearchOutput(source, limits, truncateHead, (bytes) => `${bytes}B`);
+		assertBounds(output);
+		if (delta <= 0) assert.equal(output, source);
+		else assert.match(output, /\[Research output truncated:/);
+	}
+	for (const count of [RESEARCH_MAX_LINES - 1, RESEARCH_MAX_LINES, RESEARCH_MAX_LINES + 1]) {
+		const source = Array.from({ length: count }, (_, index) => `## Answer ${index}`).join("\n");
+		const output = boundResearchOutput(source, limits, truncateHead, (bytes) => `${bytes}B`);
+		assertBounds(output);
+		if (count <= RESEARCH_MAX_LINES) assert.equal(output, source);
+		else assert.match(output, /\[Research output truncated:/);
+	}
+	const unicode = `## Answer\n${"\u{1F642}".repeat(RESEARCH_MAX_BYTES)}`;
+	const output = boundResearchOutput(unicode, limits, truncateHead, (bytes) => `${bytes}B`);
+	assertBounds(output);
+	assert.match(output, /^## Answer/);
+	assert.equal(output.match(/\[Research output truncated:/g)?.length, 1);
+	assert.match(output, /Full messages remain in tool details/);
+	assert.equal(output.includes("\uFFFD"), false);
 });
 
 test("failure middleware marks only Research and generic single failures as tool errors", () => {
@@ -584,20 +610,29 @@ test("abort escalates from SIGTERM to SIGKILL and cleans up timer and listener",
 	assert.equal(removals, 1);
 });
 
-test("registers Research metadata and no dedicated Oracle tool", async () => {
+test("registered Research bounds failures, retains normalized input details, and renders preflight errors", async () => {
 	const { default: extension } = await import("./index.ts");
-	const tools: Array<{ name: string; parameters: { properties?: Record<string, unknown> }; description: string; promptGuidelines: string[] }> = [];
+	type RegisteredTool = {
+		name: string;
+		parameters: { properties?: Record<string, unknown> };
+		description: string;
+		promptGuidelines: string[];
+		execute: (...args: any[]) => Promise<any>;
+		renderResult: (result: any, options: any, theme: typeof testTheme) => { text: string };
+	};
+	const tools: RegisteredTool[] = [];
+	const activeTools = ["read"];
 	extension({
-		registerTool(tool: unknown) { tools.push(tool as (typeof tools)[number]); },
+		registerTool(tool: unknown) { tools.push(tool as RegisteredTool); },
 		on() {},
-		getActiveTools() { return []; },
+		getActiveTools() { return activeTools; },
 	} as never);
 	assert.deepEqual(tools.map((tool) => tool.name), ["research", "subagent"]);
 	const research = tools[0];
 	assert.deepEqual(Object.keys(research.parameters.properties ?? {}).sort(), ["context", "effort", "files", "task", "webResearch"]);
 	assert.match(research.description, /narrow lookup or known URL/);
 	assert.doesNotMatch(`${research.description} ${research.promptGuidelines.join(" ")}`, /oracle/i);
-	const unknown = await (tools[1] as typeof tools[number] & { execute: Function }).execute(
+	const unknown = await tools[1].execute(
 		"test",
 		{ agent: "not-an-agent", task: "inspect" },
 		new AbortController().signal,
@@ -605,6 +640,42 @@ test("registers Research metadata and no dedicated Oracle tool", async () => {
 		{ cwd: process.cwd(), model: undefined, thinkingLevel: undefined, hasUI: false },
 	);
 	assert.doesNotMatch(unknown.content[0].text, /oracle/i);
+
+	const executeResearch = (params: Record<string, unknown>) =>
+		research.execute("test", params, new AbortController().signal, undefined, {
+			cwd: process.cwd(), model: undefined, thinkingLevel: undefined, hasUI: false,
+		});
+	for (const params of [
+		{ task: "inspect", ["x".repeat(RESEARCH_MAX_BYTES * 2)]: true },
+		{ task: "inspect", files: [`../${"x".repeat(RESEARCH_MAX_BYTES * 2)}`] },
+	]) {
+		const failure = await executeResearch(params);
+		const text = failure.content[0].text;
+		assert.ok(Buffer.byteLength(text, "utf8") <= RESEARCH_MAX_BYTES);
+		assert.ok(text.split("\n").length <= RESEARCH_MAX_LINES);
+		assert.equal(failure.details.failed, true);
+	}
+
+	const preflightFailure = await executeResearch({
+		task: "  inspect source  ",
+		context: "  caller evidence  ",
+		files: [".pi/agent/agents/researcher.md", "./.pi/agent/agents/researcher.md"],
+		webResearch: "required",
+		effort: "deep",
+	});
+	assert.deepEqual(preflightFailure.details.input, {
+		task: "inspect source",
+		context: "caller evidence",
+		files: [".pi/agent/agents/researcher.md"],
+		webResearch: "required",
+		effort: "deep",
+	});
+	assert.deepEqual(preflightFailure.details.files, [".pi/agent/agents/researcher.md"]);
+	assert.equal(preflightFailure.details.results.length, 0);
+	assert.equal(preflightFailure.details.failed, true);
+	const rendered = research.renderResult(preflightFailure, { expanded: false, isPartial: false }, testTheme);
+	assert.match(rendered.text, /^x research\n/);
+	assert.match(rendered.text, /websearch and webfetch/);
 });
 
 test("the tracked agent definitions have the approved six-definition matrix and researcher guardrails", async () => {

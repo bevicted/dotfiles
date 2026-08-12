@@ -95,6 +95,7 @@ interface ResearchDetails {
 	model: typeof RESEARCH_MODEL;
 	reasoningLevel: "high";
 	effectiveTools: string[];
+	input: NormalizedResearchInput;
 	files: string[];
 	webResearch: WebResearchMode;
 	effort: ResearchEffort;
@@ -172,6 +173,7 @@ function makeResearchDetails(
 		model: RESEARCH_MODEL,
 		reasoningLevel: "high",
 		effectiveTools: [...effectiveTools],
+		input: { ...input, files: [...input.files] },
 		files: [...input.files],
 		webResearch: input.webResearch,
 		effort: input.effort,
@@ -471,7 +473,7 @@ export default function (pi: ExtensionAPI) {
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				return {
-					content: [{ type: "text", text: message }],
+					content: [{ type: "text", text: boundResearchResult(message) }],
 					details: makeResearchDetails(
 						{ task: "", files: [], webResearch: "auto", effort: "standard" },
 						[],
@@ -498,30 +500,26 @@ export default function (pi: ExtensionAPI) {
 					projectAgentsDir: null,
 					results,
 				});
-				const toResearchResult = (result: SingleResult): SingleResult => ({ ...result, task: input.task });
-				const result = toResearchResult(
-					await runSingleAgent(
-						ctx.cwd,
-						dispatchDefaults,
-						pi.getActiveTools(),
-						[clonedAgent],
-						RESEARCH_AGENT_NAME,
-						prompt,
-						undefined,
-						signal,
-						onUpdate
-							? (partial) => {
-									const current = partial.details?.results[0];
-									if (!current) return;
-									const snapshot = toResearchResult(current);
-									onUpdate({
-										content: [{ type: "text", text: boundResearchResult(getResultOutput(snapshot) || "(running...)") }],
-										details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [snapshot]), isFailedResult(snapshot)),
-									});
-								}
-							: undefined,
-						genericDetails,
-					),
+				const result = await runSingleAgent(
+					ctx.cwd,
+					dispatchDefaults,
+					pi.getActiveTools(),
+					[clonedAgent],
+					RESEARCH_AGENT_NAME,
+					prompt,
+					undefined,
+					signal,
+					onUpdate
+						? (partial) => {
+								const current = partial.details?.results[0];
+								if (!current) return;
+								onUpdate({
+									content: [{ type: "text", text: boundResearchResult(getResultOutput(current) || "(running...)") }],
+									details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [current]), isFailedResult(current)),
+								});
+							}
+						: undefined,
+					genericDetails,
 				);
 				const failed = isFailedResult(result);
 				return {
@@ -546,7 +544,9 @@ export default function (pi: ExtensionAPI) {
 			if (!details?.results.length) {
 				const content = result.content[0];
 				const text = content?.type === "text" ? content.text : "(no output)";
-				return new Text(details?.failed ? theme.fg("error", text) : text, 0, 0);
+				const status = details?.failed ? theme.fg("error", "x") : theme.fg("success", "ok");
+				const body = details?.failed ? theme.fg("error", text) : text;
+				return new Text(`${status} ${theme.fg("toolTitle", theme.bold("research"))}\n${body}`, 0, 0);
 			}
 			return renderSingleResult(
 				details.results[0],
