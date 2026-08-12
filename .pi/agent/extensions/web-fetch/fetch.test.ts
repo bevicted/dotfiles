@@ -18,6 +18,8 @@ import {
 } from "./fetch.ts";
 import type { FetchTestOptions, WebFetchInput } from "./fetch.ts";
 
+const OPENCODE_WEBFETCH_REFERENCE = "https://github.com/anomalyco/opencode/blob/959c8bd4981fe838df102ddb7a7974e3117e92c6/packages/opencode/src/tool/webfetch.ts";
+
 function asInput(value: unknown): WebFetchInput {
   return value as WebFetchInput;
 }
@@ -114,7 +116,7 @@ test("rejects invalid input without adding a destination deny-list", () => {
   }
 });
 
-test("uses OpenCode's exact negotiated and browser-like request headers", async () => {
+test(`uses OpenCode ${OPENCODE_WEBFETCH_REFERENCE} negotiated and browser-like request headers`, async () => {
   for (const format of ["markdown", "text", "html"] as const) {
     let call: { input: string | URL | Request; init?: RequestInit } | undefined;
     const { options } = testOptions(async (input, init) => {
@@ -149,6 +151,17 @@ test("converts HTML to Markdown and text using OpenCode's removals", async () =>
   const text = await fetchWeb({ url: "https://example.com/", format: "text" }, undefined, { fetch: fetchHtml });
   assert.equal(text.text, "HeadingHello world.one");
   for (const removed of ["bad()", ".hidden", "noscript", "iframe", "object", "embed"]) assert.equal(text.text.includes(removed), false);
+
+  const xhtml = "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><h1>XHTML heading</h1><p>Body</p></body></html>";
+  const fetchXhtml = async () => new Response(xhtml, {
+    headers: { "Content-Type": "Application/XHTML+XML; charset=utf-8" },
+  });
+  const xhtmlMarkdown = await fetchWeb({ url: "https://example.com/xhtml", format: "markdown" }, undefined, { fetch: fetchXhtml });
+  assert.match(xhtmlMarkdown.text, /# XHTML heading/);
+  assert.match(xhtmlMarkdown.text, /Body/);
+
+  const xhtmlText = await fetchWeb({ url: "https://example.com/xhtml", format: "text" }, undefined, { fetch: fetchXhtml });
+  assert.equal(xhtmlText.text, "XHTML headingBody");
 });
 
 test("passes raw HTML and non-HTML content through unchanged", async () => {
@@ -164,6 +177,28 @@ test("passes raw HTML and non-HTML content through unchanged", async () => {
     });
     assert.equal(result.text, "# unchanged");
   }
+});
+
+test("rejects non-textual content types before decoding their bodies", async () => {
+  for (const contentType of ["application/pdf", "image/png", "application/zip", "application/octet-stream"]) {
+    const fixture = streamResponse([new Uint8Array([0xff, 0xd8, 0xff])], {
+      headers: { "Content-Type": contentType },
+    }, false);
+    await assert.rejects(
+      fetchWeb({ url: "https://example.com/binary" }, undefined, { fetch: async () => fixture.response }),
+      new RegExp(`^Error: Web fetch unsupported content type: ${contentType.replace("+", "\\+")}$`),
+    );
+    assert.equal(fixture.cancellations(), 1);
+    assert.equal(fixture.body.locked, false);
+  }
+
+  const missing = streamResponse([new Uint8Array([0xff])], {}, false);
+  await assert.rejects(
+    fetchWeb({ url: "https://example.com/no-content-type" }, undefined, { fetch: async () => missing.response }),
+    /^Error: Web fetch unsupported content type: \(missing\)$/,
+  );
+  assert.equal(missing.cancellations(), 1);
+  assert.equal(missing.body.locked, false);
 });
 
 test("retrieves a local HTTP response through the real Fetch transport", async (context) => {
@@ -183,6 +218,29 @@ test("retrieves a local HTTP response through the real Fetch transport", async (
   assert.equal(result.finalUrl, `http://127.0.0.1:${address.port}/fixture`);
   assert.equal(result.text, "# Local fixture");
   assert.ok(result.responseBytes > 0);
+});
+
+test("reports the final URL after a local redirect", async (context) => {
+  const server = createServer((request, response) => {
+    if (request.url === "/redirect") {
+      response.writeHead(302, { Location: "/final" });
+      response.end();
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/plain" });
+    response.end("redirected");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  context.after(() => server.close());
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  const result = await fetchWeb({
+    url: `http://127.0.0.1:${address.port}/redirect`,
+    format: "text",
+  });
+  assert.equal(result.finalUrl, `http://127.0.0.1:${address.port}/final`);
+  assert.equal(result.text, "redirected");
 });
 
 test("reports bounded, sanitized HTTP and network diagnostics", async () => {
@@ -227,7 +285,10 @@ test("rejects declared and streamed response bodies above 5 MiB", async () => {
   const declared = {
     ok: true,
     status: 200,
-    headers: new Headers({ "Content-Length": String(MAX_RESPONSE_BYTES + 1) }),
+    headers: new Headers({
+      "Content-Length": String(MAX_RESPONSE_BYTES + 1),
+      "Content-Type": "text/plain",
+    }),
     body,
     url: "https://example.com/",
   } as unknown as Response;
@@ -238,7 +299,9 @@ test("rejects declared and streamed response bodies above 5 MiB", async () => {
   assert.equal(readerRequests, 0);
   assert.equal(cancellations, 1);
 
-  const streamed = streamResponse([new Uint8Array(MAX_RESPONSE_BYTES), new Uint8Array([1])], {}, false);
+  const streamed = streamResponse([new Uint8Array(MAX_RESPONSE_BYTES), new Uint8Array([1])], {
+    headers: { "Content-Type": "text/plain" },
+  }, false);
   await assert.rejects(
     fetchWeb({ url: "https://example.com/" }, undefined, { fetch: async () => streamed.response }),
     /^Error: Web fetch response exceeded 5 MiB$/,
@@ -318,6 +381,53 @@ test("distinguishes caller cancellation and a full-operation timeout", async () 
   assert.equal(clock.pending(), 0);
 });
 
+test("caller cancellation while reading cancels and unlocks the body", async () => {
+  const reading = Promise.withResolvers<void>();
+  let cancellations = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull() {
+      reading.resolve();
+    },
+    cancel() {
+      cancellations++;
+    },
+  });
+  const caller = new AbortController();
+  const promise = fetchWeb({ url: "https://example.com/" }, caller.signal, {
+    fetch: async () => new Response(body, { headers: { "Content-Type": "text/plain" } }),
+  });
+
+  await reading.promise;
+  caller.abort("user stopped");
+  await assert.rejects(promise, /^Error: Web fetch cancelled by caller$/);
+  assert.equal(cancellations, 1);
+  assert.equal(body.locked, false);
+});
+
+test("timeout while reading cancels and unlocks the body", async () => {
+  const reading = Promise.withResolvers<void>();
+  let cancellations = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull() {
+      reading.resolve();
+    },
+    cancel() {
+      cancellations++;
+    },
+  });
+  const { clock, options } = testOptions(async () => new Response(body, {
+    headers: { "Content-Type": "text/plain" },
+  }));
+  const promise = fetchWeb({ url: "https://example.com/", timeout: 1 }, undefined, options);
+
+  await reading.promise;
+  clock.fire(1_000);
+  await assert.rejects(promise, /^Error: Web fetch timed out after 1 seconds$/);
+  assert.equal(cancellations, 1);
+  assert.equal(body.locked, false);
+  assert.equal(clock.pending(), 0);
+});
+
 test("cleans up the deadline and caller listener after a successful streamed response", async () => {
   const caller = new AbortController();
   const signal = caller.signal;
@@ -334,7 +444,7 @@ test("cleans up the deadline and caller listener after a successful streamed res
     return originalRemove(...args);
   }) as AbortSignal["removeEventListener"];
 
-  const fixture = streamResponse([encoded("ok")]);
+  const fixture = streamResponse([encoded("ok")], { headers: { "Content-Type": "text/plain" } });
   const { clock, options } = testOptions(async () => fixture.response);
   const result = await fetchWeb({ url: "https://example.com/" }, caller.signal, options);
   assert.equal(result.text, "ok");

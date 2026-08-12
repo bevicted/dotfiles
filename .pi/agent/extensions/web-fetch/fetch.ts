@@ -113,6 +113,7 @@ function isUsefulTransportError(error: unknown): error is Error {
     error.message.startsWith("Web fetch network failure") ||
     error.message.startsWith("Web fetch timed out") ||
     error.message.startsWith("Web fetch cancelled")
+    || error.message.startsWith("Web fetch unsupported content type")
   );
 }
 
@@ -249,8 +250,25 @@ export function normalizeWebFetchInput(input: WebFetchInput): NormalizedWebFetch
   return { url: parsed.toString(), format, timeout };
 }
 
+function mediaType(contentType: string): string {
+  return contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+}
+
 function isHtml(contentType: string): boolean {
-  return contentType.toLowerCase().includes("text/html");
+  return ["text/html", "application/xhtml+xml"].includes(mediaType(contentType));
+}
+
+function isTextualContentType(contentType: string): boolean {
+  const mime = mediaType(contentType);
+  return mime.startsWith("text/")
+    || mime === "application/xhtml+xml"
+    || mime === "application/json"
+    || mime.endsWith("+json")
+    || mime === "application/xml"
+    || mime.endsWith("+xml")
+    || mime === "application/javascript"
+    || mime === "application/x-javascript"
+    || mime === "image/svg+xml";
 }
 
 export function extractTextFromHtml(html: string): string {
@@ -439,6 +457,13 @@ export async function fetchWeb(
       throw new Error(`Web fetch failed with HTTP ${response.status}${suffix}`);
     }
 
+    const contentType = response.headers.get("Content-Type") ?? "";
+    if (!isTextualContentType(contentType)) {
+      await cancelBody(response.body, "unsupported content type");
+      const detail = sanitizeDetail(contentType);
+      throw new Error(`Web fetch unsupported content type${detail.length === 0 ? ": (missing)" : `: ${detail}`}`);
+    }
+
     const contentLength = validContentLength(response.headers.get("Content-Length"));
     if (contentLength !== undefined && contentLength > BigInt(MAX_RESPONSE_BYTES)) {
       await cancelBody(response.body, "response Content-Length exceeds limit");
@@ -447,7 +472,6 @@ export async function fetchWeb(
 
     const collected = await collectBody(response.body, MAX_RESPONSE_BYTES, controller.signal);
     if (abortKind !== undefined) throw abortError(abortKind, input.timeout);
-    const contentType = response.headers.get("Content-Type") ?? "";
     return {
       finalUrl: response.url || input.url,
       contentType,
