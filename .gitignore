@@ -19,6 +19,7 @@
 .pi/agent/models.json
 .pi/agent/settings.json
 .pi/agent/auth.json
+.pi/agent/extensions/web-fetch/node_modules/
 
 # shell: local helper functions may contain private item paths.
 scripts/internal.sh

@@ -5,6 +5,7 @@
 ^/\.agents$
 ^/\.config/opencode/internal\.jsonc$
 ^/\.pi/agent/models\.json$
+^/\.pi/agent/extensions/web-fetch/node_modules$
 ^/scripts/internal\.sh$
 LICENSE.md
 Makefile

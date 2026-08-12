@@ -51,6 +51,7 @@ agents:
 	herdr integration install claude
 	herdr integration install pi
 	herdr integration install opencode
+	npm ci --omit=dev --prefix .pi/agent/extensions/web-fetch
 	pi install npm:@plannotator/pi-extension
 
 .PHONY: pacman
@@ -118,6 +119,7 @@ go-install:
 
 .PHONY: link
 link:
+	mkdir -p $(HOME)/.pi/agent/extensions/web-fetch
 	stow --verbose --restow --target=$(HOME) .
 	mkdir -p $(LOCAL_BIN_PATH)
 	stow --verbose --restow --dir ./bin --target $(LOCAL_BIN_PATH) .
