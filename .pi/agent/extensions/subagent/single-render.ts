@@ -12,13 +12,18 @@ export interface SingleRenderPresentation {
 	state: SingleRenderState;
 }
 
+export interface SingleRenderDescriptor {
+	label: string;
+	showSource?: boolean;
+}
+
 export interface SingleRenderPresentationInput {
 	agent: string;
 	agentSource: string;
 	status: SingleRenderStatus;
 	isPartial: boolean;
 	failed: boolean;
-	oracle?: boolean;
+	descriptor?: SingleRenderDescriptor;
 }
 
 export interface RenderableSingleResult {
@@ -57,8 +62,8 @@ export function formatTaskPreview(task: string, maximumLength = 60): string {
 
 export function describeSingleResult(input: SingleRenderPresentationInput): SingleRenderPresentation {
 	return {
-		label: input.oracle ? "oracle" : input.agent,
-		source: input.oracle ? undefined : input.agentSource,
+		label: input.descriptor?.label ?? input.agent,
+		source: input.descriptor?.showSource === false ? undefined : input.agentSource,
 		state:
 			input.isPartial || input.status === "queued" || input.status === "running"
 				? "running"
@@ -124,18 +129,10 @@ export function formatToolCall(
 		return themeFg("muted", "read ") + themeFg("accent", file);
 	}
 	if (toolName === "grep") {
-		return (
-			themeFg("muted", "grep ") +
-			themeFg("accent", `/${String(args.pattern ?? "")}/`) +
-			themeFg("dim", ` in ${shortenPath(String(args.path ?? "."))}`)
-		);
+		return themeFg("muted", "grep ") + themeFg("accent", `/${String(args.pattern ?? "")}/`) + themeFg("dim", ` in ${shortenPath(String(args.path ?? "."))}`);
 	}
 	if (toolName === "find") {
-		return (
-			themeFg("muted", "find ") +
-			themeFg("accent", String(args.pattern ?? "*")) +
-			themeFg("dim", ` in ${shortenPath(String(args.path ?? "."))}`)
-		);
+		return themeFg("muted", "find ") + themeFg("accent", String(args.pattern ?? "*")) + themeFg("dim", ` in ${shortenPath(String(args.path ?? "."))}`);
 	}
 	if (toolName === "ls") return themeFg("muted", "ls ") + themeFg("accent", shortenPath(String(args.path ?? ".")));
 	if (toolName === "bash") {
@@ -148,7 +145,7 @@ export function formatToolCall(
 
 export function renderSingleResult<Node>(
 	agent: RenderableSingleResult,
-	options: { expanded: boolean; isPartial: boolean; failed: boolean; oracle?: boolean },
+	options: { expanded: boolean; isPartial: boolean; failed: boolean; descriptor?: SingleRenderDescriptor },
 	theme: SingleRenderTheme,
 	adapter: SingleRenderAdapter<Node>,
 ): Node {
@@ -158,14 +155,9 @@ export function renderSingleResult<Node>(
 		status: agent.status,
 		isPartial: options.isPartial,
 		failed: options.failed,
-		oracle: options.oracle,
+		descriptor: options.descriptor,
 	});
-	const status =
-		presentation.state === "running"
-			? theme.fg("warning", "...")
-			: presentation.state === "failed"
-				? theme.fg("error", "x")
-				: theme.fg("success", "ok");
+	const status = presentation.state === "running" ? theme.fg("warning", "...") : presentation.state === "failed" ? theme.fg("error", "x") : theme.fg("success", "ok");
 	const header = `${status} ${theme.fg("toolTitle", theme.bold(presentation.label))}${presentation.source ? theme.fg("muted", ` (${presentation.source})`) : ""}`;
 	const displayItems = getDisplayItems(agent.messages);
 	const finalOutput = getFinalOutput(agent.messages);
@@ -177,11 +169,8 @@ export function renderSingleResult<Node>(
 		for (const item of displayItems) {
 			if (item.type === "toolCall") children.push(adapter.text(theme.fg("muted", "-> ") + formatToolCall(item.name, item.args, theme.fg.bind(theme))));
 		}
-		if (finalOutput) {
-			children.push(adapter.spacer(), adapter.markdown(finalOutput.trim()));
-		} else if (!diagnostic) {
-			children.push(adapter.text(theme.fg("muted", presentation.state === "running" ? "(running...)" : "(no output)")));
-		}
+		if (finalOutput) children.push(adapter.spacer(), adapter.markdown(finalOutput.trim()));
+		else if (!diagnostic) children.push(adapter.text(theme.fg("muted", presentation.state === "running" ? "(running...)" : "(no output)")));
 		if (diagnostic) children.push(adapter.spacer(), adapter.text(theme.fg("error", diagnostic)));
 		if (usage) children.push(adapter.spacer(), adapter.text(theme.fg("dim", usage)));
 		return adapter.container(children);
@@ -201,18 +190,10 @@ export function renderSingleResult<Node>(
 	return adapter.text(text);
 }
 
-export function renderOracleCall<Node>(task: string, theme: SingleRenderTheme, adapter: SingleRenderAdapter<Node>): Node {
-	return adapter.text(`${theme.fg("toolTitle", theme.bold("oracle"))}\n  ${theme.fg("dim", formatTaskPreview(task))}`);
+export function renderDedicatedSingleCall<Node>(label: string, task: string, theme: SingleRenderTheme, adapter: SingleRenderAdapter<Node>): Node {
+	return adapter.text(`${theme.fg("toolTitle", theme.bold(label))}\n  ${theme.fg("dim", formatTaskPreview(task))}`);
 }
 
-export function renderGenericSingleCall<Node>(
-	agent: string,
-	scope: string,
-	task: string,
-	theme: SingleRenderTheme,
-	adapter: SingleRenderAdapter<Node>,
-): Node {
-	return adapter.text(
-		`${theme.fg("toolTitle", theme.bold("subagent "))}${theme.fg("accent", agent)}${theme.fg("muted", ` [${scope}]`)}\n  ${theme.fg("dim", formatTaskPreview(task))}`,
-	);
+export function renderGenericSingleCall<Node>(agent: string, scope: string, task: string, theme: SingleRenderTheme, adapter: SingleRenderAdapter<Node>): Node {
+	return adapter.text(`${theme.fg("toolTitle", theme.bold("subagent "))}${theme.fg("accent", agent)}${theme.fg("muted", ` [${scope}]`)}\n  ${theme.fg("dim", formatTaskPreview(task))}`);
 }

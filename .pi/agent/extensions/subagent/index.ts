@@ -25,26 +25,28 @@ import {
 	getDisplayItems,
 	getFailureDiagnostic,
 	getFinalOutput,
+	renderDedicatedSingleCall,
 	renderGenericSingleCall,
-	renderOracleCall,
 	renderSingleResult,
 	type SingleRenderAdapter,
 } from "./single-render.ts";
 import { registerToolResultMiddleware } from "./tool-result-middleware.ts";
 import {
-	boundOracleOutput,
-	cloneOracleAgent,
-	composeOraclePrompt,
-	normalizeOracleInput,
-	ORACLE_AGENT_NAME,
-	ORACLE_MODEL,
-	preflightOracleTools,
-	selectOracleTools,
-	selectUserOracleAgent,
-	withOracleFailureState,
-	type NormalizedOracleInput,
+	boundResearchOutput,
+	cloneResearcherAgent,
+	composeResearchPrompt,
+	normalizeResearchInput,
+	preflightResearchTools,
+	RESEARCH_AGENT_NAME,
+	RESEARCH_MAX_BYTES,
+	RESEARCH_MAX_LINES,
+	RESEARCH_MODEL,
+	selectUserResearcherAgent,
+	withResearchFailureState,
+	type NormalizedResearchInput,
+	type ResearchEffort,
 	type WebResearchMode,
-} from "./oracle.ts";
+} from "./research.ts";
 import {
 	assertCanDelegate,
 	boundParallelOutput,
@@ -87,14 +89,15 @@ interface DispatchDefaults {
 	thinkingLevel?: ThinkingLevel;
 }
 
-interface OracleDetails {
-	kind: "oracle";
+interface ResearchDetails {
+	kind: "research";
 	agentScope: "user";
-	model: typeof ORACLE_MODEL;
+	model: typeof RESEARCH_MODEL;
 	reasoningLevel: "high";
 	effectiveTools: string[];
-	requestedClaims: string[];
+	files: string[];
 	webResearch: WebResearchMode;
+	effort: ResearchEffort;
 	usage: UsageStats;
 	results: SingleResult[];
 	failed: boolean;
@@ -148,29 +151,30 @@ function boundModelOutput(output: string): string {
 	);
 }
 
-function boundOracleAdvice(output: string): string {
-	return boundOracleOutput(
+function boundResearchResult(output: string): string {
+	return boundResearchOutput(
 		output,
-		{ maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES },
+		{ maxLines: RESEARCH_MAX_LINES, maxBytes: RESEARCH_MAX_BYTES },
 		truncateHead,
 		formatSize,
 	);
 }
 
-function makeOracleDetails(
-	input: NormalizedOracleInput,
+function makeResearchDetails(
+	input: NormalizedResearchInput,
 	effectiveTools: readonly string[],
 	results: SingleResult[],
 	failed = false,
-): OracleDetails {
+): ResearchDetails {
 	return {
-		kind: "oracle",
+		kind: "research",
 		agentScope: "user",
-		model: ORACLE_MODEL,
+		model: RESEARCH_MODEL,
 		reasoningLevel: "high",
 		effectiveTools: [...effectiveTools],
-		requestedClaims: [...input.claims],
+		files: [...input.files],
 		webResearch: input.webResearch,
+		effort: input.effort,
 		usage: aggregateUsage(results),
 		results,
 		failed,
@@ -239,7 +243,7 @@ async function runSingleAgent(
 ): Promise<SingleResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) {
-		const available = agents.map((candidate) => `"${candidate.name}"`).join(", ") || "none";
+		const available = agents.filter((candidate) => candidate.name !== "oracle").map((candidate) => `"${candidate.name}"`).join(", ") || "none";
 		return makeFailure(agentName, task, `Unknown agent: "${agentName}". Available agents: ${available}. Omit agentScope to use its "user" default for agents in ${path.join(getAgentDir(), "agents")}; project agents must be in ${CONFIG_DIR_NAME}/agents.`);
 	}
 
@@ -403,15 +407,20 @@ const ChainItem = Type.Object({
 	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd" })),
 });
 
-const OracleParams = Type.Object({
-	task: Type.String({ description: "Decision, question, review, or investigation for Oracle", minLength: 1, pattern: "\\S" }),
-	context: Type.Optional(Type.String({ description: "Unverified caller observations, output, constraints, or supplied diff" })),
-	files: Type.Optional(Type.Array(Type.String({ description: "Repository-relative path to inspect" }))),
-	claims: Type.Optional(Type.Array(Type.String({ description: "Unverified assertion Oracle must assess individually" }))),
+const ResearchParams = Type.Object({
+	task: Type.String({ description: "Research question and requested deliverable", minLength: 1, pattern: "\\S" }),
+	context: Type.Optional(Type.String({ description: "Unverified caller material, constraints, or supplied evidence" })),
+	files: Type.Optional(Type.Array(Type.String({ description: "Repository-relative evidence target" }))),
 	webResearch: Type.Optional(
 		StringEnum(["auto", "required", "disabled"] as const, {
 			description: "Web research policy. Default: auto.",
 			default: "auto",
+		}),
+	),
+	effort: Type.Optional(
+		StringEnum(["standard", "deep"] as const, {
+			description: "Research breadth and contradiction checking. Default: standard.",
+			default: "standard",
 		}),
 	),
 }, { additionalProperties: false });
@@ -444,27 +453,27 @@ export default function (pi: ExtensionAPI) {
 	registerToolResultMiddleware(pi);
 
 	pi.registerTool({
-		name: "oracle",
-		label: "Oracle",
-		description: "Get evidence-first, read-only advice for consequential decisions, source-sensitive research, multi-file static debugging, and final challenges to expensive plans. Oracle output is advisory and bounded to 2,000 lines or 50KB.",
-		promptSnippet: "Investigate consequential decisions and source-sensitive questions with a read-only evidence-first Oracle",
+		name: "research",
+		label: "Research",
+		description: "Run isolated read-only Research for iterative multi-source synthesis, conflicting evidence, or source-sensitive reports. For a narrow lookup or known URL, use websearch or webfetch directly.",
+		promptSnippet: "Use isolated Research for iterative multi-source synthesis and source-sensitive reports",
 		promptGuidelines: [
-			"Use oracle for consequential or cross-cutting decisions, inconclusive investigations, current or source-sensitive research, multi-file static debugging, and final challenges to expensive plans.",
-			"Do not use oracle for routine lookup, straightforward implementation, style-only review, or work that requires immediate file changes.",
+			"Use Research for iterative multi-source synthesis, conflicting evidence, and source-sensitive reports.",
+			"Use websearch or webfetch directly for a narrow discovery lookup or known URL.",
 		],
-		parameters: OracleParams,
+		parameters: ResearchParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			let input: NormalizedOracleInput;
+			let input: NormalizedResearchInput;
 			let effectiveTools: string[] = [];
 			try {
-				input = normalizeOracleInput(params, ctx.cwd);
+				input = normalizeResearchInput(params, ctx.cwd);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				return {
 					content: [{ type: "text", text: message }],
-					details: makeOracleDetails(
-						{ task: "", files: [], claims: [], webResearch: "auto" },
+					details: makeResearchDetails(
+						{ task: "", files: [], webResearch: "auto", effort: "standard" },
 						[],
 						[],
 						true,
@@ -475,11 +484,10 @@ export default function (pi: ExtensionAPI) {
 			try {
 				assertCanDelegate();
 				const discovery = discoverAgents(ctx.cwd, "user");
-				const agent = selectUserOracleAgent(discovery.agents);
-				effectiveTools = selectOracleTools(agent.tools ?? [], pi.getActiveTools());
-				effectiveTools = preflightOracleTools(agent.tools ?? [], pi.getActiveTools(), input);
-				const prompt = composeOraclePrompt(input, effectiveTools);
-				const clonedAgent = cloneOracleAgent(agent, effectiveTools) as AgentConfig;
+				const agent = selectUserResearcherAgent(discovery.agents);
+				effectiveTools = preflightResearchTools(agent.tools ?? [], pi.getActiveTools(), input);
+				const prompt = composeResearchPrompt(input, effectiveTools);
+				const clonedAgent = cloneResearcherAgent(agent, effectiveTools) as AgentConfig;
 				const dispatchDefaults: DispatchDefaults = {
 					model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
 					thinkingLevel: ctx.thinkingLevel,
@@ -490,14 +498,14 @@ export default function (pi: ExtensionAPI) {
 					projectAgentsDir: null,
 					results,
 				});
-				const toOracleResult = (result: SingleResult): SingleResult => ({ ...result, task: input.task });
-				const result = toOracleResult(
+				const toResearchResult = (result: SingleResult): SingleResult => ({ ...result, task: input.task });
+				const result = toResearchResult(
 					await runSingleAgent(
 						ctx.cwd,
 						dispatchDefaults,
 						pi.getActiveTools(),
 						[clonedAgent],
-						ORACLE_AGENT_NAME,
+						RESEARCH_AGENT_NAME,
 						prompt,
 						undefined,
 						signal,
@@ -505,13 +513,10 @@ export default function (pi: ExtensionAPI) {
 							? (partial) => {
 									const current = partial.details?.results[0];
 									if (!current) return;
-									const snapshot = toOracleResult(current);
+									const snapshot = toResearchResult(current);
 									onUpdate({
-										content: [{ type: "text", text: boundOracleAdvice(getResultOutput(snapshot) || "(running...)") }],
-										details: withOracleFailureState(
-										makeOracleDetails(input, effectiveTools, [snapshot]),
-										isFailedResult(snapshot),
-									),
+										content: [{ type: "text", text: boundResearchResult(getResultOutput(snapshot) || "(running...)") }],
+										details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [snapshot]), isFailedResult(snapshot)),
 									});
 								}
 							: undefined,
@@ -520,24 +525,24 @@ export default function (pi: ExtensionAPI) {
 				);
 				const failed = isFailedResult(result);
 				return {
-					content: [{ type: "text", text: boundOracleAdvice(getResultOutput(result)) }],
-					details: withOracleFailureState(makeOracleDetails(input, effectiveTools, [result]), failed),
+					content: [{ type: "text", text: boundResearchResult(getResultOutput(result)) }],
+					details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [result]), failed),
 				};
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				return {
-					content: [{ type: "text", text: message }],
-					details: makeOracleDetails(input, effectiveTools, [], true),
+					content: [{ type: "text", text: boundResearchResult(message) }],
+					details: makeResearchDetails(input, effectiveTools, [], true),
 				};
 			}
 		},
 
 		renderCall(args, theme) {
-			return renderOracleCall(args.task ?? "...", theme, singleRenderAdapter);
+			return renderDedicatedSingleCall("research", args.task ?? "...", theme, singleRenderAdapter);
 		},
 
 		renderResult(result, options, theme) {
-			const details = result.details as OracleDetails | undefined;
+			const details = result.details as ResearchDetails | undefined;
 			if (!details?.results.length) {
 				const content = result.content[0];
 				const text = content?.type === "text" ? content.text : "(no output)";
@@ -545,7 +550,7 @@ export default function (pi: ExtensionAPI) {
 			}
 			return renderSingleResult(
 				details.results[0],
-				{ ...options, failed: isFailedResult(details.results[0]), oracle: true },
+				{ ...options, failed: isFailedResult(details.results[0]), descriptor: { label: "research", showSource: false } },
 				theme,
 				singleRenderAdapter,
 			);
