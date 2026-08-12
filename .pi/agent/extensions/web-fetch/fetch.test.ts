@@ -25,6 +25,18 @@ import type { FetchTestOptions, WebFetchInput } from "./fetch.ts";
 
 const OPENCODE_WEBFETCH_REFERENCE = "https://github.com/anomalyco/opencode/blob/959c8bd4981fe838df102ddb7a7974e3117e92c6/packages/opencode/src/tool/webfetch.ts";
 
+// Literal request values from the pinned OpenCode revision above. Do not derive
+// these expectations from fetch.ts: this test guards source parity.
+const PINNED_OPENCODE_ACCEPT_HEADERS = {
+  markdown: "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1",
+  text: "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1",
+  html: "text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1",
+} as const;
+const PINNED_OPENCODE_REQUEST_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+  "Accept-Language": "en-US,en;q=0.9",
+} as const;
+
 const piPackageDirectory = join(
   execFileSync("npm", ["root", "--global"], { encoding: "utf8" }).trim(),
   "@earendil-works/pi-coding-agent",
@@ -179,6 +191,9 @@ test("rejects invalid input without adding a destination deny-list", () => {
 });
 
 test(`uses OpenCode ${OPENCODE_WEBFETCH_REFERENCE} negotiated and browser-like request headers`, async () => {
+  assert.deepEqual(ACCEPT_HEADERS, PINNED_OPENCODE_ACCEPT_HEADERS);
+  assert.deepEqual(REQUEST_HEADERS, PINNED_OPENCODE_REQUEST_HEADERS);
+
   for (const format of ["markdown", "text", "html"] as const) {
     let call: { input: string | URL | Request; init?: RequestInit } | undefined;
     const { options } = testOptions(async (input, init) => {
@@ -189,8 +204,8 @@ test(`uses OpenCode ${OPENCODE_WEBFETCH_REFERENCE} negotiated and browser-like r
     await fetchWeb({ url: "https://example.com/", format }, undefined, options);
     assert.equal(call?.input, "https://example.com/");
     assert.deepEqual(call?.init?.headers, {
-      ...REQUEST_HEADERS,
-      Accept: ACCEPT_HEADERS[format],
+      ...PINNED_OPENCODE_REQUEST_HEADERS,
+      Accept: PINNED_OPENCODE_ACCEPT_HEADERS[format],
     });
     assert.ok(call?.init?.signal instanceof AbortSignal);
   }
@@ -802,6 +817,45 @@ test("follows relative and cross-origin redirects and bounds redirect loops", as
   );
 });
 
+test("preserves one injected deadline while Fetch follows delayed redirects", async (context) => {
+  const finalRequest = Promise.withResolvers<void>();
+  const releaseFinalResponse = Promise.withResolvers<void>();
+  const finalServer = createServer(async (_request, response) => {
+    finalRequest.resolve();
+    await releaseFinalResponse.promise;
+    response.writeHead(200, { "Content-Type": "text/plain" });
+    response.end("too late");
+  });
+  const redirectServer = createServer((_request, response) => {
+    const address = finalServer.address();
+    assert.ok(address && typeof address !== "string");
+    response.writeHead(302, { Location: `http://127.0.0.1:${address.port}/final` });
+    response.end();
+  });
+  await Promise.all([
+    new Promise<void>((resolve) => finalServer.listen(0, "127.0.0.1", resolve)),
+    new Promise<void>((resolve) => redirectServer.listen(0, "127.0.0.1", resolve)),
+  ]);
+  context.after(() => finalServer.close());
+  context.after(() => redirectServer.close());
+  const redirectAddress = redirectServer.address();
+  assert.ok(redirectAddress && typeof redirectAddress !== "string");
+
+  const { clock, options } = testOptions(fetch);
+  const pending = fetchWeb({
+    url: `http://127.0.0.1:${redirectAddress.port}/redirect`,
+    format: "text",
+    timeout: 1,
+  }, undefined, options);
+  await finalRequest.promise;
+  clock.fire(1_000);
+  releaseFinalResponse.resolve();
+
+  await assert.rejects(pending, /^Error: Web fetch timed out after 1 seconds$/);
+  assert.deepEqual(clock.scheduled, [1_000]);
+  assert.equal(clock.pending(), 0);
+});
+
 test("bounds HTTP diagnostics at a valid UTF-8 boundary and leaves empty errors drained", async () => {
   const marker = "must-not-appear";
   const partialCodePoint = encoded(`${"x".repeat(MAX_ERROR_EXCERPT_BYTES - 2)}🙂${marker}`);
@@ -860,31 +914,119 @@ test("uses the first abort at fetch and completion boundaries", async () => {
   assert.equal(fixture.body.locked, false);
 });
 
-test("cleans timers, caller listeners, body listeners, and locks on each bounded failure", async () => {
-  const cases = [
+test("cleans timers, caller listeners, body listeners, and locks on every tested failure class", async () => {
+  type TestFetch = NonNullable<FetchTestOptions["fetch"]>;
+  const assertLifecycle = async (
+    testFetch: TestFetch,
+    run?: (fetch: TestFetch, caller: AbortController, clock: FakeClock, options: FetchTestOptions) => Promise<unknown>,
+  ) => {
+    const caller = new AbortController();
+    const callerListeners = trackAbortListeners(caller.signal);
+    let transportListeners: ReturnType<typeof trackAbortListeners> | undefined;
+    const { clock, options } = testOptions(testFetch);
+    const fetch: TestFetch = async (input, init) => {
+      assert.ok(init?.signal);
+      transportListeners ??= trackAbortListeners(init.signal);
+      return testFetch(input, init);
+    };
+    const execute = run ?? ((trackedFetch: TestFetch, signal: AbortController) => fetchWeb(
+      { url: "https://example.com/failure" }, signal.signal, { ...options, fetch: trackedFetch },
+    ));
+    await assert.rejects(execute(fetch, caller, clock, options));
+    assert.equal(clock.pending(), 0);
+    assert.equal(callerListeners.additions(), callerListeners.removals());
+    assert.equal(transportListeners?.additions(), transportListeners?.removals());
+  };
+
+  for (const makeFixture of [
     () => streamResponse([encoded("bad request")], { status: 400 }),
     () => streamResponse([encoded("binary")], { headers: { "Content-Type": "application/pdf" } }, false),
     () => streamResponse([new Uint8Array(MAX_RESPONSE_BYTES), new Uint8Array([1])], {
       headers: { "Content-Type": "text/plain" },
     }, false),
-  ];
-
-  for (const makeFixture of cases) {
-    const caller = new AbortController();
-    const callerListeners = trackAbortListeners(caller.signal);
+  ]) {
     const fixture = makeFixture();
-    let transportListeners: ReturnType<typeof trackAbortListeners> | undefined;
-    const { clock, options } = testOptions(async (_input, init) => {
-      assert.ok(init?.signal);
-      transportListeners = trackAbortListeners(init.signal);
-      return fixture.response;
-    });
-    await assert.rejects(fetchWeb({ url: "https://example.com/failure" }, caller.signal, options));
+    await assertLifecycle(async () => fixture.response);
     assert.equal(fixture.body.locked, false);
-    assert.equal(clock.pending(), 0);
-    assert.equal(callerListeners.additions(), callerListeners.removals());
-    assert.equal(transportListeners?.additions(), transportListeners?.removals());
   }
+
+  let declaredCancels = 0;
+  const declaredBody = {
+    locked: false,
+    cancel: async () => { declaredCancels++; },
+    getReader: () => { throw new Error("declared oversized body must not be read"); },
+  };
+  await assertLifecycle(async () => ({
+    ok: true,
+    status: 200,
+    headers: new Headers({
+      "Content-Type": "text/plain",
+      "Content-Length": String(MAX_RESPONSE_BYTES + 1),
+    }),
+    body: declaredBody,
+    url: "https://example.com/declared",
+  } as unknown as Response));
+  assert.equal(declaredCancels, 1);
+  assert.equal(declaredBody.locked, false);
+
+  await assertLifecycle(async () => { throw new TypeError("offline"); });
+
+  await assertLifecycle(
+    async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      const onAbort = () => {
+        init?.signal?.removeEventListener("abort", onAbort);
+        reject(init?.signal?.reason);
+      };
+      init?.signal?.addEventListener("abort", onAbort, { once: true });
+    }),
+    (fetch, caller, clock, options) => {
+      const pending = fetchWeb({ url: "https://example.com/fetch-wait", timeout: 1 }, caller.signal, {
+        ...options,
+        fetch,
+      });
+      clock.fire(1_000);
+      return pending;
+    },
+  );
+
+  const challenge = streamResponse([encoded("challenge")], {
+    status: 403,
+    headers: { "cf-mitigated": "challenge" },
+  }, false);
+  const retryFailure = streamResponse([encoded("unavailable")], { status: 503 });
+  let retryCalls = 0;
+  await assertLifecycle(async () => ++retryCalls === 1 ? challenge.response : retryFailure.response);
+  assert.equal(challenge.cancellations(), 1);
+  assert.equal(challenge.body.locked, false);
+  assert.equal(retryFailure.body.locked, false);
+
+  const cancelStarted = Promise.withResolvers<void>();
+  const releaseCancel = Promise.withResolvers<void>();
+  let challengeBoundaryCancels = 0;
+  const challengeBoundary = new Response(new ReadableStream<Uint8Array>({
+    cancel: async () => {
+      challengeBoundaryCancels++;
+      cancelStarted.resolve();
+      await releaseCancel.promise;
+    },
+  }), { status: 403, headers: { "cf-mitigated": "challenge" } });
+  let boundaryCalls = 0;
+  await assertLifecycle(
+    async () => {
+      boundaryCalls++;
+      return challengeBoundary;
+    },
+    async (fetch, caller, _clock, options) => {
+      const pending = fetchWeb({ url: "https://example.com/challenge-boundary" }, caller.signal, { ...options, fetch });
+      await cancelStarted.promise;
+      caller.abort("stop before retry");
+      releaseCancel.resolve();
+      return pending;
+    },
+  );
+  assert.equal(boundaryCalls, 1);
+  assert.equal(challengeBoundaryCancels, 1);
+  assert.equal(challengeBoundary.body?.locked, false);
 });
 
 test("live public webfetch smoke test", {
