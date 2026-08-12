@@ -12,12 +12,28 @@ import {
 	formatSize,
 	getAgentDir,
 	getMarkdownTheme,
+	truncateHead,
 	truncateTail,
 	withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
+import {
+	boundOracleOutput,
+	cloneOracleAgent,
+	composeOraclePrompt,
+	isFailedToolResult,
+	normalizeOracleInput,
+	ORACLE_AGENT_NAME,
+	ORACLE_MODEL,
+	preflightOracleTools,
+	selectOracleTools,
+	selectUserOracleAgent,
+	withOracleFailureState,
+	type NormalizedOracleInput,
+	type WebResearchMode,
+} from "./oracle.ts";
 import {
 	assertCanDelegate,
 	boundParallelOutput,
@@ -61,6 +77,19 @@ interface SubagentDetails {
 interface DispatchDefaults {
 	model?: string;
 	thinkingLevel?: ThinkingLevel;
+}
+
+interface OracleDetails {
+	kind: "oracle";
+	agentScope: "user";
+	model: typeof ORACLE_MODEL;
+	reasoningLevel: "high";
+	effectiveTools: string[];
+	requestedClaims: string[];
+	webResearch: WebResearchMode;
+	usage: UsageStats;
+	results: SingleResult[];
+	failed: boolean;
 }
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
@@ -120,6 +149,35 @@ function boundModelOutput(output: string): string {
 		truncateTail,
 		formatSize,
 	);
+}
+
+function boundOracleAdvice(output: string): string {
+	return boundOracleOutput(
+		output,
+		{ maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES },
+		truncateHead,
+		formatSize,
+	);
+}
+
+function makeOracleDetails(
+	input: NormalizedOracleInput,
+	effectiveTools: readonly string[],
+	results: SingleResult[],
+	failed = false,
+): OracleDetails {
+	return {
+		kind: "oracle",
+		agentScope: "user",
+		model: ORACLE_MODEL,
+		reasoningLevel: "high",
+		effectiveTools: [...effectiveTools],
+		requestedClaims: [...input.claims],
+		webResearch: input.webResearch,
+		usage: aggregateUsage(results),
+		results,
+		failed,
+	};
 }
 
 function getDisplayItems(messages: Message[]): DisplayItem[] {
@@ -409,6 +467,19 @@ const ChainItem = Type.Object({
 	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd" })),
 });
 
+const OracleParams = Type.Object({
+	task: Type.String({ description: "Decision, question, review, or investigation for Oracle", minLength: 1, pattern: "\\S" }),
+	context: Type.Optional(Type.String({ description: "Unverified caller observations, output, constraints, or supplied diff" })),
+	files: Type.Optional(Type.Array(Type.String({ description: "Repository-relative path to inspect" }))),
+	claims: Type.Optional(Type.Array(Type.String({ description: "Unverified assertion Oracle must assess individually" }))),
+	webResearch: Type.Optional(
+		StringEnum(["auto", "required", "disabled"] as const, {
+			description: "Web research policy. Default: auto.",
+			default: "auto",
+		}),
+	),
+}, { additionalProperties: false });
+
 const SubagentParams = Type.Object({
 	agent: Type.Optional(Type.String({ description: "Name of the agent to invoke (single mode)", minLength: 1, maxLength: 160 })),
 	task: Type.Optional(Type.String({ description: "Task to delegate (single mode)", minLength: 1 })),
@@ -435,9 +506,97 @@ const SubagentParams = Type.Object({
 
 export default function (pi: ExtensionAPI) {
 	pi.on("tool_result", (event) => {
-		if (event.toolName !== "subagent") return;
-		const details = event.details as SubagentDetails | undefined;
-		if (details?.failed) return { isError: true };
+		if (isFailedToolResult(event.toolName, event.details)) return { isError: true };
+	});
+
+	pi.registerTool({
+		name: "oracle",
+		label: "Oracle",
+		description: "Get evidence-first, read-only advice for consequential decisions, source-sensitive research, multi-file static debugging, and final challenges to expensive plans. Oracle output is advisory and bounded to 2,000 lines or 50KB.",
+		promptSnippet: "Investigate consequential decisions and source-sensitive questions with a read-only evidence-first Oracle",
+		promptGuidelines: [
+			"Use oracle for consequential or cross-cutting decisions, inconclusive investigations, current or source-sensitive research, multi-file static debugging, and final challenges to expensive plans.",
+			"Do not use oracle for routine lookup, straightforward implementation, style-only review, or work that requires immediate file changes.",
+		],
+		parameters: OracleParams,
+
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			let input: NormalizedOracleInput;
+			let effectiveTools: string[] = [];
+			try {
+				input = normalizeOracleInput(params, ctx.cwd);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					content: [{ type: "text", text: message }],
+					details: makeOracleDetails(
+						{ task: "", files: [], claims: [], webResearch: "auto" },
+						[],
+						[],
+						true,
+					),
+				};
+			}
+
+			try {
+				assertCanDelegate();
+				const discovery = discoverAgents(ctx.cwd, "user");
+				const agent = selectUserOracleAgent(discovery.agents);
+				effectiveTools = selectOracleTools(agent.tools ?? [], pi.getActiveTools());
+				effectiveTools = preflightOracleTools(agent.tools ?? [], pi.getActiveTools(), input);
+				const prompt = composeOraclePrompt(input, effectiveTools);
+				const clonedAgent = cloneOracleAgent(agent, effectiveTools) as AgentConfig;
+				const dispatchDefaults: DispatchDefaults = {
+					model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+					thinkingLevel: ctx.thinkingLevel,
+				};
+				const genericDetails = (results: SingleResult[]): SubagentDetails => ({
+					mode: "single",
+					agentScope: "user",
+					projectAgentsDir: null,
+					results,
+				});
+				const toOracleResult = (result: SingleResult): SingleResult => ({ ...result, task: input.task });
+				const result = toOracleResult(
+					await runSingleAgent(
+						ctx.cwd,
+						dispatchDefaults,
+						pi.getActiveTools(),
+						[clonedAgent],
+						ORACLE_AGENT_NAME,
+						prompt,
+						undefined,
+						signal,
+						onUpdate
+							? (partial) => {
+									const current = partial.details?.results[0];
+									if (!current) return;
+									const snapshot = toOracleResult(current);
+									onUpdate({
+										content: [{ type: "text", text: boundOracleAdvice(getResultOutput(snapshot) || "(running...)") }],
+										details: withOracleFailureState(
+										makeOracleDetails(input, effectiveTools, [snapshot]),
+										isFailedResult(snapshot),
+									),
+									});
+								}
+							: undefined,
+						genericDetails,
+					),
+				);
+				const failed = isFailedResult(result);
+				return {
+					content: [{ type: "text", text: boundOracleAdvice(getResultOutput(result)) }],
+					details: withOracleFailureState(makeOracleDetails(input, effectiveTools, [result]), failed),
+				};
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					content: [{ type: "text", text: message }],
+					details: makeOracleDetails(input, effectiveTools, [], true),
+				};
+			}
+		},
 	});
 
 	pi.registerTool({
