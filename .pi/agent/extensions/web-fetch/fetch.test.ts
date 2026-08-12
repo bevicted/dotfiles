@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
+import { registerHooks } from "node:module";
+import { join } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
 import {
   ACCEPT_HEADERS,
@@ -19,6 +23,43 @@ import {
 import type { FetchTestOptions, WebFetchInput } from "./fetch.ts";
 
 const OPENCODE_WEBFETCH_REFERENCE = "https://github.com/anomalyco/opencode/blob/959c8bd4981fe838df102ddb7a7974e3117e92c6/packages/opencode/src/tool/webfetch.ts";
+
+const piPackageDirectory = join(
+  execFileSync("npm", ["root", "--global"], { encoding: "utf8" }).trim(),
+  "@earendil-works/pi-coding-agent",
+);
+const piRuntimeModules = new Map([
+  ["@earendil-works/pi-ai", "node_modules/@earendil-works/pi-ai/dist/index.js"],
+  ["@earendil-works/pi-tui", "node_modules/@earendil-works/pi-tui/dist/index.js"],
+  ["typebox", "node_modules/typebox/build/index.mjs"],
+].map(([specifier, path]) => [specifier, pathToFileURL(join(piPackageDirectory, path)).href]));
+
+// Node's test runner does not inherit Pi's package resolver, unlike extension loading.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const url = piRuntimeModules.get(specifier);
+    return url === undefined ? nextResolve(specifier, context) : { url, shortCircuit: true };
+  },
+});
+
+interface RegisteredWebfetchTool {
+  name: string;
+  description: string;
+  promptSnippet: string;
+  execute(toolCallId: string, params: unknown, signal: AbortSignal): Promise<unknown>;
+}
+
+async function loadRegisteredWebfetchTool(): Promise<RegisteredWebfetchTool> {
+  const { default: webFetchExtension } = await import("./index.ts");
+  let registered: RegisteredWebfetchTool | undefined;
+  webFetchExtension({
+    registerTool(tool: unknown) {
+      registered = tool as RegisteredWebfetchTool;
+    },
+  } as never);
+  assert.ok(registered, "webfetch extension must register its tool");
+  return registered;
+}
 
 function asInput(value: unknown): WebFetchInput {
   return value as WebFetchInput;
@@ -220,7 +261,7 @@ test("retrieves a local HTTP response through the real Fetch transport", async (
   assert.ok(result.responseBytes > 0);
 });
 
-test("returns raster image blocks and SVG text from a local HTTP fixture", async (context) => {
+test("registered tool returns raster image blocks and SVG text from a local HTTP fixture", async (context) => {
   const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
   const svg = '<svg xmlns="http://www.w3.org/2000/svg"><text>hello</text></svg>';
   const server = createServer((request, response) => {
@@ -237,27 +278,43 @@ test("returns raster image blocks and SVG text from a local HTTP fixture", async
   const address = server.address();
   assert.ok(address && typeof address !== "string");
   const baseUrl = `http://127.0.0.1:${address.port}`;
-  const imageInput = normalizeWebFetchInput({ url: `${baseUrl}/image.png` });
-  const image = buildWebFetchToolResult(imageInput, await fetchWeb(imageInput));
-  assert.deepEqual(image.content, [
-    { type: "text", text: "Image fetched successfully" },
-    { type: "image", data: Buffer.from(png).toString("base64"), mimeType: "image/png" },
-  ]);
-  assert.deepEqual(image.details, {
-    url: `${baseUrl}/image.png`,
-    finalUrl: `${baseUrl}/image.png`,
-    format: "markdown",
-    contentType: "IMAGE/PNG; charset=binary",
-    responseBytes: png.byteLength,
-    outputBytes: 26,
-    truncated: false,
-  });
-  assert.equal(JSON.stringify(image.details).includes(Buffer.from(png).toString("base64")), false);
+  const tool = await loadRegisteredWebfetchTool();
+  assert.equal(tool.name, "webfetch");
+  assert.match(tool.description, /raster image/);
+  assert.match(tool.promptSnippet, /raster image/);
 
-  const textInput = normalizeWebFetchInput({ url: `${baseUrl}/image.svg`, format: "html" });
-  const text = buildWebFetchToolResult(textInput, await fetchWeb(textInput));
-  assert.deepEqual(text.content, [{ type: "text", text: svg }]);
-  assert.equal(text.details.contentType, "image/svg+xml; charset=utf-8");
+  const image = await tool.execute("image-fixture", { url: `${baseUrl}/image.png` }, new AbortController().signal);
+  assert.deepEqual(image, {
+    content: [
+      { type: "text", text: "Image fetched successfully" },
+      { type: "image", data: Buffer.from(png).toString("base64"), mimeType: "image/png" },
+    ],
+    details: {
+      url: `${baseUrl}/image.png`,
+      finalUrl: `${baseUrl}/image.png`,
+      format: "markdown",
+      contentType: "IMAGE/PNG; charset=binary",
+      responseBytes: png.byteLength,
+      outputBytes: 26,
+      truncated: false,
+    },
+  });
+  assert.equal(JSON.stringify(image).includes(Buffer.from(png).toString("base64")), true);
+  assert.equal(JSON.stringify((image as { details: unknown }).details).includes(Buffer.from(png).toString("base64")), false);
+
+  const text = await tool.execute("svg-fixture", { url: `${baseUrl}/image.svg`, format: "html" }, new AbortController().signal);
+  assert.deepEqual(text, {
+    content: [{ type: "text", text: svg }],
+    details: {
+      url: `${baseUrl}/image.svg`,
+      finalUrl: `${baseUrl}/image.svg`,
+      format: "html",
+      contentType: "image/svg+xml; charset=utf-8",
+      responseBytes: Buffer.byteLength(svg),
+      outputBytes: Buffer.byteLength(svg),
+      truncated: false,
+    },
+  });
 });
 
 test("retries exactly one Cloudflare challenge with OpenCode's user agent", async () => {
