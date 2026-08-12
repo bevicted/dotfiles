@@ -253,12 +253,12 @@ export function normalizeWebFetchInput(input: WebFetchInput): NormalizedWebFetch
     throw new TypeError("url must not include credentials");
   }
 
-  const format = input.format ?? "markdown";
+  const format = input.format === undefined ? "markdown" : input.format;
   if (!FORMATS.includes(format)) {
     throw new TypeError(`format must be one of: ${FORMATS.join(", ")}`);
   }
 
-  const timeout = input.timeout ?? DEFAULT_TIMEOUT_SECONDS;
+  const timeout = input.timeout === undefined ? DEFAULT_TIMEOUT_SECONDS : input.timeout;
   if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0 || timeout > MAX_TIMEOUT_SECONDS) {
     throw new TypeError(`timeout must be a finite number greater than 0 through ${MAX_TIMEOUT_SECONDS}`);
   }

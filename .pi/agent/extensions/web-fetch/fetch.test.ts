@@ -182,10 +182,10 @@ test("rejects invalid input without adding a destination deny-list", () => {
   ]) {
     assert.throws(() => normalizeWebFetchInput(asInput(input)), /url|Web fetch input/);
   }
-  for (const value of ["xml", "", 1]) {
+  for (const value of ["xml", "", 1, null]) {
     assert.throws(() => normalizeWebFetchInput(asInput({ url: "https://example.com/", format: value })), /format/);
   }
-  for (const value of [0, -1, MAX_TIMEOUT_SECONDS + 1, NaN, Infinity, "30"]) {
+  for (const value of [0, -1, MAX_TIMEOUT_SECONDS + 1, NaN, Infinity, "30", null]) {
     assert.throws(() => normalizeWebFetchInput(asInput({ url: "https://example.com/", timeout: value })), /timeout/);
   }
 });
