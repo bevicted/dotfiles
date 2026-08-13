@@ -192,3 +192,50 @@ Every isolated downstream `context` capture leaked its applicable marker set, wh
 ### Final verification
 
 Retained `audit/v6/final-verification/` records show 57/57 focused subagent/Research tests passed; 89/91 web tests passed with two optional live tests skipped; and offline subagent extension loading passed. Each command retained `env -u PI_SUBAGENT_DEPTH` and `present: false`. The recorded `git diff --check` passed. This retained-artifact review changed only derived v6 analysis, this results report, and Task 06 notes; it did not alter raw artifacts, the frozen v6 design, or implementation. No cell was rerun, Task 07 was not started, and no commit was made.
+
+## v7 scored attempt
+
+**Disposition:** Invalid retained scored attempt. All 22 fixed-order Pi invocations launched once, with no retry. Task 06 remains unchecked and Task 07 remains blocked.
+
+### Preconditions and retained observations
+
+The retained v7 preflight passed at implementation baseline `249b9fe290e0bfa984d6b72406fbdde8271f475e`, design seal and execution revision `46a89d447ce1fdb6b13903e15d7c60c47f27b7c8`. It retained Pi `0.84.1`, Node `v26.7.0`, the exact model/auth/catalog records, child-extension argv and hashes, unset top-level depth, and the ordered ten-route fixture manifest. These are phase-local preconditions, not evidence that an isolated provider request was valid.
+
+The fixture access log has 19 successful expected GETs in order and no unexpected route. It proves the completed direct phases and C1-C5 isolated fresh child fetches used the packet order. It also proves that isolated C5 continuation made no C5-C GET; there was no retry.
+
+### Provider-boundary failure
+
+For C1-C4 isolated Research and C5 isolated fresh, the post-Research `context` capture contains exactly the bounded, marker-free Research report. The immediately following actual provider payload does not transmit that report: its matching `function_call_output` has only `call_id`, with neither `output` nor `content`. The payload instead carries the synthetic text `Research isolation failure: private child evidence was removed before the provider request. Inspect Research details.` It also retains an unnamed `webfetch` function schema. This is provider-envelope corruption, not successful parent isolation. Every affected isolated Research phase has a retained provider failure and is invalid.
+
+C5 isolated continuation made no parent Research tool call. Its stdout records `Codex error: The 'None' model is not supported when using Codex with a ChatGPT account.` with `willRetry: false`; it made no C5-C fetch, created no new budget ledger, and produced no resumed report. There is no continuation child copy or hash. Therefore its child extension, custom-type, budget, provenance, same-child identity, and continuation checks are unmeasured, not passed. The C5 fresh child identity is only a phase-local observation and is not continuation evidence.
+
+The immutable C1-C4 and C5-fresh child copies parse, match their recorded hashes, and contain only the allowed Research custom types. This does not cure the failed provider boundary.
+
+### Scoring and observed usage
+
+All isolated cells are invalid and non-score-eligible. The five retained fresh isolated Research reports each have a 14/14 rubric observation only; they are not protocol scores. All isolated downstream outputs are absent, so there is no isolated downstream-quality observation or result. The direct outputs remain separately score-eligible under their valid direct arms.
+
+Observed aggregate usage is reported without an efficiency comparison because isolated totals include failed provider requests:
+
+| Arm | requests | input | output | cache read | cost | elapsed ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Direct | 21 | 93,088 | 3,806 | 31,744 | 0.595492 | 169,088 |
+| Isolated | 30 | 65,575 | 3,895 | 52,736 | 0.471093 | 186,670 |
+
+Cache write was zero in both aggregates. `analysis-summary.json`, `metrics.json`, `scoring.json`, `boundary-audit.json`, `child-session-audit.json`, and `gate-audit.json` were recomputed from retained raw v7 artifacts only. No fixture, prompt, capture, stdout, session, child copy, or scored invocation was changed or rerun.
+
+### Gates
+
+1. **Comparable valid cells: fail.** Every isolated cell is invalid: completed fresh Research phases fail at the provider boundary, and C5 continuation made no Research call or child continuation.
+2. **Parent isolation: fail.** Marker-free bounded text in the parent `context` is only a phase-local observation; it did not cross the actual provider boundary. C5 continuation also has no new Research envelope.
+3. **Downstream quality: fail/not measurable.** No isolated downstream output is present or score-eligible.
+4. **Evidence/report quality: fail as a Task 06 gate.** Full-source citation and qualitative report observations are retained, but no valid isolated cell supports the required result.
+
+**Task 06: FAIL.** Task 06 remains unchecked; Task 07 remains blocked and was not started.
+
+### Final verification
+
+- `env -u PI_SUBAGENT_DEPTH node --test .pi/agent/extensions/subagent/subagent.test.ts .pi/agent/extensions/subagent/research.test.ts .pi/agent/extensions/subagent/research-context.test.ts`: 58/58 passed.
+- `env -u PI_SUBAGENT_DEPTH node --test .pi/agent/extensions/web-fetch/fetch.test.ts .pi/agent/extensions/web-search/mcp.test.ts`: 89/91 passed; two optional live tests skipped.
+- `env -u PI_SUBAGENT_DEPTH PI_OFFLINE=1 pi --no-extensions --extension .pi/agent/extensions/subagent/index.ts --help` passed.
+- `git diff --check` passed. Repository status contains only the tracked results and Task 06 note changes described here. No commit was made.
