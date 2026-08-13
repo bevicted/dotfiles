@@ -26,7 +26,7 @@ import {
 } from "./research.ts";
 import { renderDedicatedSingleCall, renderGenericSingleCall, renderSingleResult, type SingleRenderAdapter } from "./single-render.ts";
 import { isFailedToolResult, registerToolResultMiddleware, type ToolResultEvent } from "./tool-result-middleware.ts";
-import { RESEARCH_ISOLATION_ENTRY, registerResearchBoundary, ResearchBoundaryTracker, serializedModelBytes } from "./research-boundary.ts";
+import { RESEARCH_ISOLATION_ENTRY, RESEARCH_ISOLATION_ERROR, registerResearchBoundary, ResearchBoundaryTracker, serializedModelBytes } from "./research-boundary.ts";
 import {
 	ABORT_GRACE_MS,
 	CHILD_DEPTH_ENV,
@@ -727,7 +727,10 @@ test("Research provider boundary retains over 100 KiB of private child evidence 
 	const contextResult = handlers.get("context")?.({ messages: contextCapture });
 	const deliveredContext = contextResult?.messages ?? contextCapture;
 	assert.equal(JSON.stringify(deliveredContext).includes("Research isolation failure"), false);
-	const providerPayload = { model: "fake", messages: deliveredContext };
+	const providerPayload = { model: "fake", messages: [
+		{ role: "assistant", tool_calls: [{ id: "call", type: "function", function: { name: "research", arguments: "{}" } }] },
+		{ role: "tool", tool_call_id: "call", content: result.content[0].text },
+	] };
 	const providerCapture = structuredClone(providerPayload);
 	const providerResult = handlers.get("before_provider_request")?.({ payload: providerCapture });
 	const deliveredPayload = providerResult ?? providerCapture;
@@ -741,10 +744,14 @@ test("Research provider boundary retains over 100 KiB of private child evidence 
 	assert.equal(customEntries.length, 1);
 	assert.equal(customEntries[0].customType, RESEARCH_ISOLATION_ENTRY);
 	assert.equal(JSON.stringify(customEntries[0].data).includes(marker), false);
-	const telemetry = customEntries[0].data as { modelVisibleBytes: number; providerPayloadBytes: number; childUsage: { input: number } };
+	const telemetry = customEntries[0].data as { modelVisibleBytes: number; providerPayloadBytes: number; childUsage: { input: number; contextTokens: number; turns: number }; totalUsage: { contextTokens: number; turns: number } };
 	assert.ok(telemetry.modelVisibleBytes > 0);
 	assert.ok(telemetry.providerPayloadBytes > 0);
 	assert.equal(telemetry.childUsage.input, 12);
+	assert.equal(telemetry.childUsage.contextTokens, 12);
+	assert.equal(telemetry.childUsage.turns, 1);
+	assert.equal(telemetry.totalUsage.contextTokens, 12);
+	assert.equal(telemetry.totalUsage.turns, 1);
 });
 
 test("Research boundary permits bounded cited synthesis that overlaps fetched evidence", () => {
@@ -771,15 +778,17 @@ test("Research boundary permits bounded cited synthesis that overlaps fetched ev
 	}] as never);
 	assert.equal(context.leaked, false);
 	assert.equal((context.messages![0] as any).content[0].text, synthesis);
-	const providerInput = { messages: context.messages };
-	const provider = tracker.inspectProvider(providerInput);
+	const providerInput = { messages: [
+		{ role: "assistant", tool_calls: [{ id: "research-citation", type: "function", function: { name: "research", arguments: "{}" } }] },
+		{ role: "tool", tool_call_id: "research-citation", content: synthesis },
+	] };
+	const provider = tracker.inspectProvider(providerInput, "openai-completions");
 	const delivered = provider.payload ?? providerInput;
 	assert.equal(provider.leaked, false);
-	assert.deepEqual((delivered as { messages: unknown[] }).messages[0], {
-		role: "toolResult",
-		toolName: "research",
-		toolCallId: "research-citation",
-		content: [{ type: "text", text: synthesis }],
+	assert.deepEqual((delivered as { messages: unknown[] }).messages[1], {
+		role: "tool",
+		tool_call_id: "research-citation",
+		content: synthesis,
 	});
 	assert.equal(JSON.stringify(delivered).includes("Research isolation failure"), false);
 });
@@ -930,24 +939,26 @@ test("Research boundary correlates interleaved requests and sanitizes transforme
 	const context = (id: string) => handlers.get("context")!({ messages: [{ role: "toolResult", toolName: "research", toolCallId: `research-${id}`, content: [{ type: "text", text: `synthesis ${id}` }], details: { private: true }, usage: { input: 1 } }] });
 
 	context("A");
-	// B is recorded but has not appeared in its own sanitized parent context, so
-	// an unrelated provider payload cannot consume its pending audit state.
-	handlers.get("before_provider_request")!({ payload: { messages: [{ role: "tool", tool_call_id: "research-B", content: "synthesis B" }] } });
-	assert.deepEqual(entries, []);
+	// A context-presented result must be paired in this provider request and is
+	// consumed independently before the later B request.
+	handlers.get("before_provider_request")!({ payload: { messages: [
+		{ role: "assistant", tool_calls: [{ id: "research-A", type: "function", function: { name: "research", arguments: "{}" } }] },
+		{ role: "tool", tool_call_id: "research-A", content: "synthesis A" },
+	] } });
+	assert.deepEqual(entries.map((entry) => (entry as { toolCallId: string }).toolCallId), ["research-A"]);
 	context("B");
 	const transformed = handlers.get("before_provider_request")!({ payload: {
 		messages: [
-			{ role: "assistant", tool_calls: [{ id: "private-call-A", type: "function", function: { name: "webfetch", arguments: "{\\\"url\\\":\\\"https://private.test/A\\\"}" } }] },
-			{ role: "tool", tool_call_id: "research-A", content: "synthesis A" },
+			{ role: "assistant", tool_calls: [{ id: "private-call-B", type: "function", function: { name: "webfetch", arguments: "{\\\"url\\\":\\\"https://private.test/B\\\"}" } }] },
+			{ role: "assistant", tool_calls: [{ id: "research-B", type: "function", function: { name: "research", arguments: "{}" } }] },
+			{ role: "tool", tool_call_id: "research-B", content: "synthesis B" },
 		],
 	} });
 	const serialized = JSON.stringify(transformed);
-	assert.equal(serialized.includes("private-call-A"), false);
-	assert.equal(serialized.includes("https://private.test/A"), false);
+	assert.equal(serialized.includes("private-call-B"), false);
+	assert.equal(serialized.includes("https://private.test/B"), false);
 	assert.equal(serialized.includes("webfetch"), false);
 	assert.equal((serialized.match(new RegExp("Research isolation failure", "g")) ?? []).length, 1);
-	assert.deepEqual(entries.map((entry) => (entry as { toolCallId: string }).toolCallId), ["research-A"]);
-	handlers.get("before_provider_request")!({ payload: { messages: [{ role: "tool", tool_call_id: "research-B", content: "synthesis B" }] } });
 	assert.deepEqual(entries.map((entry) => (entry as { toolCallId: string }).toolCallId), ["research-A", "research-B"]);
 });
 
@@ -1034,7 +1045,11 @@ test("Research provider boundary executes the registered tool through Pi and a l
 		assert.equal(telemetry.childUsage.input, 12);
 		assert.equal(telemetry.totalUsage.input, 12);
 		const context = contextCaptures.at(-1);
-		const payload = providerPayloads.at(-1);
+		const payload = providerPayloads.at(-1) as { messages: Array<{ role: string; content?: string; tool_call_id?: string; tool_calls?: Array<{ id: string; function: { name: string } }> }> };
+		const call = payload.messages.find((message) => message.tool_calls?.some((toolCall) => toolCall.id === "research-call" && toolCall.function.name === "research"));
+		const output = payload.messages.find((message) => message.role === "tool" && message.tool_call_id === "research-call");
+		assert.ok(call, "the fake transport receives the parent Research function call");
+		assert.match(output?.content ?? "", /Bounded synthesis only/, "the matching function output carries the bounded report");
 		for (const capture of [context, payload]) {
 			const serialized = JSON.stringify(capture);
 			assert.match(serialized, /Bounded synthesis only/);
@@ -1050,6 +1065,470 @@ test("Research provider boundary executes the registered tool through Pi and a l
 			if (child.cwd === root || child.cwd === await fs.promises.realpath(root)) await fs.promises.rm(child.path, { force: true });
 		}
 		await fs.promises.rm(root, { recursive: true, force: true });
+	}
+});
+
+test("an AgentSession sends an OpenAI Responses call/output pair to the fake transport", async () => {
+	const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
+	const { registerSubagentExtension } = await import("./index.ts");
+	const root = await temporaryDirectory();
+	const transport: any[] = [];
+	let request = 0;
+	const originalFetch = globalThis.fetch;
+	(globalThis as { fetch: typeof fetch }).fetch = async (_input, init) => {
+		transport.push(JSON.parse(String(init?.body)));
+		const tool = request++ === 0;
+		const item = tool
+			? { type: "function_call", id: "fc_responses", call_id: "responses-call", name: "research", arguments: "{\"task\":\"proof\"}" }
+			: { type: "message", id: "msg_responses", role: "assistant", content: [{ type: "output_text", text: "parent received bounded Responses synthesis" }], status: "completed" };
+		const events = [
+			{ type: "response.output_item.added", output_index: 0, item },
+			{ type: "response.output_item.done", output_index: 0, item },
+			{ type: "response.completed", response: { id: `resp-${request}`, status: "completed", output: [item], usage: { input_tokens: 1, output_tokens: 1 } } },
+		];
+		return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), { status: 200, headers: { "content-type": "text/event-stream" } });
+	};
+	try {
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root, extensionFactories: [(pi) => {
+			pi.registerProvider("responses-boundary-fake", { baseUrl: "http://responses-boundary.invalid/v1", apiKey: "test", api: "openai-responses", models: [{ id: "fake", name: "Fake", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 }] });
+			registerSubagentExtension(pi, { runResearch: async ({ agent, prompt }) => ({
+				agent: agent.name, agentSource: "user", task: prompt, status: "completed", exitCode: 0, stderr: "", malformedStdout: "",
+				usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 2, turns: 1 },
+				messages: [{ role: "assistant", content: [{ type: "toolCall", id: "child-responses-fetch", name: "webfetch", arguments: { query: "private" } }] }, { role: "toolResult", toolCallId: "child-responses-fetch", toolName: "webfetch", content: [{ type: "text", text: "responses-private-marker" }] }, { role: "assistant", content: [{ type: "text", text: "## Answer\nBounded Responses synthesis.\n\n## Findings\n- None.\n\n## Conflicts and limits\n- None.\n\n## Sources\n- None." }] }],
+			}) });
+		}] });
+		await loader.reload();
+		const sessionManager = SessionManager.inMemory(root);
+		const model = { id: "fake", name: "Fake", api: "openai-responses" as const, provider: "responses-boundary-fake", baseUrl: "http://responses-boundary.invalid/v1", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 };
+		const { session } = await createAgentSession({ cwd: root, resourceLoader: loader, sessionManager, settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }), tools: ["research"], thinkingLevel: "off", model });
+		try {
+			await session.prompt("exercise Responses boundary");
+			await session.prompt("follow up in the same parent session");
+		} finally { session.dispose(); }
+		assert.equal(transport.length, 3);
+		for (const requestPayload of [transport[1], transport[2]]) {
+			const input = requestPayload.input as Array<{ type: string; call_id: string; output?: string }>;
+			const call = input.find((item) => item.type === "function_call" && item.call_id === "responses-call");
+			const output = input.find((item) => item.type === "function_call_output" && item.call_id === "responses-call");
+			assert.ok(call, `the persisted native call remains paired on every later request: ${JSON.stringify(requestPayload)}`);
+			assert.ok((output?.output ?? "").length > 0, "the Responses function output is present and bounded");
+			assert.ok(Buffer.byteLength(output!.output!, "utf8") <= RESEARCH_MAX_BYTES);
+			assert.equal(JSON.stringify(requestPayload).includes("responses-private-marker"), false);
+		}
+		const telemetry = sessionManager.getEntries().filter((entry) => entry.type === "custom" && entry.customType === RESEARCH_ISOLATION_ENTRY);
+		assert.equal(telemetry.length, 2, "the consumed result is rehydrated from persisted details for the same-session follow-up");
+	} finally {
+		(globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+		await fs.promises.rm(root, { recursive: true, force: true });
+	}
+});
+
+test("an AgentSession sends an Anthropic tool-use/result pair to the fake transport", async () => {
+	const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
+	const { registerSubagentExtension } = await import("./index.ts");
+	const root = await temporaryDirectory();
+	const transport: any[] = [];
+	let request = 0;
+	const originalFetch = globalThis.fetch;
+	(globalThis as { fetch: typeof fetch }).fetch = async (_input, init) => {
+		transport.push(JSON.parse(String(init?.body)));
+		const tool = request++ === 0;
+		const events = tool
+			? [
+				{ type: "message_start", message: { id: "anthropic-tool", type: "message", role: "assistant", model: "fake", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 } } },
+				{ type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "anthropic-research-call", name: "research", input: {} } },
+				{ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: "{\"task\":\"proof\"}" } },
+				{ type: "content_block_stop", index: 0 },
+				{ type: "message_delta", delta: { stop_reason: "tool_use", stop_sequence: null }, usage: { output_tokens: 1 } },
+				{ type: "message_stop" },
+			]
+			: [
+				{ type: "message_start", message: { id: "anthropic-text", type: "message", role: "assistant", model: "fake", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 } } },
+				{ type: "content_block_start", index: 0, content_block: { type: "text", text: "accepted Anthropic synthesis" } },
+				{ type: "content_block_stop", index: 0 },
+				{ type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 1 } },
+				{ type: "message_stop" },
+			];
+		return new Response(events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(""), { status: 200, headers: { "content-type": "text/event-stream" } });
+	};
+	try {
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root, extensionFactories: [(pi) => {
+			pi.registerProvider("anthropic-boundary-fake", { baseUrl: "http://anthropic-boundary.invalid", apiKey: "test", api: "anthropic-messages", models: [{ id: "fake", name: "Fake", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 }] });
+			registerSubagentExtension(pi, { runResearch: async ({ agent, prompt }) => ({
+				agent: agent.name, agentSource: "user", task: prompt, status: "completed", exitCode: 0, stderr: "", malformedStdout: "",
+				usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 2, turns: 1 },
+				messages: [{ role: "assistant", content: [{ type: "toolCall", id: "anthropic-child-fetch", name: "webfetch", arguments: {} }] }, { role: "toolResult", toolCallId: "anthropic-child-fetch", toolName: "webfetch", content: [{ type: "text", text: "anthropic-private-marker" }] }, { role: "assistant", content: [{ type: "text", text: "## Answer\nBounded Anthropic synthesis.\n\n## Findings\n- None.\n\n## Conflicts and limits\n- None.\n\n## Sources\n- None." }] }],
+			}) });
+		}] });
+		await loader.reload();
+		const sessionManager = SessionManager.inMemory(root);
+		const { session } = await createAgentSession({ cwd: root, resourceLoader: loader, sessionManager, settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }), tools: ["research"], thinkingLevel: "off", model: { id: "fake", name: "Fake", api: "anthropic-messages", provider: "anthropic-boundary-fake", baseUrl: "http://anthropic-boundary.invalid", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 } });
+		try { await session.prompt("exercise Anthropic boundary"); } finally { session.dispose(); }
+		assert.equal(transport.length, 2);
+		assert.equal(transport[1].model, "fake");
+		assert.equal(transport[1].max_tokens, 1_024);
+		const call = transport[1].messages.find((message: any) => message.role === "assistant" && message.content.some((part: any) => part.type === "tool_use" && part.id === "anthropic-research-call"));
+		const output = transport[1].messages.find((message: any) => message.role === "user" && message.content.some((part: any) => part.type === "tool_result" && part.tool_use_id === "anthropic-research-call"));
+		assert.ok(call);
+		const boundedOutput = output?.content.find((part: any) => part.type === "tool_result")?.content ?? "";
+		assert.ok(Buffer.byteLength(boundedOutput, "utf8") <= RESEARCH_MAX_BYTES);
+		assert.match(boundedOutput, /^## Answer\n/);
+		assert.equal(JSON.stringify(transport[1]).includes("anthropic-private-marker"), false);
+		assert.equal("tools" in transport[1], true);
+	} finally {
+		(globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+		await fs.promises.rm(root, { recursive: true, force: true });
+	}
+});
+
+test("an AgentSession terminal guard replaces a later private payload with one provider-valid diagnostic", async () => {
+	const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
+	const { registerSubagentExtension } = await import("./index.ts");
+	const root = await temporaryDirectory();
+	const marker = "guarded-terminal-private-marker";
+	const synthesis = "## Answer\nBounded terminal synthesis.\n\n## Findings\n- None.\n\n## Conflicts and limits\n- None.\n\n## Sources\n- None.";
+	const transport: any[] = [];
+	let request = 0;
+	let mutated = false;
+	let promptCompleted = false;
+	const originalFetch = globalThis.fetch;
+	(globalThis as { fetch: typeof fetch }).fetch = async (_input, init) => {
+		transport.push(JSON.parse(String(init?.body)));
+		const item = request++ === 0
+			? { type: "function_call", id: "fc_guarded", call_id: "guarded-research-call", name: "research", arguments: "{\"task\":\"proof\"}" }
+			: { type: "message", id: "msg_guarded", role: "assistant", content: [{ type: "output_text", text: "diagnostic request accepted" }], status: "completed" };
+		const events = [
+			{ type: "response.output_item.added", output_index: 0, item },
+			{ type: "response.output_item.done", output_index: 0, item },
+			{ type: "response.completed", response: { id: `guarded-${request}`, status: "completed", output: [item], usage: { input_tokens: 1, output_tokens: 1 } } },
+		];
+		return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), { status: 200, headers: { "content-type": "text/event-stream" } });
+	};
+	try {
+		const provider = { baseUrl: "http://guarded-terminal.invalid/v1", apiKey: "test", api: "openai-responses" as const, models: [{ id: "fake", name: "Fake", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 }] };
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root, extensionFactories: [
+			(pi) => {
+				pi.registerProvider("guarded-terminal-fake", provider);
+				registerSubagentExtension(pi, { runResearch: async ({ agent, prompt }) => ({
+					agent: agent.name, agentSource: "user", task: prompt, status: "completed", exitCode: 0, stderr: "", malformedStdout: "",
+					usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 2, turns: 1 },
+					messages: [{ role: "assistant", content: [{ type: "toolCall", id: "guarded-child-fetch", name: "webfetch", arguments: {} }] }, { role: "toolResult", toolCallId: "guarded-child-fetch", toolName: "webfetch", content: [{ type: "text", text: marker }] }, { role: "assistant", content: [{ type: "text", text: synthesis }] }],
+				}) });
+				// This handler runs after the boundary hook. The active provider was
+				// already wrapped at session start, so terminal onPayload must catch it.
+				pi.on("before_provider_request", (event) => {
+					if (!Array.isArray((event.payload as any).input) || !(event.payload as any).input.some((item: any) => item.type === "function_call_output" && item.call_id === "guarded-research-call")) return undefined;
+					mutated = true;
+					return { ...event.payload, metadata: { marker } };
+				});
+			},
+		] });
+		await loader.reload();
+		const sessionManager = SessionManager.inMemory(root);
+		const model = { id: "fake", name: "Fake", api: "openai-responses" as const, provider: "guarded-terminal-fake", baseUrl: provider.baseUrl, reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 };
+		const { session } = await createAgentSession({ cwd: root, resourceLoader: loader, sessionManager, settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }), tools: ["research"], thinkingLevel: "off", model });
+		try {
+			await session.prompt("exercise guarded terminal boundary");
+			promptCompleted = true;
+		} finally { session.dispose(); }
+		assert.equal(mutated, true, "the later handler receives the valid Research follow-up request");
+		assert.equal(promptCompleted, true, "the diagnostic-only request receives a successful model response");
+		assert.equal(transport.length, 2);
+		const diagnostic = transport[1];
+		assert.equal(JSON.stringify(diagnostic).includes(marker), false);
+		assert.equal("tools" in diagnostic, false);
+		assert.deepEqual(diagnostic.input, [{ role: "user", content: [{ type: "input_text", text: RESEARCH_ISOLATION_ERROR }] }]);
+		const telemetry = sessionManager.getEntries().filter((entry) => entry.type === "custom" && entry.customType === RESEARCH_ISOLATION_ENTRY) as any[];
+		assert.equal(telemetry.length, 1, "terminal enforcement consumes and appends telemetry exactly once");
+		assert.equal(telemetry[0].data.providerReplacement, true);
+		assert.equal(JSON.stringify(telemetry[0].data).includes(marker), false);
+	} finally {
+		(globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+		await fs.promises.rm(root, { recursive: true, force: true });
+	}
+});
+
+test("an AgentSession aborts an unguarded provider replacement before a later mutator can transport evidence", async () => {
+	const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
+	const { registerSubagentExtension } = await import("./index.ts");
+	const root = await temporaryDirectory();
+	const marker = `replacement-provider-private-${"x".repeat(128 * 1024)}`;
+	const synthesis = "## Answer\nBounded replacement retry.\n\n## Findings\n- None.\n\n## Conflicts and limits\n- None.\n\n## Sources\n- None.";
+	const transport: any[] = [];
+	let response = 0;
+	let laterMutatorRan = false;
+	const originalFetch = globalThis.fetch;
+	(globalThis as { fetch: typeof fetch }).fetch = async (_input, init) => {
+		transport.push(JSON.parse(String(init?.body)));
+		const item = response++ === 0
+			? { type: "function_call", id: "fc_replacement", call_id: "replacement-research-call", name: "research", arguments: "{\"task\":\"proof\"}" }
+			: { type: "message", id: "msg_replacement", role: "assistant", content: [{ type: "output_text", text: "clean retry accepted" }], status: "completed" };
+		const events = [
+			{ type: "response.output_item.added", output_index: 0, item },
+			{ type: "response.output_item.done", output_index: 0, item },
+			{ type: "response.completed", response: { id: `replacement-${response}`, status: "completed", output: [item], usage: { input_tokens: 1, output_tokens: 1 } } },
+		];
+		return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), { status: 200, headers: { "content-type": "text/event-stream" } });
+	};
+	try {
+		const provider = { baseUrl: "http://replacement-boundary.invalid/v1", apiKey: "test", api: "openai-responses" as const, models: [{ id: "fake", name: "Fake", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 }] };
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root, extensionFactories: [
+			(pi) => {
+				pi.registerProvider("replacement-boundary-fake", provider);
+				registerSubagentExtension(pi, { runResearch: async ({ agent, prompt }) => ({
+					agent: agent.name, agentSource: "user", task: prompt, status: "completed", exitCode: 0, stderr: "", malformedStdout: "",
+					usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 2, turns: 1 },
+					messages: [{ role: "assistant", content: [{ type: "toolCall", id: "replacement-child", name: "webfetch", arguments: {} }] }, { role: "toolResult", toolCallId: "replacement-child", toolName: "webfetch", content: [{ type: "text", text: marker }] }, { role: "assistant", content: [{ type: "text", text: synthesis }] }],
+				}) });
+				let replaced = false;
+				let injected = false;
+				pi.on("tool_result", (event) => {
+					if (event.toolName !== "research" || replaced) return undefined;
+					replaced = true;
+					pi.registerProvider("replacement-boundary-fake", provider);
+					return undefined;
+				});
+				pi.on("before_provider_request", (event) => {
+					if (!replaced || injected) return undefined;
+					injected = true;
+					laterMutatorRan = true;
+					return { ...event.payload, input: [...(event.payload as any).input, { type: "function_call_output", call_id: "replacement-research-call", output: marker }] };
+				});
+			},
+		] });
+		await loader.reload();
+		const sessionManager = SessionManager.inMemory(root);
+		const model = { id: "fake", name: "Fake", api: "openai-responses" as const, provider: "replacement-boundary-fake", baseUrl: provider.baseUrl, reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 };
+		const { session } = await createAgentSession({ cwd: root, resourceLoader: loader, sessionManager, settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }), tools: ["research"], thinkingLevel: "off", model });
+		try {
+			await session.prompt("replace the active provider after Research");
+			assert.equal(laterMutatorRan, true, "the later provider handler mutated the diagnostic-only replacement");
+			assert.equal(transport.length, 1, "the aborted operation made no second transport call despite the later payload mutation");
+			const abortedAudit = sessionManager.getEntries().filter((entry) => entry.type === "custom" && entry.customType === RESEARCH_ISOLATION_ENTRY) as any[];
+			assert.equal(abortedAudit.length, 1, "aborted replacement telemetry persists once when the agent settles");
+			assert.equal(abortedAudit[0].data.providerGuardReplacement, true);
+			assert.equal(abortedAudit[0].data.attemptedProviderPayloadBytes, undefined, "aborted telemetry has no transported payload evidence");
+			assert.equal(JSON.stringify(abortedAudit[0].data).includes(marker), false);
+			await session.prompt("clean retry with the wrapped replacement provider");
+		} finally { session.dispose(); }
+		assert.equal(transport.length, 2, "the replacement provider is wrapped for the later clean retry");
+		assert.equal(JSON.stringify(transport[1]).includes(marker), false);
+		const retryOutput = (transport[1].input as any[]).find((item) => item.type === "function_call_output" && item.call_id === "replacement-research-call")?.output;
+		assert.match(retryOutput, /^## Answer\nResearch ID: /, "the clean retry reaches the newly wrapped provider with one bounded Research output");
+	} finally {
+		(globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+		await fs.promises.rm(root, { recursive: true, force: true });
+	}
+});
+
+test("Research boundary rehydrates consumed results across queued and retry-shaped contexts", () => {
+	const tracker = new ResearchBoundaryTracker();
+	const entries: unknown[] = [];
+	const handlers = new Map<string, (event: any, ctx?: any) => any>();
+	registerResearchBoundary({
+		on(event: string, handler: (event: any, ctx?: any) => any) { handlers.set(event, handler); },
+		appendEntry(_type: string, data: unknown) { entries.push(data); },
+	} as never, tracker);
+	const synthesis = "## Answer\nPersisted bounded synthesis.";
+	const marker = "queued-retry-private-marker";
+	const result = {
+		role: "toolResult", toolName: "research", toolCallId: "queued-call",
+		content: [{ type: "text", text: synthesis }],
+		details: { usage: { input: 3 }, results: [{ usage: { input: 2 }, messages: [
+			{ role: "assistant", content: [{ type: "toolCall", id: "queued-child-call", name: "webfetch", arguments: { url: "https://private.example" } }] },
+			{ role: "toolResult", toolCallId: "queued-child-call", toolName: "webfetch", content: [{ type: "text", text: marker }] },
+			{ role: "assistant", content: [{ type: "text", text: synthesis }], usage: { input: 1 } },
+		] }] },
+	} as never;
+	const messages = () => [
+		{ role: "assistant", content: [{ type: "toolCall", id: "queued-call", name: "research", arguments: {} }] },
+		structuredClone(result),
+	] as never;
+	const payload = () => ({ messages: [
+		{ role: "assistant", tool_calls: [{ id: "queued-call", type: "function", function: { name: "research", arguments: "{}" } }] },
+		{ role: "tool", tool_call_id: "queued-call", content: synthesis },
+	] });
+
+	// A failed/queued preparation can run context more than once before its retry.
+	for (let index = 0; index < 2; index++) {
+		const context = handlers.get("context")!({ messages: messages() });
+		assert.equal(JSON.stringify(context.messages).includes(marker), false);
+	}
+	assert.equal(handlers.get("before_provider_request")!({ payload: payload() }), undefined);
+	assert.deepEqual(entries.map((entry) => (entry as { toolCallId: string }).toolCallId), ["queued-call"]);
+
+	// Terminal consumption must release the observed ID. A later context gets a
+	// fresh private fingerprint from its persisted details and validates the pair.
+	const followUp = handlers.get("context")!({ messages: messages() });
+	assert.equal(JSON.stringify(followUp.messages).includes(marker), false);
+	assert.equal(handlers.get("before_provider_request")!({ payload: payload() }), undefined);
+	assert.deepEqual(entries.map((entry) => (entry as { toolCallId: string }).toolCallId), ["queued-call", "queued-call"]);
+});
+
+test("terminal provider proxy preserves class providers, options, and replacement providers", async () => {
+	const tracker = new ResearchBoundaryTracker();
+	const handlers = new Map<string, (event: any, ctx?: any) => any>();
+	const registrations: any[] = [];
+	let current: any;
+	registerResearchBoundary({
+		on(event: string, handler: (event: any, ctx?: any) => any) { handlers.set(event, handler); },
+		registerProvider(provider: unknown) { registrations.push(provider); current = provider; },
+	} as never, tracker);
+	const model = { id: "class-model", provider: "class-provider", api: "openai-responses" } as never;
+	class ClassProvider {
+		#calls = 0;
+		#secret: string;
+		streamOptions: any;
+		simpleOptions: any;
+		constructor(secret: string) { this.#secret = secret; }
+		get id() { return "class-provider"; }
+		get name() { return `class-${this.#secret}`; }
+		get auth() { return { apiKey: this.#secret }; }
+		getModels() { this.#calls++; return [model]; }
+		async refreshModels(context: any) { this.#calls++; context.refreshedBy = this.#secret; }
+		filterModels(models: readonly unknown[]) { this.#calls++; return models; }
+		stream(_model: unknown, _context: unknown, options?: unknown) { this.#calls++; this.streamOptions = options; return { kind: "stream", owner: this.#secret }; }
+		streamSimple(_model: unknown, _context: unknown, options?: unknown) { this.#calls++; this.simpleOptions = options; return { kind: "simple", owner: this.#secret }; }
+		fetchDeferred(_model: unknown, handle: unknown, options?: unknown) { this.#calls++; return { kind: "fetch", owner: this.#secret, handle, options }; }
+		async cancelDeferred(_model: unknown, handle: unknown, options?: unknown) { this.#calls++; return { kind: "cancel", owner: this.#secret, handle, options }; }
+		get calls() { return this.#calls; }
+	}
+	class CustomOptions {
+		#apiSpecific = { opaque: "api-specific-options" };
+		callbackThis: unknown;
+		responseThis: unknown;
+		retryThis: unknown;
+		readonly signal = new AbortController().signal;
+		readonly headers = { "x-test": "header" };
+		readonly maxRetries = 7;
+		readonly transport = "websocket";
+		get apiSpecific() { return this.#apiSpecific; }
+		onResponse() { this.responseThis = this; return this.#apiSpecific.opaque; }
+		onRetry() { this.retryThis = this; return this.#apiSpecific.opaque; }
+		onPayload(payload: unknown) { this.callbackThis = this; return { ...payload as object, fromOriginalCallback: true }; }
+	}
+	const first = new ClassProvider("first");
+	current = first;
+	const context = { model, modelRegistry: { getProvider() { return current; } } };
+	handlers.get("session_start")!({}, context);
+	const guarded = registrations.at(-1)!;
+	assert.notEqual(guarded, first);
+	handlers.get("model_select")!({}, context);
+	assert.equal(registrations.length, 1, "an already guarded provider is not wrapped or registered again");
+	assert.equal(Object.getPrototypeOf(guarded), ClassProvider.prototype);
+	assert.equal(guarded.name, "class-first");
+	assert.equal(guarded.auth.apiKey, "first");
+	assert.deepEqual(guarded.getModels(), [model]);
+	const refreshed: any = {};
+	await guarded.refreshModels(refreshed);
+	assert.equal(refreshed.refreshedBy, "first");
+	assert.deepEqual(guarded.filterModels([model], undefined), [model]);
+	assert.deepEqual(guarded.fetchDeferred(model, "handle", { headers: { deferred: "yes" } }).owner, "first");
+	assert.equal((await guarded.cancelDeferred(model, "handle", { signal: new AbortController().signal })).owner, "first");
+
+	const synthesis = "bounded class-provider synthesis";
+	tracker.record({ content: [{ type: "text", text: synthesis }], details: { results: [{ messages: [{ role: "assistant", content: [{ type: "text", text: synthesis }] }] }] } }, "class-call");
+	tracker.inspectContext([{ role: "toolResult", toolName: "research", toolCallId: "class-call", content: [{ type: "text", text: synthesis }] }] as never);
+	const options = new CustomOptions();
+	assert.deepEqual(guarded.stream(model, {} as never, options as never), { kind: "stream", owner: "first" });
+	assert.notEqual(first.streamOptions, options, "only onPayload is overlaid without mutating caller options");
+	assert.equal(first.streamOptions.signal, options.signal);
+	assert.equal(first.streamOptions.headers, options.headers);
+	assert.equal(first.streamOptions.maxRetries, options.maxRetries);
+	assert.equal(first.streamOptions.transport, options.transport);
+	assert.equal(first.streamOptions.apiSpecific, options.apiSpecific);
+	assert.notEqual(first.streamOptions.onResponse, options.onResponse);
+	assert.equal(first.streamOptions.onResponse, first.streamOptions.onResponse, "bound callback identity is stable");
+	assert.equal(first.streamOptions.onResponse(), "api-specific-options");
+	assert.equal(first.streamOptions.onRetry(), "api-specific-options");
+	assert.equal(options.responseThis, options, "class/private-field onResponse remains bound to its options instance");
+	assert.equal(options.retryThis, options, "every other function-valued option remains bound too");
+	const guardedPayload = await first.streamOptions.onPayload({ input: [
+		{ type: "function_call", call_id: "class-call", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "class-call", output: synthesis },
+	] }, model);
+	assert.equal(options.callbackThis, options);
+	assert.equal((guardedPayload as any).fromOriginalCallback, true);
+	assert.deepEqual(guarded.streamSimple(model, {} as never, undefined), { kind: "simple", owner: "first" });
+	assert.deepEqual(Object.keys(first.simpleOptions), ["onPayload"], "undefined options create only the terminal callback object");
+
+	const replacement = new ClassProvider("replacement");
+	current = replacement;
+	handlers.get("model_select")!({}, context);
+	const replacementGuard = registrations.at(-1)!;
+	assert.notEqual(replacementGuard, guarded);
+	handlers.get("model_select")!({}, context);
+	assert.equal(registrations.length, 2, "the replacement guard also resists recursive wrapping");
+	assert.equal(replacementGuard.name, "class-replacement");
+	assert.deepEqual(replacementGuard.stream(model, {} as never, undefined), { kind: "stream", owner: "replacement" });
+	assert.equal(replacement.calls > 0, true, "selection wraps the current replacement provider, not the first provider cache");
+	assert.equal(first.calls > 0, true);
+});
+
+test("Research boundary keeps final assistant protocol metadata public while retaining private diagnostics", () => {
+	const synthesis = "bounded final synthesis";
+	const privateMarkers = {
+		usage: "private-final-usage", details: "private-final-details", diagnostics: "private-final-diagnostics",
+		metadata: "private-final-metadata", outer: "private-result-metadata",
+	};
+	const protocolMetadata = {
+		provider: "final-provider", model: "final-model", responseId: "final-response", thinkingSignature: "final-signature", encryptedContent: "final-encrypted-content",
+	};
+	const prepare = () => {
+		const tracker = new ResearchBoundaryTracker();
+		tracker.record({
+			content: [{ type: "text", text: synthesis }],
+			details: { auditMetadata: { marker: privateMarkers.outer }, results: [{ metadata: { marker: "result-metadata" }, messages: [{
+				role: "assistant", provider: protocolMetadata.provider, model: protocolMetadata.model, responseId: protocolMetadata.responseId,
+				reasoning: { encrypted_content: protocolMetadata.encryptedContent },
+				content: [{ type: "thinking", thinking: "private final reasoning", thinkingSignature: protocolMetadata.thinkingSignature }, { type: "text", text: synthesis }],
+				usage: { marker: privateMarkers.usage }, details: { marker: privateMarkers.details }, diagnostics: { marker: privateMarkers.diagnostics }, metadata: { marker: privateMarkers.metadata },
+			}] }] },
+		}, "final-call");
+		tracker.inspectContext([{ role: "toolResult", toolName: "research", toolCallId: "final-call", content: [{ type: "text", text: synthesis }] }] as never);
+		return tracker;
+	};
+	for (const marker of Object.values(privateMarkers)) {
+		const inspected = prepare().inspectProvider({ metadata: { marker }, input: [
+			{ type: "function_call", call_id: "final-call", name: "research", arguments: "{}" },
+			{ type: "function_call_output", call_id: "final-call", output: synthesis },
+		] }, "openai-responses");
+		assert.equal(inspected.leaked, true, `${marker} is private child diagnostics`);
+		assert.equal(JSON.stringify(inspected.payload).includes(marker), false);
+	}
+	const payload = { model: protocolMetadata.model, provider: protocolMetadata.provider, responseId: protocolMetadata.responseId, input: [
+		{ type: "function_call", call_id: "final-call", name: "research", arguments: "{}", reasoning: { encrypted_content: protocolMetadata.encryptedContent } },
+		{ type: "function_call_output", call_id: "final-call", output: synthesis },
+	] };
+	const inspected = prepare().inspectProvider(payload, "openai-responses");
+	assert.equal(inspected.leaked, false, "final assistant protocol metadata is not private merely because it recurs");
+	assert.equal(inspected.payload, undefined, "a valid OpenAI Responses payload remains unchanged");
+});
+
+test("Research boundary fails closed for top-level final assistant opaque metadata", () => {
+	const synthesis = "bounded final synthesis";
+	const privateMetadata = {
+		id: "private-final-id", api: "private-final-api", signature: "private-final-signature",
+		thinkingSignature: "private-final-top-level-thinking-signature", encrypted_content: "private-final-top-level-encrypted-content", encryptedContent: "private-final-camel-encrypted-content",
+		call_id: "private-final-call-id", toolCallId: "private-final-tool-call-id", tool_use_id: "private-final-tool-use-id",
+	};
+	const prepare = () => {
+		const tracker = new ResearchBoundaryTracker();
+		tracker.record({
+			content: [{ type: "text", text: synthesis }],
+			details: { results: [{ messages: [{ role: "assistant", ...privateMetadata, content: [{ type: "text", text: synthesis }] }] }] },
+		}, "final-call");
+		tracker.inspectContext([{ role: "toolResult", toolName: "research", toolCallId: "final-call", content: [{ type: "text", text: synthesis }] }] as never);
+		return tracker;
+	};
+	const pair = () => [
+		{ type: "function_call", call_id: "final-call", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "final-call", output: synthesis },
+	];
+	for (const [key, marker] of Object.entries(privateMetadata)) {
+		const inspected = prepare().inspectProvider({ metadata: { [key]: marker }, input: pair() }, "openai-responses");
+		assert.equal(inspected.leaked, true, `final assistant ${key} remains private`);
+		assert.equal(JSON.stringify(inspected.payload).includes(marker), false);
 	}
 });
 
@@ -1154,7 +1633,7 @@ test("Research boundary ignores metadata keys while redacting child detail value
 		content: [{ type: "text", text: safeSynthesis }],
 		details: { results: [{ messages: [
 			{ role: "assistant", content: [{ type: "thinking", thinking: "thinkingSignature", thinkingSignature: "child-signature" }] },
-			{ role: "assistant", content: [{ type: "text", text: safeSynthesis }] },
+			{ role: "assistant", provider: "child-provider", model: "child-model", responseId: "child-response", content: [{ type: "text", text: safeSynthesis }] },
 		] }] },
 	}, "research-call");
 	const parentCall = {
@@ -1171,6 +1650,11 @@ test("Research boundary ignores metadata keys while redacting child detail value
 	const context = tracker.inspectContext([parentCall, parentResult]).messages!;
 	assert.deepEqual(context[0], parentCall, "a child value matching a parent metadata key must not replace the parent Research call");
 	assert.equal((context[1] as { content: Array<{ text: string }> }).content[0].text, safeSynthesis);
+	const metadata = tracker.inspectProvider({ model: "child-model", provider: "child-provider", input: [
+		{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "research-call", output: safeSynthesis },
+	] }, "openai-responses");
+	assert.equal(metadata.leaked, false, "provider metadata remains public when a child happens to use the same value");
 
 	const detailsTracker = new ResearchBoundaryTracker();
 	const detailsMarker = "private-details-only-marker";
@@ -1202,7 +1686,408 @@ test("Research boundary fails closed before a provider request with one bounded 
 	assert.equal(error.includes(privateEvidence[0]), false);
 	assert.ok(Buffer.byteLength(error, "utf8") <= RESEARCH_MAX_BYTES);
 	const payload = registrations.get("before_provider_request")!({ payload: { messages: [{ role: "tool", content: raw }] } });
-	assert.deepEqual(payload, { messages: [{ role: "tool", content: "Research isolation failure: private child evidence was removed before the provider request. Inspect Research details." }] });
+	assert.deepEqual(payload, { stream: true, messages: [{ role: "user", content: "Research isolation failure: private child evidence was removed before the provider request. Inspect Research details." }] });
+});
+
+test("Research boundary preserves exact-v7 Responses pairs and valid Anthropic and generic envelopes", () => {
+	const fixturePath = fileURLToPath(new URL("./fixtures/v7-openai-responses.json", import.meta.url));
+	const rawPayload = JSON.parse(fs.readFileSync(fixturePath, "utf8")).corruptPayload;
+	const rawOutput = rawPayload.input.find((item: any) => item.type === "function_call_output");
+	assert.ok(rawOutput && typeof rawOutput.call_id === "string");
+	assert.equal(rawOutput.output, undefined, "the sanitized v7 fixture records the missing output defect");
+	assert.ok(rawPayload.tools.some((tool: any) => tool.type === "function" && !tool.name), "the sanitized v7 fixture records unnamed webfetch");
+
+	const callId = `${rawOutput.call_id}|fc_v7_exact`;
+	const synthesis = "## Answer\nBounded v7 replacement synthesis.";
+	const sharedHandoff = "parent handoff remains public";
+	const privateMarkers = Array.from({ length: 128 }, (_, index) => `v7-private-${index}-${"x".repeat(900)}`);
+	assert.ok(Buffer.byteLength(privateMarkers.join("\n"), "utf8") > 100 * 1024);
+	const makeTracker = () => {
+		const tracker = new ResearchBoundaryTracker();
+		tracker.record({
+			content: [{ type: "text", text: synthesis }],
+			details: { input: { context: sharedHandoff }, effectiveTools: ["webfetch"], usage: { input: 9 }, results: [{ usage: { input: 8 }, messages: [
+				{ role: "assistant", content: [{ type: "thinking", thinking: "private progress", thinkingSignature: "shared-signature" }, { type: "toolCall", id: "child-webfetch-id", name: "webfetch", arguments: { url: "https://private.example", handoff: sharedHandoff } }] },
+				...privateMarkers.map((marker, index) => ({ role: "toolResult", toolCallId: `child-${index}`, toolName: "webfetch", content: [{ type: "text", text: marker }], details: { raw: marker }, usage: { input: index } })),
+				{ role: "assistant", content: [{ type: "text", text: synthesis }], usage: { input: 1 } },
+			] }] },
+		}, callId);
+		return tracker;
+	};
+	const tracker = makeTracker();
+	const parentMessages = [
+		{ role: "user", content: [{ type: "text", text: sharedHandoff }] },
+		{ role: "assistant", content: [{ type: "thinking", thinking: "parent thought", thinkingSignature: "shared-signature" }, { type: "toolCall", id: callId, name: "research", arguments: { context: sharedHandoff } }] },
+		{ role: "toolResult", toolName: "research", toolCallId: callId, content: [{ type: "text", text: synthesis }], details: { results: "private" }, usage: { input: 9 } },
+	] as never[];
+	const context = tracker.inspectContext(structuredClone(parentMessages) as never).messages! as any[];
+	assert.deepEqual(context.slice(0, 2), parentMessages.slice(0, 2), "trusted parent messages and provider metadata survive shared values");
+	assert.deepEqual(context[2], { role: "toolResult", toolName: "research", toolCallId: callId, content: [{ type: "text", text: synthesis }] });
+
+	const responses = tracker.inspectProvider({
+		...rawPayload,
+		input: [
+			{ type: "function_call", call_id: rawOutput.call_id, name: "research", arguments: "{}", reasoning: { encrypted_content: "required-provider-metadata" } },
+			{ ...rawOutput, output: synthesis },
+		],
+	}, "openai-responses");
+	const deliveredResponses = responses.payload as any;
+	assert.equal(responses.leaked, false);
+	assert.equal(deliveredResponses.input[1].output, synthesis);
+	assert.equal(deliveredResponses.input[1].call_id, rawOutput.call_id);
+	assert.equal(deliveredResponses.input[0].reasoning.encrypted_content, "required-provider-metadata");
+	assert.ok(deliveredResponses.tools.every((tool: any) => tool.type !== "function" || typeof tool.name === "string" && tool.name.length > 0));
+	for (const marker of privateMarkers) assert.equal(JSON.stringify(deliveredResponses).includes(marker), false);
+	assert.equal(JSON.stringify(deliveredResponses).includes('"details"'), false);
+
+	for (const payload of [
+		{ model: "generic", messages: [{ role: "assistant", tool_calls: [{ id: callId, type: "function", function: { name: "research", arguments: "{}" }}], thinkingSignature: "shared-signature" }, { role: "tool", tool_call_id: callId, content: synthesis }], tools: [{ type: "function", function: { name: "webfetch", parameters: {} } }] },
+		{ model: "anthropic", max_tokens: 100, messages: [{ role: "assistant", content: [{ type: "tool_use", id: callId, name: "research", input: {} }] }, { role: "user", content: [{ type: "tool_result", tool_use_id: callId, content: synthesis }] }], tools: [{ name: "webfetch", input_schema: {} }] },
+	]) {
+		const shapeTracker = makeTracker();
+		shapeTracker.inspectContext(structuredClone(parentMessages) as never);
+		const shape = shapeTracker.inspectProvider(payload, "messages" in payload && "max_tokens" in payload ? "anthropic-messages" : "openai-completions");
+		assert.equal(shape.leaked, false);
+		assert.equal(JSON.stringify(shape.payload ?? payload).includes("child-webfetch-id"), false);
+	}
+
+	const anthropicLeakTracker = makeTracker();
+	anthropicLeakTracker.inspectContext([{ role: "toolResult", toolName: "research", toolCallId: callId, content: [{ type: "text", text: synthesis }] }] as never);
+	const anthropicLeak = anthropicLeakTracker.inspectProvider({ model: "anthropic", max_tokens: 100, messages: [{ role: "assistant", content: [{ type: "tool_use", id: callId, name: "research", input: {} }] }, { role: "user", content: [{ type: "tool_result", tool_use_id: callId, content: privateMarkers[0] }] }], tools: [{ name: "webfetch", input_schema: {} }] }, "anthropic-messages");
+	assert.equal(anthropicLeak.leaked, true);
+	assert.deepEqual(anthropicLeak.payload, { model: "anthropic", max_tokens: 100, stream: true, messages: [{ role: "user", content: RESEARCH_ISOLATION_ERROR }] });
+
+	const noMarkerTracker = new ResearchBoundaryTracker();
+	noMarkerTracker.record({ content: [{ type: "text", text: "bounded no-marker result" }], details: { usage: { input: 2 }, results: [{ usage: { input: 1 }, messages: [{ role: "assistant", content: [{ type: "text", text: "bounded no-marker result" }] }] }] } }, "no-marker-call");
+	noMarkerTracker.inspectContext([{ role: "toolResult", toolName: "research", toolCallId: "no-marker-call", content: [{ type: "text", text: "bounded no-marker result" }] }] as never);
+	const noMarker = noMarkerTracker.inspectProvider({ model: "generic", messages: [{ role: "assistant", tool_calls: [{ id: "no-marker-call", type: "function", function: { name: "research", arguments: "{}" }}] }, { role: "tool", tool_call_id: "no-marker-call", content: "bounded no-marker result" }] }, "openai-completions");
+	assert.equal(noMarker.leaked, false);
+	assert.deepEqual(noMarkerTracker.consumeTelemetry(new Set(["no-marker-call"])).map((entry) => entry.toolCallId), ["no-marker-call"]);
+
+	const fallbackTracker = makeTracker();
+	fallbackTracker.inspectContext(context as never);
+	const fallback = fallbackTracker.inspectProvider({ ...rawPayload, input: [{ type: "function_call_output", call_id: rawOutput.call_id, output: privateMarkers[0] }], tools: rawPayload.tools }, "openai-responses");
+	assert.equal(fallback.leaked, true);
+	assert.deepEqual(fallback.payload, { stream: true, input: [{ role: "user", content: [{ type: "input_text", text: RESEARCH_ISOLATION_ERROR }] }] });
+	const telemetry = fallbackTracker.consumeTelemetry(new Set([callId]));
+	assert.equal(telemetry.length, 1);
+	assert.equal(telemetry[0].providerReplacement, true);
+	assert.equal(JSON.stringify(telemetry).includes(privateMarkers[0]), false);
+});
+
+test("Research boundary validates missing and duplicate native outputs, stripped child arguments, and settled telemetry", () => {
+	const synthesis = "bounded report";
+	const record = (tracker: ResearchBoundaryTracker, id = "research-call") => tracker.record({
+		content: [{ type: "text", text: synthesis }],
+		details: { usage: { input: 2 }, results: [{ usage: { input: 1 }, messages: [
+			{ role: "assistant", content: [{ type: "text", text: "private progress observation" }, { type: "toolCall", id: "child-private-id", name: "webfetch", arguments: { query: "private child argument" } }] },
+			{ role: "toolResult", toolCallId: "child-private-id", toolName: "webfetch", content: [{ type: "text", text: "private marker" }] },
+			{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+		] }] },
+	}, id);
+	const present = (tracker: ResearchBoundaryTracker, id = "research-call") => tracker.inspectContext([
+		{ role: "user", content: [{ type: "text", text: "trusted parent handoff" }] },
+		{ role: "assistant", content: [{ type: "toolCall", id, name: "research", arguments: { context: "trusted parent handoff" } }] },
+		{ role: "toolResult", toolName: "research", toolCallId: id, content: [{ type: "text", text: synthesis }] },
+	] as never);
+	const pair = (outputs: unknown[]) => ({ input: [
+		{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" },
+		...outputs,
+	] });
+	for (const outputs of [
+		[],
+		[{ type: "function_call_output", call_id: "research-call", output: synthesis }, { type: "function_call_output", call_id: "research-call", output: synthesis }],
+	]) {
+		const tracker = new ResearchBoundaryTracker();
+		record(tracker); present(tracker);
+		const checked = tracker.inspectProvider(pair(outputs), "openai-responses");
+		assert.equal(checked.leaked, true, "every context-presented Research call has exactly one native output");
+		assert.equal(JSON.stringify(checked.payload).includes("private marker"), false);
+	}
+	const strippedId = new ResearchBoundaryTracker();
+	record(strippedId); present(strippedId);
+	const stripped = strippedId.inspectProvider({ messages: [
+		{ role: "assistant", content: "private child argument" },
+		{ role: "assistant", tool_calls: [{ id: "research-call", type: "function", function: { name: "research", arguments: "{}" } }] },
+		{ role: "tool", tool_call_id: "research-call", content: synthesis },
+	] }, "openai-completions");
+	assert.equal(stripped.leaked, true, "child call arguments remain private even if a provider strips the child ID");
+	assert.equal(JSON.stringify(stripped.payload).includes("private child argument"), false);
+
+	const entries: unknown[] = [];
+	const handlers = new Map<string, (event: any) => any>();
+	const terminal = new ResearchBoundaryTracker();
+	registerResearchBoundary({ on(event: string, handler: (event: any) => any) { handlers.set(event, handler); }, appendEntry(_type: string, data: unknown) { entries.push(data); } } as never, terminal);
+	record(terminal, "retry-call");
+	// agent_end occurs for the failed run before Pi's retry/compaction retry.
+	// The pending pair must survive it and be correlated by the retry request.
+	assert.equal(handlers.has("agent_end"), false);
+	handlers.get("context")!({ messages: [
+		{ role: "assistant", content: [{ type: "toolCall", id: "retry-call", name: "research", arguments: {} }] },
+		{ role: "toolResult", toolName: "research", toolCallId: "retry-call", content: [{ type: "text", text: synthesis }] },
+	] });
+	const retried = handlers.get("before_provider_request")!({ payload: { messages: [
+		{ role: "assistant", tool_calls: [{ id: "retry-call", type: "function", function: { name: "research", arguments: "{}" } }] },
+		{ role: "tool", tool_call_id: "retry-call", content: synthesis },
+	] } });
+	assert.equal(retried, undefined);
+	assert.equal((entries[0] as { toolCallId: string }).toolCallId, "retry-call", "the retry keeps and persists the correlated pair");
+	assert.equal(handlers.has("agent_settled"), true);
+	handlers.get("context")!({ messages: [{ role: "toolResult", toolName: "research", content: [{ type: "text", text: "malformed" }] }] });
+	handlers.get("session_shutdown")!({});
+	assert.equal((entries.at(-1) as { toolCallId: string; leakDetected: boolean }).toolCallId, "unmatched");
+	assert.equal((entries.at(-1) as { leakDetected: boolean }).leakDetected, true, "malformed no-ID results persist evidence-free telemetry");
+});
+
+test("Research boundary classifies every child origin without trusting post-Research context", () => {
+	const synthesis = "bounded public synthesis";
+	const markers = {
+		url: "private-detail-url", finalUrl: "private-detail-final-url", requestedUrl: "private-detail-requested-url",
+		thinkingSignature: "private-detail-signature", responseId: "private-detail-response-id",
+		model: "private-detail-model", provider: "private-detail-provider", telemetry: "private-result-two-telemetry",
+	};
+	const details = {
+		usage: { input: 2, contextTokens: 5, turns: 1 },
+		results: [
+			{ usage: { input: 1, contextTokens: 2, turns: 1 }, messages: [{ role: "assistant", content: [{ type: "text", text: synthesis }] }] },
+			{ details: markers, usage: { telemetry: markers.telemetry, contextTokens: 3, turns: 1 }, messages: [
+				{ role: "assistant", content: [{ type: "toolCall", id: "child-private-call", name: "webfetch", arguments: { requestedUrl: markers.requestedUrl } }] },
+				{ role: "toolResult", toolCallId: "child-private-call", toolName: "webfetch", content: [{ type: "text", text: markers.url }], details: markers },
+				{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+			] },
+		],
+	};
+	const prepare = () => {
+		const tracker = new ResearchBoundaryTracker();
+		tracker.record({ content: [{ type: "text", text: synthesis }], details } as never, "research-call");
+		tracker.inspectContext([{ role: "user", content: [{ type: "text", text: "trusted handoff" }] }, { role: "toolResult", toolName: "research", toolCallId: "research-call", content: [{ type: "text", text: synthesis }] }] as never);
+		return tracker;
+	};
+	for (const marker of [markers.url, markers.finalUrl, markers.requestedUrl, markers.telemetry]) {
+		const checked = prepare().inspectProvider({
+			model: "parent-model", instructions: marker, metadata: { marker }, providerOptions: { marker },
+			input: [{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" }, { type: "function_call_output", call_id: "research-call", output: synthesis }],
+		}, "openai-responses");
+		assert.equal(checked.leaked, true, `private ${marker} from child evidence is rejected anywhere in the payload`);
+		assert.equal(JSON.stringify(checked.payload).includes(marker), false);
+	}
+	const privateDetails = prepare().inspectProvider({
+		metadata: { details: markers },
+		input: [{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" }, { type: "function_call_output", call_id: "research-call", output: synthesis }],
+	}, "openai-responses");
+	assert.equal(privateDetails.leaked, true, "a private outer detail subtree is rejected without scalar metadata taint");
+	for (const [key, marker] of Object.entries({ thinkingSignature: markers.thinkingSignature, responseId: markers.responseId, model: markers.model, provider: markers.provider })) {
+		const privateDetailsMetadata = prepare().inspectProvider({
+			[key]: marker,
+			input: [{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" }, { type: "function_call_output", call_id: "research-call", output: synthesis }],
+		}, "openai-responses");
+		assert.equal(privateDetailsMetadata.leaked, true, `${key} remains private when its origin is child details`);
+		assert.equal(JSON.stringify(privateDetailsMetadata.payload).includes(marker), false);
+	}
+
+	const modelFallback = prepare().inspectProvider({
+		model: "None", instructions: markers.url,
+		input: [{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" }, { type: "function_call_output", call_id: "research-call", output: synthesis }],
+	}, "openai-responses", "real-active-model");
+	assert.equal((modelFallback.payload as { model: string }).model, "real-active-model", "the hook-context model replaces an invalid serialized fallback model");
+
+	const sameId = prepare().inspectProvider({ input: [
+		{ type: "function_call", call_id: "research-call", name: "webfetch", arguments: "{}" },
+		{ type: "function_call_output", call_id: "research-call", output: synthesis },
+	] }, "openai-responses");
+	assert.equal(sameId.leaked, true, "a same-ID non-Research function call is not a valid pair");
+
+	const postResearch = prepare();
+	const context = postResearch.inspectContext([
+		{ role: "toolResult", toolName: "research", toolCallId: "research-call", content: [{ type: "text", text: synthesis }] },
+		{ role: "assistant", content: [{ type: "text", text: markers.url }] },
+	] as never);
+	assert.equal(context.leaked, true);
+	assert.equal(JSON.stringify(context.messages).includes(markers.url), false, "post-Research text cannot turn private evidence public");
+	const postProvider = postResearch.inspectProvider({ input: [
+		{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "research-call", output: synthesis },
+	] }, "openai-responses");
+	assert.equal(postProvider.leaked, true);
+});
+
+test("Research boundary handles short private fragments by origin", () => {
+	const synthesis = "## Answer\nThe bounded result is OK.";
+	const pair = () => [
+		{ type: "function_call", call_id: "short-fragment-call", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "short-fragment-call", output: synthesis },
+	];
+	const prepare = (parentText: string) => {
+		const tracker = new ResearchBoundaryTracker();
+		tracker.record({
+			content: [{ type: "text", text: synthesis }],
+			details: { results: [{ messages: [
+				{ role: "toolResult", toolCallId: "child-call", toolName: "webfetch", content: [{ type: "text", text: "OK" }] },
+				{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+			] }] },
+		}, "short-fragment-call");
+		const context = tracker.inspectContext([
+			{ role: "user", content: [{ type: "text", text: parentText }] },
+			{ role: "assistant", content: [{ type: "toolCall", id: "short-fragment-call", name: "research", arguments: {} }] },
+			{ role: "toolResult", toolName: "research", toolCallId: "short-fragment-call", content: [{ type: "text", text: synthesis }] },
+		] as never);
+		return { tracker, context };
+	};
+
+	for (const diagnostic of ["OK", "child diagnostic: OK"]) {
+		const privateOnly = prepare("Parent prompt has no short child value.").tracker.inspectProvider({ diagnostic, input: pair() }, "openai-responses");
+		assert.equal(privateOnly.leaked, true, "an untrusted short child fragment fails closed in a provider field");
+		assert.equal(JSON.stringify(privateOnly.payload).includes("OK"), false);
+	}
+
+	const parentText = "Parent prompt already contains the recurring value OK.";
+	const trusted = prepare(parentText);
+	assert.equal((trusted.context.messages![0] as { content: Array<{ text: string }> }).content[0].text, parentText, "pre-Research prompt text remains visible");
+	const recurrence = trusted.tracker.inspectProvider({ instructions: parentText, input: pair() }, "openai-responses");
+	assert.equal(recurrence.leaked, false, "an exact parent/provider recurrence and exact bounded synthesis remain visible");
+});
+
+test("Research boundary fingerprints private detail subtrees without scalar collisions", () => {
+	const synthesis = "bounded public synthesis";
+	const privateBranches = {
+		maskingTelemetry: [{ originalBytes: 7, deliveredBytes: 3, exhausted: true, reason: null }],
+		workBudget: { search: { reserved: 2, exhausted: false, remaining: null } },
+		evidence: { fetches: [{ status: 200, redirected: true, body: null }] },
+		failureDiagnostics: { attempts: [{ code: 503, retryable: false, cause: null }] },
+		futureExtension: { nested: [{ numeric: 11, boolean: true, nil: null }] },
+	};
+	const makeTracker = (childArguments?: unknown) => {
+		const tracker = new ResearchBoundaryTracker();
+		tracker.record({
+			content: [{ type: "text", text: synthesis }],
+			details: { evidenceExcerpt: "private evidence excerpt", usage: { input: 7, enabled: true, value: null }, results: [{ messages: [
+				...(childArguments === undefined ? [] : [{ role: "assistant", content: [{ type: "toolCall", id: "child-private", name: "webfetch", arguments: childArguments }] }]),
+				{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+			] }], ...privateBranches },
+		} as never, "research-call");
+		return tracker;
+	};
+	const present = (tracker: ResearchBoundaryTracker, before: unknown[] = []) => tracker.inspectContext([
+		...before,
+		{ role: "assistant", content: [{ type: "toolCall", id: "research-call", name: "research", arguments: {} }] },
+		{ role: "toolResult", toolName: "research", toolCallId: "research-call", content: [{ type: "text", text: synthesis }] },
+	] as never);
+	const pair = (metadata: unknown) => ({ metadata, input: [
+		{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "research-call", output: synthesis },
+	] });
+
+	const scalarTracker = makeTracker();
+	present(scalarTracker);
+	for (const [key, scalar] of [["evidenceExcerpt", "private evidence excerpt"], ["input", 7], ["enabled", true], ["value", null]] as const) {
+		const checked = scalarTracker.inspectProvider(pair({ [key]: scalar }), "openai-responses");
+		assert.equal(checked.leaked, true, `an unknown outer-detail scalar is a private fingerprint: ${key}`);
+	}
+	for (const [name, branch] of Object.entries(privateBranches)) {
+		const tracker = makeTracker();
+		present(tracker);
+		const checked = tracker.inspectProvider(pair({ [name]: branch }), "openai-responses");
+		assert.equal(checked.leaked, true, `${name} is rejected as a private detail subtree`);
+		assert.equal(JSON.stringify(checked.payload).includes(JSON.stringify(branch)), false);
+	}
+
+	const shared = { numeric: 11, boolean: true, nil: null, nested: [7, false, null] };
+	const trusted = makeTracker(shared);
+	present(trusted, [{ role: "user", content: [{ type: "text", text: "trusted parent handoff" }] }, { role: "assistant", content: [{ type: "toolCall", id: "parent-call", name: "other", arguments: shared }] }]);
+	assert.equal(trusted.inspectProvider(pair({ shared }), "openai-responses").leaked, false, "pre-Research parent structures stay public even when a child reuses them");
+});
+
+test("Research boundary scopes trusted parent origins to each sequential Research result", () => {
+	const firstSynthesis = "bounded first synthesis";
+	const secondSynthesis = "bounded second synthesis";
+	const firstHandoff = "initial parent handoff";
+	const secondHandoff = "later parent handoff for run two";
+	const secondAssistantHandoff = { phase: "second", constraints: ["preserve provenance", "use only parent facts"] };
+	const postRunTwoLeak = "private run two fetched evidence";
+	const firstResult = {
+		role: "toolResult", toolName: "research", toolCallId: "run-one", content: [{ type: "text", text: firstSynthesis }],
+		details: { results: [{ messages: [
+			{ role: "toolResult", toolCallId: "child-one", toolName: "webfetch", content: [{ type: "text", text: "private run one evidence" }] },
+			{ role: "assistant", content: [{ type: "text", text: firstSynthesis }] },
+		] }] },
+	};
+	const secondResult = {
+		role: "toolResult", toolName: "research", toolCallId: "run-two", content: [{ type: "text", text: secondSynthesis }],
+		details: { results: [{ messages: [
+			{ role: "assistant", content: [{ type: "toolCall", id: "child-two", name: "webfetch", arguments: secondAssistantHandoff }] },
+			{ role: "toolResult", toolCallId: "child-two", toolName: "webfetch", content: [{ type: "text", text: secondHandoff }] },
+			{ role: "toolResult", toolCallId: "child-two-private", toolName: "webfetch", content: [{ type: "text", text: postRunTwoLeak }] },
+			{ role: "assistant", content: [{ type: "text", text: secondSynthesis }] },
+		] }] },
+	};
+	const history = [
+		{ role: "user", content: [{ type: "text", text: firstHandoff }] },
+		{ role: "assistant", content: [{ type: "toolCall", id: "run-one", name: "research", arguments: { task: firstHandoff } }] },
+		firstResult,
+		{ role: "user", content: [{ type: "text", text: secondHandoff }] },
+		{ role: "assistant", content: [{ type: "text", text: "I will use the second handoff." }, { type: "toolCall", id: "run-two", name: "research", arguments: secondAssistantHandoff }] },
+		secondResult,
+	] as never[];
+	const safeHistory = [
+		history[0], history[1], { role: "toolResult", toolName: "research", toolCallId: "run-one", content: [{ type: "text", text: firstSynthesis }] },
+		history[3], history[4], { role: "toolResult", toolName: "research", toolCallId: "run-two", content: [{ type: "text", text: secondSynthesis }] },
+	];
+	const payload = () => ({ metadata: { handoff: secondAssistantHandoff }, input: [
+		{ type: "function_call", call_id: "run-one", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "run-one", output: firstSynthesis },
+		{ type: "function_call", call_id: "run-two", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "run-two", output: secondSynthesis },
+	] });
+	const assertValidHistory = (tracker: ResearchBoundaryTracker) => {
+		const context = tracker.inspectContext(structuredClone(history) as never);
+		assert.equal(context.leaked, false);
+		assert.deepEqual(context.messages, safeHistory, "both parent handoffs and both bounded Research results remain visible");
+		const provider = tracker.inspectProvider(payload(), "openai-responses");
+		assert.equal(provider.leaked, false, "both native Research call-result pairs remain valid");
+		assert.equal(provider.payload, undefined);
+	};
+
+	const liveTracker = new ResearchBoundaryTracker();
+	liveTracker.record(firstResult, "run-one");
+	liveTracker.record(secondResult, "run-two");
+	assertValidHistory(liveTracker);
+	// A new tracker rebuilds each run's provenance from persisted parent history.
+	assertValidHistory(new ResearchBoundaryTracker());
+
+	const leakedTracker = new ResearchBoundaryTracker();
+	const leakedContext = leakedTracker.inspectContext([...structuredClone(history), { role: "assistant", content: [{ type: "text", text: postRunTwoLeak }] }] as never);
+	assert.equal(leakedContext.leaked, true);
+	assert.equal(JSON.stringify(leakedContext.messages).includes(postRunTwoLeak), false, "post-run-two evidence is never trusted");
+	const provider = leakedTracker.inspectProvider(payload(), "openai-responses");
+	assert.equal(provider.leaked, true);
+	assert.equal(JSON.stringify(provider.payload).includes(postRunTwoLeak), false);
+});
+
+test("Research boundary requires one exact native output and replaces non-record payloads", () => {
+	const synthesis = "bounded public synthesis";
+	const tracker = new ResearchBoundaryTracker();
+	tracker.record({ content: [{ type: "text", text: synthesis }], details: { results: [{ messages: [{ role: "assistant", content: [{ type: "text", text: synthesis }] }] }] } }, "native-call|fc_item");
+	tracker.inspectContext([
+		{ role: "assistant", content: [{ type: "toolCall", id: "native-call|fc_item", name: "research", arguments: {} }] },
+		{ role: "toolResult", toolName: "research", toolCallId: "native-call|fc_item", content: [{ type: "text", text: synthesis }] },
+	] as never);
+	const unequal = tracker.inspectProvider({ input: [
+		{ type: "function_call", call_id: "native-call", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "native-call|fc_other", output: synthesis },
+	] }, "openai-responses", { id: "responses-model" });
+	assert.equal(unequal.leaked, true, "a prefix-compatible but unequal output ID cannot satisfy a native pair");
+	assert.deepEqual(unequal.payload, { model: "responses-model", stream: true, input: [{ role: "user", content: [{ type: "input_text", text: RESEARCH_ISOLATION_ERROR }] }] });
+
+	const handlers = new Map<string, (event: any, ctx?: any) => any>();
+	registerResearchBoundary({ on(event: string, handler: (event: any, ctx?: any) => any) { handlers.set(event, handler); } } as never, new ResearchBoundaryTracker());
+	const replacement = handlers.get("before_provider_request")!({ payload: null }, { model: { api: "anthropic-messages", id: "anthropic-model", maxTokens: 321 } });
+	assert.deepEqual(replacement, { model: "anthropic-model", max_tokens: 321, stream: true, messages: [{ role: "user", content: RESEARCH_ISOLATION_ERROR }] }, "a non-record payload is never forwarded");
+	assert.deepEqual(new ResearchBoundaryTracker().inspectProvider([], "openai-responses", { id: "responses-model" }).payload, {
+		model: "responses-model", stream: true, input: [{ role: "user", content: [{ type: "input_text", text: RESEARCH_ISOLATION_ERROR }] }],
+	});
+	assert.deepEqual(new ResearchBoundaryTracker().inspectProvider(false, "openai-completions", { id: "generic-model" }).payload, {
+		model: "generic-model", stream: true, messages: [{ role: "user", content: RESEARCH_ISOLATION_ERROR }],
+	});
 });
 
 test("normal Pi isolates child extensions, writes the normalized Research handoff, and can resume a cancelled child session", async () => {

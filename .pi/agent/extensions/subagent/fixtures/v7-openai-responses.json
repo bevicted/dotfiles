@@ -1,0 +1,50 @@
+{
+  "corruptPayload": {
+    "store": false,
+    "stream": true,
+    "input": [
+      {
+        "type": "function_call",
+        "call_id": "call_v7_research",
+        "name": "research",
+        "arguments": "{}",
+        "reasoning": { "encrypted_content": "required-provider-metadata" }
+      },
+      { "type": "function_call_output", "call_id": "call_v7_research" }
+    ],
+    "text": { "verbosity": "low" },
+    "include": ["reasoning.encrypted_content"],
+    "tools": [
+      {
+        "type": "function",
+        "parameters": {
+          "type": "object",
+          "required": ["url"],
+          "properties": {
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S",
+              "description": "Known direct HTTP(S) URL to retrieve"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["text", "markdown", "html"],
+              "default": "markdown",
+              "description": "Return format. Defaults to markdown."
+            },
+            "timeout": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 120,
+              "default": 30,
+              "description": "Timeout in seconds. Defaults to 30; maximum 120."
+            }
+          },
+          "additionalProperties": false
+        },
+        "strict": null
+      }
+    ]
+  }
+}

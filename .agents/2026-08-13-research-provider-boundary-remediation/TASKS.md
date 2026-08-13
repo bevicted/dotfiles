@@ -28,7 +28,7 @@ Relevant starting points:
 
 Pick any unchecked task whose blockers are complete. Before starting, read this complete task set, every linked source needed by the selected task, and all applicable repository instructions. Implement one task at a time. Exercise actual behavior; tests alone do not establish provider correctness. Record completion notes and check a heading only after every acceptance criterion and verification item succeeds.
 
-## [ ] 2026-08-13-research-provider-boundary-remediation-01: Preserve valid provider-native Research call pairs
+## [x] 2026-08-13-research-provider-boundary-remediation-01: Preserve valid provider-native Research call pairs
 
 **Delivers:** The parent boundary sends one bounded Research result to the provider without forwarding child-private evidence or corrupting provider-native messages, function calls, function outputs, or tool schemas.
 
@@ -43,13 +43,13 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 
 **Acceptance criteria:**
 
-- [ ] Private fingerprints derive only from actual child-private origins: child web tool results, child tool-call structures and opaque IDs, non-final progress observations, child details, and child usage or telemetry. Trusted handoff values, parent-originated prompt text, generic field names, final bounded synthesis, and required provider metadata are not tainted merely because they recur in the child.
-- [ ] The parent `context` contains the original parent user and assistant messages, the original Research tool call, and exactly one bounded Research tool result with no `details`, child usage, child messages, raw markers, or private child structures.
-- [ ] The OpenAI Responses payload preserves the matching `function_call` and `function_call_output`, including the bounded `output`, call ID, reasoning metadata needed by the provider, and every active tool schema name. It contains zero raw child markers, details, usage, progress snapshots, or child tool structures.
-- [ ] Provider-specific coverage also proves that Anthropic-style and generic message envelopes remain valid; provider enforcement does not depend on OpenAI field names alone.
-- [ ] The `context` hook removes all known private origins before provider serialization. Because Pi's documented `before_provider_request` hook can replace but not cancel a request, an unexpected provider-level leak uses a tested provider-native replacement containing only one bounded isolation diagnostic and no tools or private evidence. The transport may receive that safe request; it never receives the tainted payload or a malformed call/output envelope. Evidence-free telemetry records the replacement.
-- [ ] Fresh, parallel, interleaved, persisted-reload, cancellation, failure, and no-marker paths retain request-correlated telemetry and immutable private details without changing generic subagent behavior.
-- [ ] Deterministic regressions use more than 100 KiB of unique child markers and the exact v7 failure characteristics: shared parent/child values, `thinkingSignature`, `function_call_output`, required `output`, and named `webfetch` schema.
+- [x] Private fingerprints derive only from actual child-private origins: child web tool results, child tool-call structures and opaque IDs, non-final progress observations, child details, and child usage or telemetry. Trusted handoff values, parent-originated prompt text, generic field names, final bounded synthesis, and required provider metadata are not tainted merely because they recur in the child.
+- [x] The parent `context` contains the original parent user and assistant messages, the original Research tool call, and exactly one bounded Research tool result with no `details`, child usage, child messages, raw markers, or private child structures.
+- [x] The OpenAI Responses payload preserves the matching `function_call` and `function_call_output`, including the bounded `output`, call ID, reasoning metadata needed by the provider, and every active tool schema name. It contains zero raw child markers, details, usage, progress snapshots, or child tool structures.
+- [x] Provider-specific coverage also proves that Anthropic-style and generic message envelopes remain valid; provider enforcement does not depend on OpenAI field names alone.
+- [x] The `context` hook removes all known private origins before provider serialization. Because Pi's documented `before_provider_request` hook can replace but not cancel a request, an unexpected provider-level leak uses a tested provider-native replacement containing only one bounded isolation diagnostic and no tools or private evidence. The transport may receive that safe request; it never receives the tainted payload or a malformed call/output envelope. Evidence-free telemetry records the replacement.
+- [x] Fresh, parallel, interleaved, persisted-reload, cancellation, failure, and no-marker paths retain request-correlated telemetry and immutable private details without changing generic subagent behavior.
+- [x] Deterministic regressions use more than 100 KiB of unique child markers and the exact v7 failure characteristics: shared parent/child values, `thinkingSignature`, `function_call_output`, required `output`, and named `webfetch` schema.
 
 **Verification:**
 
@@ -60,10 +60,10 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 
 **Completion notes:**
 
-- Changes: <fill when complete>
-- Decisions or deviations: <fill when complete>
-- Verification results: <fill when complete>
-- Remaining risks or follow-ups: <fill when complete>
+- Changes: Replaced broad recursive scalar taint with origin-aware text, opaque-ID, and canonical-structure fingerprints scoped to each Research run. The context boundary now preserves sequential and reloaded parent provenance while reducing each Research result to one bounded text envelope. Provider validation requires one exact native `research` call/output pair, preserves OpenAI Responses reasoning fields, repairs only the exact known unnamed `webfetch` schema, and validates Anthropic and generic envelopes. A native-provider Proxy composes a terminal payload guard without dropping provider capabilities or request options; dynamic unguarded provider replacement aborts before transport and is wrapped for retry.
+- Decisions or deviations: `before_provider_request` remains an early assertion because Pi chains later handlers. Terminal enforcement runs through the active native provider's `onPayload`; if another extension replaces that provider after wrapping, the current operation aborts with evidence-free telemetry rather than risking transport. Telemetry flushes at `agent_settled` or shutdown, not `agent_end`, so automatic retry and compaction retry retain correlation. Historical v3-v7 artifacts remain unchanged; the exact v7 shape is represented by a tracked sanitized fixture.
+- Verification results: Independent review passed all seven criteria. Parent verification passed 73 focused Research/subagent tests, including actual OpenAI Responses, Anthropic, generic, guarded diagnostic transport, unguarded replacement abort/retry, same-session/reload, parallel/interleaved, cancellation/failure/no-marker, exact-v7, and greater-than-100-KiB cases. Both web suites passed 89/91 with two optional live tests skipped. Offline loading of subagent, webfetch, and websearch extensions, fixture JSON validation, `git diff --check`, tracked task/history mutation checks, and repository status checks passed.
+- Remaining risks or follow-ups: Authenticated production-provider fresh, downstream, restart, and continuation qualification remains Task 02. Provider-native metadata variants introduced by future Pi versions may require additional exact-path classification.
 
 ## [ ] 2026-08-13-research-provider-boundary-remediation-02: Prove production fresh, downstream, and resumed Research behavior
 

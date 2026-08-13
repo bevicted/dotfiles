@@ -90,7 +90,13 @@ async function researchHarness(runResearch: (request: any) => Promise<any>) {
 function deliver(harness: Awaited<ReturnType<typeof researchHarness>>, result: any, toolCallId = "research-call") {
 	const parent = [{ role: "user", content: [{ type: "text", text: "parent baseline" }] }, { role: "toolResult", toolName: "research", toolCallId, content: result.content, details: result.details, usage: { private: true }, isError: result.details.failed }];
 	const context = structuredClone(parent); const contextResult = harness.handlers.get("context")!({ messages: context }); const deliveredContext = contextResult?.messages ?? context;
-	const payload = { model: "fake", messages: deliveredContext, tools: [{ type: "function", function: { name: "research" } }] }; const providerResult = harness.handlers.get("before_provider_request")!({ payload });
+	const text = deliveredContext[1].content[0].text;
+	const payload = { model: "fake", messages: [
+		{ role: "user", content: "parent baseline" },
+		{ role: "assistant", tool_calls: [{ id: toolCallId, type: "function", function: { name: "research", arguments: "{}" } }] },
+		{ role: "tool", tool_call_id: toolCallId, content: text },
+	], tools: [{ type: "function", function: { name: "research" } }] };
+	const providerResult = harness.handlers.get("before_provider_request")!({ payload });
 	return { parent, context, deliveredContext, payload: providerResult ?? payload };
 }
 
@@ -105,7 +111,7 @@ test("Research serialized parent growth is exact across the 8 KiB and 400-line m
 			const result = await harness.research.execute("research-call", { task: `matrix ${key}` }, new AbortController().signal, undefined, { cwd: process.cwd(), model: undefined, thinkingLevel: undefined, hasUI: false });
 			const text = result.content[0].text; assertBoundedUtf8(text); assert.ok(JSON.stringify(result.details).includes(marker)); assert.equal(JSON.stringify(result.content).includes(marker), false);
 			const delivered = deliver(harness, result); const serialized = JSON.stringify({ context: delivered.context, payload: delivered.payload });
-			assert.equal(delivered.deliveredContext[1].content[0].text, text); assert.equal((delivered.payload as { messages: Array<{ content: Array<{ text: string }> }> }).messages[1].content[0].text, text); assert.equal(serialized.includes(marker), false); assert.equal(serialized.includes('"details":'), false);
+			assert.equal(delivered.deliveredContext[1].content[0].text, text); assert.equal((delivered.payload as { messages: Array<{ content: string }> }).messages[2].content, text); assert.equal(serialized.includes(marker), false); assert.equal(serialized.includes('"details":'), false);
 			const baseline = [{ role: "user", content: [{ type: "text", text: "parent baseline" }] }]; const growth = serializedModelBytes(delivered.deliveredContext) - serializedModelBytes(baseline); growths.push(growth); fixedOverheads.add(growth - Buffer.byteLength(text, "utf8"));
 			const telemetry = harness.entries.at(-1)!; assert.equal(telemetry.customType, RESEARCH_ISOLATION_ENTRY); assert.equal(JSON.stringify(telemetry.data).includes(marker), false); assert.equal((telemetry.data as { modelVisibleBytes: number }).modelVisibleBytes, serializedModelBytes([delivered.deliveredContext[1]])); assert.equal((telemetry.data as { providerPayloadBytes: number }).providerPayloadBytes, serializedModelBytes(delivered.payload));
 		}
