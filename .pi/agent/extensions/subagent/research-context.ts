@@ -15,6 +15,10 @@ import {
 	type ResearchContextTelemetry,
 } from "./research-context-audit.ts";
 import {
+	RESEARCH_FETCH_EVIDENCE_ENTRY,
+	recordResearchFetchEvidence,
+} from "./research-evidence.ts";
+import {
 	RESEARCH_CHILD_ENV,
 	RESEARCH_PARENT_ENV,
 	isTrustedResearchChildSession,
@@ -589,6 +593,13 @@ export function registerResearchContext(
 			event.content as Array<{ type: string; text?: string }>,
 			event.isError,
 		);
+		if (event.toolName === "webfetch") {
+			const evidence = recordResearchFetchEvidence({
+				...event,
+				content: result.content ?? event.content,
+			});
+			if (evidence) pi.appendEntry?.(RESEARCH_FETCH_EVIDENCE_ENTRY, evidence);
+		}
 		audit(ledger);
 		return result;
 	});

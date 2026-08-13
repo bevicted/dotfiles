@@ -332,6 +332,7 @@ test("registered tool returns raster image blocks and SVG text from a local HTTP
     details: {
       url: `${baseUrl}/image.png`,
       finalUrl: `${baseUrl}/image.png`,
+      status: 200,
       format: "markdown",
       contentType: "IMAGE/PNG; charset=binary",
       responseBytes: png.byteLength,
@@ -348,6 +349,7 @@ test("registered tool returns raster image blocks and SVG text from a local HTTP
     details: {
       url: `${baseUrl}/image.svg`,
       finalUrl: `${baseUrl}/image.svg`,
+      status: 200,
       format: "html",
       contentType: "image/svg+xml; charset=utf-8",
       responseBytes: Buffer.byteLength(svg),
@@ -382,6 +384,7 @@ test("retries exactly one Cloudflare challenge with OpenCode's user agent", asyn
   assert.equal(second.body.locked, false);
   assert.deepEqual(result, {
     finalUrl: "https://example.com/image",
+    status: 200,
     contentType: "image/png",
     image: { data: Buffer.from(png).toString("base64"), mimeType: "image/png" },
     responseBytes: png.byteLength,
@@ -572,6 +575,7 @@ test("returns compact tool details without fetched content", () => {
   const input = normalizeWebFetchInput({ url: "https://example.com/source", format: "text" });
   const result = buildWebFetchToolResult(input, {
     finalUrl: "https://example.com/final",
+    status: 200,
     contentType: "text/plain; charset=utf-8",
     text: "unique-source-marker",
     responseBytes: 321,
@@ -581,6 +585,7 @@ test("returns compact tool details without fetched content", () => {
     details: {
       url: "https://example.com/source",
       finalUrl: "https://example.com/final",
+      status: 200,
       format: "text",
       contentType: "text/plain; charset=utf-8",
       responseBytes: 321,

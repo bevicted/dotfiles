@@ -45,6 +45,15 @@ import {
 import type { ResearchWorkBudgetDetails } from "./research-budget-audit.ts";
 import type { ResearchContextTelemetry } from "./research-context-audit.ts";
 import {
+	addResearchIdToAnswer,
+	boundStructuredResearchOutput,
+	evidenceFromChildMessages,
+	researchExecutionFailure,
+	researchValidationFailure,
+	validateResearchOutput,
+	type ResearchEvidenceDetails,
+} from "./research-evidence.ts";
+import {
 	boundResearchOutput,
 	cloneResearcherAgent,
 	composeResearchPrompt,
@@ -127,6 +136,8 @@ export interface ResearchDetails {
 	maskingTelemetry?: ResearchContextTelemetry[];
 	/** Per-invocation and cumulative child-only web work measurements. */
 	workBudget?: ResearchWorkBudgetDetails;
+	/** Successful and limited fetch provenance, excluded from parent model context. */
+	evidence?: ResearchEvidenceDetails;
 	session?: Omit<ResearchSessionTarget, "sessionFile">;
 }
 
@@ -246,6 +257,14 @@ function boundResearchResult(output: string): string {
 	);
 }
 
+/** Completed results retain their required headings even when the child overflows. */
+function boundCompletedResearchResult(output: string): string {
+	return boundStructuredResearchOutput(output, {
+		maxLines: RESEARCH_MAX_LINES,
+		maxBytes: RESEARCH_MAX_BYTES,
+	});
+}
+
 function makeResearchDetails(
 	input: NormalizedResearchInput,
 	effectiveTools: readonly string[],
@@ -254,6 +273,7 @@ function makeResearchDetails(
 	session?: ResearchSessionTarget,
 	maskingTelemetry?: readonly ResearchContextTelemetry[],
 	workBudget?: ResearchWorkBudgetDetails,
+	evidence?: ResearchEvidenceDetails,
 ): ResearchDetails {
 	return {
 		kind: "research",
@@ -272,6 +292,7 @@ function makeResearchDetails(
 		failed,
 		maskingTelemetry: maskingTelemetry?.map((telemetry) => ({ ...telemetry })),
 		workBudget: workBudget ? structuredClone(workBudget) : undefined,
+		evidence: evidence ? structuredClone(evidence) : undefined,
 		session: session ? researchSessionMetadataForDetails(session) : undefined,
 	};
 }
@@ -733,7 +754,14 @@ export function registerSubagentExtension(
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				return {
-					content: [{ type: "text", text: boundResearchResult(message) }],
+					content: [
+						{
+							type: "text",
+							text: boundCompletedResearchResult(
+								researchExecutionFailure(undefined, message),
+							),
+						},
+					],
 					details: makeResearchDetails(
 						{ task: "", files: [], webResearch: "auto", effort: "standard" },
 						[],
@@ -850,17 +878,30 @@ export function registerSubagentExtension(
 						RESEARCH_MAPPING_ENTRY,
 						researchSessionStore.mapping(session),
 					);
-				const failed = isFailedResult(result);
-				const researchId = session
-					? `[Research ID: ${session.researchId}]\n\n`
-					: "";
+				const childOutput = getResultOutput(result);
+				const persistedEvidence = session
+					? researchSessionStore.evidenceDetails(session, childOutput)
+					: undefined;
+				const evidence = persistedEvidence ?? {
+					fetches: evidenceFromChildMessages(result.messages),
+					validation: validateResearchOutput(
+						childOutput,
+						evidenceFromChildMessages(result.messages),
+						input,
+					),
+				};
+				const childFailed = isFailedResult(result);
+				const failed = childFailed || !evidence.validation.valid;
+				const output = childFailed
+					? researchExecutionFailure(session?.researchId)
+					: !evidence.validation.valid
+						? researchValidationFailure(evidence.validation, session?.researchId)
+						: addResearchIdToAnswer(childOutput, session?.researchId);
 				const response = {
 					content: [
 						{
 							type: "text" as const,
-							text: boundResearchResult(
-								`${researchId}${getResultOutput(result)}`,
-							),
+							text: boundCompletedResearchResult(output),
 						},
 					],
 					details: withResearchFailureState(
@@ -874,11 +915,9 @@ export function registerSubagentExtension(
 								? researchSessionStore.maskingTelemetry(session)
 								: undefined,
 							session && workBudgetInvocationId
-								? researchSessionStore.workBudgetDetails(
-										session,
-										workBudgetInvocationId,
-									)
+								? researchSessionStore.workBudgetDetails(session, workBudgetInvocationId)
 								: undefined,
+							evidence,
 						),
 						failed,
 					),
@@ -896,7 +935,17 @@ export function registerSubagentExtension(
 						? error.message
 						: String(error);
 				return {
-					content: [{ type: "text", text: boundResearchResult(message) }],
+					content: [
+						{
+							type: "text",
+							text: boundCompletedResearchResult(
+								researchExecutionFailure(
+									session?.researchId,
+									message,
+								),
+							),
+						},
+					],
 					details: makeResearchDetails(
 						input,
 						effectiveTools,

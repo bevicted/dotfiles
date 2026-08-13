@@ -710,7 +710,7 @@ test("Research provider boundary retains over 100 KiB of private child evidence 
 			messages: [
 				{ role: "assistant", content: [{ type: "toolCall", name: "webfetch", arguments: { url: "https://example.test/private" } }] },
 				...markers.map((text, index) => ({ role: "toolResult", toolCallId: `fetch-${index}`, toolName: "webfetch", content: [{ type: "text", text }] })),
-				{ role: "assistant", content: [{ type: "text", text: "## Answer\nBounded synthesis only." }] },
+				{ role: "assistant", content: [{ type: "text", text: "## Answer\nBounded synthesis only [local](README.md:1).\n\n## Findings\n- No web claims.\n\n## Conflicts and limits\n- No web evidence needed.\n\n## Sources\n- None." }] },
 			],
 		}),
 	});
@@ -894,7 +894,7 @@ test("Research provider boundary executes the registered tool through Pi and a l
 							messages: [
 								{ role: "assistant", content: [{ type: "text", text: "partial snapshot must remain private" }, { type: "toolCall", id: "fetch-call", name: "webfetch", arguments: { url: "https://example.test/private" } }] },
 								...markers.map((text, index) => ({ role: "toolResult", toolCallId: `fetch-${index}`, toolName: "webfetch", content: [{ type: "text", text }] })),
-								{ role: "assistant", content: [{ type: "text", text: "## Answer\nBounded synthesis only." }] },
+								{ role: "assistant", content: [{ type: "text", text: "## Answer\nBounded synthesis only [local](README.md:1).\n\n## Findings\n- No web claims.\n\n## Conflicts and limits\n- No web evidence needed.\n\n## Sources\n- None." }] },
 							],
 						}),
 					});
@@ -1133,7 +1133,7 @@ test("registered Research rejects concurrent continuation and permits cancellati
 		agent: request.agent.name, agentSource: "user", task: request.prompt, status: aborted ? "failed" : "completed", exitCode: aborted ? 1 : 0,
 		stderr: "", malformedStdout: "", failureMessage: aborted ? "Subagent was aborted." : undefined,
 		usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 2, turns: 1 },
-		messages: [{ role: "assistant", content: [{ type: "text", text: aborted ? "cancelled" : "resumed synthesis" }] }],
+		messages: [{ role: "assistant", content: [{ type: "text", text: aborted ? "cancelled" : "## Answer\nResumed synthesis [local](README.md:1).\n\n## Findings\n- No web claims.\n\n## Conflicts and limits\n- No web evidence needed.\n\n## Sources\n- None." }] }],
 	});
 	registerSubagentExtension({
 		registerTool(tool: unknown) { registered.push(tool as typeof registered[number]); },

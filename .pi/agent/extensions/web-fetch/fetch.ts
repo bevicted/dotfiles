@@ -35,6 +35,7 @@ export interface NormalizedWebFetchInput {
 
 interface WebFetchResponseBase {
   finalUrl: string;
+  status: number;
   contentType: string;
   responseBytes: number;
 }
@@ -65,6 +66,8 @@ export interface BoundedWebFetchOutput {
 export interface WebFetchToolDetails {
   url: string;
   finalUrl: string;
+  /** Successful fetches always have a 2xx response before this result is built. */
+  status: number;
   format: WebFetchFormat;
   contentType: string;
   responseBytes: number;
@@ -518,6 +521,7 @@ export async function fetchWeb(
     if (rasterImage) {
       return {
         finalUrl: response.url || input.url,
+        status: response.status,
         contentType,
         image: {
           data: Buffer.from(collected.data).toString("base64"),
@@ -528,6 +532,7 @@ export async function fetchWeb(
     }
     return {
       finalUrl: response.url || input.url,
+      status: response.status,
       contentType,
       text: convertContent(new TextDecoder().decode(collected.data), contentType, input.format),
       responseBytes: collected.bytes,
@@ -551,6 +556,7 @@ export function buildWebFetchToolResult(
   const details = {
     url: input.url,
     finalUrl: response.finalUrl,
+    status: response.status,
     format: input.format,
     contentType: response.contentType,
     responseBytes: response.responseBytes,

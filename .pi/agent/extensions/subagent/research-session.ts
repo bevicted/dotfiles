@@ -19,6 +19,13 @@ import {
 	type ResearchContextTelemetry,
 } from "./research-context-audit.ts";
 import {
+	RESEARCH_FETCH_EVIDENCE_ENTRY,
+	isResearchFetchEvidence,
+	validateResearchOutput,
+	type ResearchEvidenceDetails,
+	type ResearchFetchEvidence,
+} from "./research-evidence.ts";
+import {
 	RESEARCH_AGENT_NAME,
 	RESEARCH_MODEL,
 	RESEARCH_TOOLS,
@@ -581,6 +588,28 @@ export class ResearchSessionStore {
 			// The child session can be deleted only after this invocation ends.
 			// Details retain the bounded best-effort audit already available.
 		}
+	}
+
+	evidenceDetails(
+		target: ResearchSessionTarget,
+		output: string,
+	): ResearchEvidenceDetails {
+		let fetches: ResearchFetchEvidence[] = [];
+		try {
+			fetches = SessionManager.open(target.sessionFile)
+				.getEntries()
+				.filter(
+					(entry) =>
+						entry.type === "custom" &&
+						entry.customType === RESEARCH_FETCH_EVIDENCE_ENTRY &&
+						isResearchFetchEvidence(entry.data),
+				)
+				.map((entry) => structuredClone(entry.data as ResearchFetchEvidence));
+		} catch {
+			// A deleted child is already rejected before a resume. Keep completed-call
+			// diagnostics bounded if deletion races final detail collection.
+		}
+		return { fetches, validation: validateResearchOutput(output, fetches) };
 	}
 
 	workBudgetDetails(
