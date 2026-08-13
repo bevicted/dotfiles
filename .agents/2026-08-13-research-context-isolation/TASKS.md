@@ -259,10 +259,10 @@ Pick any unchecked task whose blockers are complete. Before starting, read the t
 
 **Completion notes:**
 
-- Changes: Committed `EVALUATION.md` is the frozen v2 design. Pending tracked `EVALUATION-v3.md` replaces only v2's impossible revision rule and requires repository-owned ignored raw artifacts; pending `EVALUATION-RESULTS.md` records a preflight-only stop. No scored cell or raw audit artifact exists.
-- Decisions or deviations: Task 06 remains unchecked. v3 separates the implementation baseline from the later standalone design-seal and execution revisions. The observed Pi catalog does not resolve the pinned model, so no cell was launched. Authentication readiness is not treated as model resolution.
-- Verification results: `pi --version` returned `0.84.1`; offline exact-model lookup returned no match; no-refresh authentication check reported ready. Git history confirmed that v2 was committed after its implementation baseline and that no implementation files changed between them. No evaluation suite or cell was run.
-- Remaining risks or follow-ups: Commit the v3 design and repository ignore rule as its required standalone seal, create a fresh tracked preflight result at the sealed execution revision, and proceed only if the exact model resolves and every v3 preflight passes. Retain every future attempt and publish measured results only after all v3 gates are evaluated.
+- Changes: Retained v4 runtime-preflight records and the v4 results analysis exist. No fixture, scored cell, or other post-runtime-preflight artifact was created.
+- Decisions or deviations: Task 06 remains unchecked. The v4 static Git topology/blob assertions passed, but both top-level Git preflight argv records retained `PI_SUBAGENT_DEPTH=1`, contrary to the inherited v2 requirement that it be unset. Independently, the required child-extension argv/path command failed to import `@earendil-works/pi-ai`; it did not establish the required argv, canonical paths, or `--no-extensions` isolation. The retained attempt was not adapted or retried.
+- Verification results: Retained v4 records show Pi `0.84.1`, Node `v26.7.0`, the exact catalog row, ready no-refresh auth, and the audit ignore rule. The child-extension argv/path command exited 1. Zero cells launched; no metrics, scores, or gates are measurable, and all four Task 06 gates fail.
+- Remaining risks or follow-ups: Preserve this invalid v4 attempt. Do not retry or alter its frozen design or implementation. Any future evaluation requires a separately versioned design and a fully compliant preflight with retained raw records; Task 07 remains blocked.
 
 ## [ ] 2026-08-13-research-context-isolation-07: Optimize the measured isolation premium
 

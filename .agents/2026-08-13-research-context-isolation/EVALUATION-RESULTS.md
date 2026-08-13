@@ -91,3 +91,26 @@ Preserve this first attempt. Do not retry it. A future run requires a separately
 - `node --test .pi/agent/extensions/web-fetch/fetch.test.ts .pi/agent/extensions/web-search/mcp.test.ts`: 89 pass, 2 optional live tests skipped.
 - Offline loading of the subagent and webfetch extensions passed.
 - No scored invocation was run during post-review correction.
+
+## v4 preflight-only attempt
+
+**Disposition:** Runtime preflight failed. No fixture server or cell launched; Task 06 remains unchecked and Task 07 was not started. The retained v3 invalid first attempt above is unchanged and was not retried.
+
+### Revision and retained preflight
+
+| Item | Result |
+| --- | --- |
+| Implementation baseline `I` | `1687648ff44f86b3f10205e287c8eaa9cf2f822a` |
+| Design seal `D`; execution revision `E` | `bff5994fe1bbef10af95fcb7d95711d1e17481b5`; same revision |
+| Revision identities | **Fail (protocol environment).** The command exited 0 and printed the recorded `I`, `D`, and `E`, but its retained argv record has `PI_SUBAGENT_DEPTH=1`. Section 1 of the inherited v2 protocol requires it unset in every top-level process. |
+| Revision/path/blob comparison | **Fail (protocol environment).** Its Git assertions all printed `true`: `D` has `I` as first parent, changes only `EVALUATION-v4.md`, `E` has only allowed differences from `I`, and the retained v2 blob is `500840b6ec51b589134ea122d792249ea6372d01`; however, this second top-level command also retained `PI_SUBAGENT_DEPTH=1`. |
+| Pi; Node; OS | Pass: `0.84.1`; `v26.7.0`; retained in `audit/v4/preflight/` |
+| Catalog and no-refresh auth | Pass; the exact `openai-codex`/`gpt-5.6-sol` row was present and auth reported `{"status":"ready","provider":"openai-codex","authType":"oauth"}` without credential values |
+| Audit ignore rule | Pass; repository `.gitignore:74` ignores the v4 audit path |
+| Child extension argv/path check | **Fail.** The exact required command exited 1 before emitting JSON because Node could not resolve `@earendil-works/pi-ai` imported by `.pi/agent/extensions/subagent/index.ts` |
+
+The retained raw records establish two independent runtime-preflight failures: the two Git preflight processes violate the inherited top-level environment requirement, and the required child-extension argv/path command exited 1 before it could establish the seven-element argv, canonical paths, or `--no-extensions` isolation property. The raw `run-manifest.json` labels the two Git checks as passed because their static assertions exited 0; that label does not cure the retained environment violation. Every raw command record through the stop is retained losslessly under `audit/v4/preflight/`: exact argv and selected environment names in `*.argv.json`, stdout, stderr, and UTC/cwd/exit/signal data in `*.status.json`. The failing argv/path command was not adapted or retried. The later child SHA-256 check, fixture-manifest inspection, fixture server, and all scored invocations were not run, as required by the runtime-preflight stop rule.
+
+### Measurements, scoring, and gates
+
+No metrics, usage calculations, output scores, citation audits, fixture artifacts, traces, sessions, or envelopes were created. They are not reported as zero. V4 launched zero cells, so all four Task 06 gates fail. `TASKS.md` records this retained invalid v4 attempt; Task 06 remains unchecked and Task 07 remains unstarted.
