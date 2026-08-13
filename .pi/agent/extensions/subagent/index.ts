@@ -1,7 +1,10 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentToolResult, ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type {
+	AgentToolResult,
+	ThinkingLevel,
+} from "@earendil-works/pi-agent-core";
 import type { Message } from "@earendil-works/pi-ai";
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
@@ -31,8 +34,15 @@ import {
 	type SingleRenderAdapter,
 } from "./single-render.ts";
 import { registerToolResultMiddleware } from "./tool-result-middleware.ts";
-import { registerResearchBoundary, ResearchBoundaryTracker } from "./research-boundary.ts";
-import { registerResearchContext, type ResearchContextOptions } from "./research-context.ts";
+import {
+	registerResearchBoundary,
+	ResearchBoundaryTracker,
+} from "./research-boundary.ts";
+import {
+	registerResearchContext,
+	type ResearchContextOptions,
+} from "./research-context.ts";
+import type { ResearchWorkBudgetDetails } from "./research-budget-audit.ts";
 import type { ResearchContextTelemetry } from "./research-context-audit.ts";
 import {
 	boundResearchOutput,
@@ -52,6 +62,7 @@ import {
 } from "./research.ts";
 import {
 	RESEARCH_MAPPING_ENTRY,
+	RESEARCH_PARENT_ENV,
 	ResearchSessionStore,
 	researchSessionError,
 	researchSessionMetadataForDetails,
@@ -114,6 +125,8 @@ export interface ResearchDetails {
 	failed: boolean;
 	/** Persisted child masking events, excluded from parent model context. */
 	maskingTelemetry?: ResearchContextTelemetry[];
+	/** Per-invocation and cumulative child-only web work measurements. */
+	workBudget?: ResearchWorkBudgetDetails;
 	session?: Omit<ResearchSessionTarget, "sessionFile">;
 }
 
@@ -132,7 +145,9 @@ export interface ResearchLifecycleRequest {
 }
 
 /** The one Research execution seam. Production uses runSingleAgent/runChild. */
-export type ResearchLifecycle = (request: ResearchLifecycleRequest) => Promise<SingleResult>;
+export type ResearchLifecycle = (
+	request: ResearchLifecycleRequest,
+) => Promise<SingleResult>;
 
 export interface SubagentExtensionOptions {
 	runResearch?: ResearchLifecycle;
@@ -141,7 +156,9 @@ export interface SubagentExtensionOptions {
 	researchSessionStore?: ResearchSessionStore;
 }
 
-function defaultResearchLifecycle(request: ResearchLifecycleRequest): Promise<SingleResult> {
+function defaultResearchLifecycle(
+	request: ResearchLifecycleRequest,
+): Promise<SingleResult> {
 	return runSingleAgent(
 		request.cwd,
 		request.dispatchDefaults,
@@ -158,10 +175,22 @@ function defaultResearchLifecycle(request: ResearchLifecycleRequest): Promise<Si
 }
 
 function emptyUsage(): UsageStats {
-	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 };
+	return {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		cost: 0,
+		contextTokens: 0,
+		turns: 0,
+	};
 }
 
-function makeFailure(agent: string, task: string, failureMessage: string): SingleResult {
+function makeFailure(
+	agent: string,
+	task: string,
+	failureMessage: string,
+): SingleResult {
 	return {
 		agent,
 		agentSource: "unknown",
@@ -190,7 +219,12 @@ function isFailedResult(result: SingleResult): boolean {
 }
 
 function getResultOutput(result: SingleResult): string {
-	if (isFailedResult(result)) return getFailureDiagnostic(result) || getFinalOutput(result.messages) || "(no output)";
+	if (isFailedResult(result))
+		return (
+			getFailureDiagnostic(result) ||
+			getFinalOutput(result.messages) ||
+			"(no output)"
+		);
 	return getFinalOutput(result.messages) || "(no output)";
 }
 
@@ -219,6 +253,7 @@ function makeResearchDetails(
 	failed = false,
 	session?: ResearchSessionTarget,
 	maskingTelemetry?: readonly ResearchContextTelemetry[],
+	workBudget?: ResearchWorkBudgetDetails,
 ): ResearchDetails {
 	return {
 		kind: "research",
@@ -236,16 +271,26 @@ function makeResearchDetails(
 		results: structuredClone(results),
 		failed,
 		maskingTelemetry: maskingTelemetry?.map((telemetry) => ({ ...telemetry })),
+		workBudget: workBudget ? structuredClone(workBudget) : undefined,
 		session: session ? researchSessionMetadataForDetails(session) : undefined,
 	};
 }
 
-async function writePromptToTempFile(agentName: string, prompt: string): Promise<{ dir: string; filePath: string }> {
+async function writePromptToTempFile(
+	agentName: string,
+	prompt: string,
+): Promise<{ dir: string; filePath: string }> {
 	const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pi-subagent-"));
-	const filePath = path.join(dir, `prompt-${agentName.replace(/[^\w.-]+/g, "_")}.md`);
+	const filePath = path.join(
+		dir,
+		`prompt-${agentName.replace(/[^\w.-]+/g, "_")}.md`,
+	);
 	try {
 		await withFileMutationQueue(filePath, () =>
-			fs.promises.writeFile(filePath, prompt, { encoding: "utf8", mode: 0o600 }),
+			fs.promises.writeFile(filePath, prompt, {
+				encoding: "utf8",
+				mode: 0o600,
+			}),
 		);
 		return { dir, filePath };
 	} catch (error) {
@@ -261,7 +306,8 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 		return { command: process.execPath, args: [currentScript, ...args] };
 	}
 	const executable = path.basename(process.execPath).toLowerCase();
-	if (!/^(node|bun)(\.exe)?$/.test(executable)) return { command: process.execPath, args };
+	if (!/^(node|bun)(\.exe)?$/.test(executable))
+		return { command: process.execPath, args };
 	return { command: "pi", args };
 }
 
@@ -270,10 +316,20 @@ function combineResult(
 	child: ChildRunResult,
 	status: "running" | "completed" | "failed",
 ): SingleResult {
-	return { ...base, ...child, messages: child.messages as unknown as Message[], status };
+	return {
+		...base,
+		...child,
+		messages: child.messages as unknown as Message[],
+		status,
+	};
 }
 
-function makePendingResult(agent: AgentConfig | undefined, agentName: string, task: string, status: "queued" | "running"): SingleResult {
+function makePendingResult(
+	agent: AgentConfig | undefined,
+	agentName: string,
+	task: string,
+	status: "queued" | "running",
+): SingleResult {
 	return {
 		agent: agentName,
 		agentSource: agent?.source ?? "unknown",
@@ -303,15 +359,27 @@ async function runSingleAgent(
 ): Promise<SingleResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) {
-		const available = agents.filter((candidate) => candidate.name !== "oracle").map((candidate) => `"${candidate.name}"`).join(", ") || "none";
-		return makeFailure(agentName, task, `Unknown agent: "${agentName}". Available agents: ${available}. Omit agentScope to use its "user" default for agents in ${path.join(getAgentDir(), "agents")}; project agents must be in ${CONFIG_DIR_NAME}/agents.`);
+		const available =
+			agents
+				.filter((candidate) => candidate.name !== "oracle")
+				.map((candidate) => `"${candidate.name}"`)
+				.join(", ") || "none";
+		return makeFailure(
+			agentName,
+			task,
+			`Unknown agent: "${agentName}". Available agents: ${available}. Omit agentScope to use its "user" default for agents in ${path.join(getAgentDir(), "agents")}; project agents must be in ${CONFIG_DIR_NAME}/agents.`,
+		);
 	}
 
 	let resolvedCwd: string;
 	try {
 		resolvedCwd = resolveWorkingDirectory(defaultCwd, cwd);
 	} catch (error) {
-		return makeFailure(agentName, task, error instanceof Error ? error.message : String(error));
+		return makeFailure(
+			agentName,
+			task,
+			error instanceof Error ? error.message : String(error),
+		);
 	}
 
 	const model = agent.model ?? dispatchDefaults.model;
@@ -319,7 +387,8 @@ async function runSingleAgent(
 	if (researchSession) args.push("--session", researchSession.sessionFile);
 	else args.push("--no-session");
 	if (model) args.push("--model", model);
-	if (!agent.model && dispatchDefaults.thinkingLevel) args.push("--thinking", dispatchDefaults.thinkingLevel);
+	if (!agent.model && dispatchDefaults.thinkingLevel)
+		args.push("--thinking", dispatchDefaults.thinkingLevel);
 	const tools = selectChildTools(agent.tools, parentActiveTools);
 	if (tools.length > 0) args.push("--tools", tools.join(","));
 	else args.push("--no-tools");
@@ -327,23 +396,42 @@ async function runSingleAgent(
 	let temporaryDir: string | undefined;
 	try {
 		if (agent.systemPrompt.trim()) {
-			const temporary = await writePromptToTempFile(agent.name, agent.systemPrompt);
+			const temporary = await writePromptToTempFile(
+				agent.name,
+				agent.systemPrompt,
+			);
 			temporaryDir = temporary.dir;
 			args.push("--append-system-prompt", temporary.filePath);
 		}
 		const invocation = getPiInvocation(args);
-		const base = { agent: agent.name, agentSource: agent.source, task } as const;
+		const base = {
+			agent: agent.name,
+			agentSource: agent.source,
+			task,
+		} as const;
 		const child = await runChild({
 			...invocation,
 			task,
-			env: researchSession ? { PI_RESEARCH_CHILD_SESSION_ID: researchSession.childSessionId } : undefined,
+			env: researchSession
+				? {
+						PI_RESEARCH_CHILD_SESSION_ID: researchSession.childSessionId,
+						[RESEARCH_PARENT_ENV]: researchSession.parentSessionId,
+					}
+				: undefined,
 			cwd: resolvedCwd,
 			signal,
 			onUpdate: onUpdate
 				? (snapshot) => {
 						const result = combineResult(base, snapshot, "running");
 						onUpdate({
-							content: [{ type: "text", text: boundModelOutput(getFinalOutput(result.messages) || "(running...)") }],
+							content: [
+								{
+									type: "text",
+									text: boundModelOutput(
+										getFinalOutput(result.messages) || "(running...)",
+									),
+								},
+							],
 							details: makeDetails([result]),
 						});
 					}
@@ -354,9 +442,14 @@ async function runSingleAgent(
 		if (isFailedResult(completed)) completed.status = "failed";
 		return completed;
 	} catch (error) {
-		return makeFailure(agentName, task, error instanceof Error ? error.message : String(error));
+		return makeFailure(
+			agentName,
+			task,
+			error instanceof Error ? error.message : String(error),
+		);
 	} finally {
-		if (temporaryDir) await fs.promises.rm(temporaryDir, { recursive: true, force: true });
+		if (temporaryDir)
+			await fs.promises.rm(temporaryDir, { recursive: true, force: true });
 	}
 }
 
@@ -376,9 +469,13 @@ function aggregateUsage(results: readonly SingleResult[]): UsageStats {
 }
 
 function parallelProgress(results: readonly SingleResult[]): string {
-	const completed = results.filter((result) => result.status === "completed").length;
+	const completed = results.filter(
+		(result) => result.status === "completed",
+	).length;
 	const failed = results.filter((result) => result.status === "failed").length;
-	const running = results.filter((result) => result.status === "running").length;
+	const running = results.filter(
+		(result) => result.status === "running",
+	).length;
 	const queued = results.filter((result) => result.status === "queued").length;
 	return `Parallel: ${completed + failed}/${results.length} done, ${running} running, ${queued} queued, ${failed} failed`;
 }
@@ -396,7 +493,9 @@ function parallelSectionHeader(result: SingleResult, index: number): string {
 }
 
 function formatParallelModelOutput(results: readonly SingleResult[]): string {
-	const successCount = results.filter((result) => !isFailedResult(result)).length;
+	const successCount = results.filter(
+		(result) => !isFailedResult(result),
+	).length;
 	return boundParallelOutput(
 		`Parallel: ${successCount}/${results.length} succeeded`,
 		results.map((result, index) => ({
@@ -420,7 +519,10 @@ function formatChainSection(
 		[
 			{
 				header: `### Step ${index + 1}: [${formatAgentLabel(result.agent)}] ${status}`,
-				output: status === "running" ? getFinalOutput(result.messages) || "(running...)" : getResultOutput(result),
+				output:
+					status === "running"
+						? getFinalOutput(result.messages) || "(running...)"
+						: getResultOutput(result),
 			},
 		],
 		{ maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES },
@@ -429,11 +531,24 @@ function formatChainSection(
 	);
 }
 
-function formatChainUpdate(result: SingleResult, index: number, totalSteps: number): string {
-	return formatChainSection(`Chain: step ${index + 1}/${totalSteps} running`, result, index, "running");
+function formatChainUpdate(
+	result: SingleResult,
+	index: number,
+	totalSteps: number,
+): string {
+	return formatChainSection(
+		`Chain: step ${index + 1}/${totalSteps} running`,
+		result,
+		index,
+		"running",
+	);
 }
 
-function formatChainFailure(result: SingleResult, index: number, totalSteps: number): string {
+function formatChainFailure(
+	result: SingleResult,
+	index: number,
+	totalSteps: number,
+): string {
 	return formatChainSection(
 		`Chain failed at step ${index + 1}/${totalSteps} (${formatAgentLabel(result.agent)})`,
 		result,
@@ -442,7 +557,9 @@ function formatChainFailure(result: SingleResult, index: number, totalSteps: num
 	);
 }
 
-const singleRenderAdapter: SingleRenderAdapter<Text | Spacer | Markdown | Container> = {
+const singleRenderAdapter: SingleRenderAdapter<
+	Text | Spacer | Markdown | Container
+> = {
 	text: (text) => new Text(text, 0, 0),
 	spacer: () => new Spacer(1),
 	markdown: (text) => new Markdown(text, 0, 0, getMarkdownTheme()),
@@ -454,74 +571,142 @@ const singleRenderAdapter: SingleRenderAdapter<Text | Spacer | Markdown | Contai
 };
 
 const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
-	description: 'Agent discovery scope. Default: "user". Project agents require explicit "project" or "both".',
+	description:
+		'Agent discovery scope. Default: "user". Project agents require explicit "project" or "both".',
 	default: "user",
 });
 
 const TaskItem = Type.Object({
-	agent: Type.String({ description: "Name of the agent to invoke", minLength: 1, maxLength: 160 }),
+	agent: Type.String({
+		description: "Name of the agent to invoke",
+		minLength: 1,
+		maxLength: 160,
+	}),
 	task: Type.String({ description: "Task to delegate", minLength: 1 }),
-	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd" })),
+	cwd: Type.Optional(
+		Type.String({
+			description: "Working directory, resolved from the parent cwd",
+		}),
+	),
 });
 
 const ChainItem = Type.Object({
-	agent: Type.String({ description: "Name of the agent to invoke", minLength: 1, maxLength: 160 }),
-	task: Type.String({ description: "Task with optional {previous} placeholders for the prior output", minLength: 1 }),
-	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd" })),
+	agent: Type.String({
+		description: "Name of the agent to invoke",
+		minLength: 1,
+		maxLength: 160,
+	}),
+	task: Type.String({
+		description:
+			"Task with optional {previous} placeholders for the prior output",
+		minLength: 1,
+	}),
+	cwd: Type.Optional(
+		Type.String({
+			description: "Working directory, resolved from the parent cwd",
+		}),
+	),
 });
 
-const ResearchParams = Type.Object({
-	task: Type.String({ description: "Research question and requested deliverable", minLength: 1, pattern: "\\S" }),
-	context: Type.Optional(Type.String({ description: "Unverified caller material, constraints, or supplied evidence" })),
-	files: Type.Optional(Type.Array(Type.String({ description: "Repository-relative evidence target" }))),
-	webResearch: Type.Optional(
-		StringEnum(["auto", "required", "disabled"] as const, {
-			description: "Web research policy. Default: auto.",
-			default: "auto",
+const ResearchParams = Type.Object(
+	{
+		task: Type.String({
+			description: "Research question and requested deliverable",
+			minLength: 1,
+			pattern: "\\S",
 		}),
-	),
-	effort: Type.Optional(
-		StringEnum(["standard", "deep"] as const, {
-			description: "Research breadth and contradiction checking. Default: standard.",
-			default: "standard",
-		}),
-	),
-	researchId: Type.Optional(Type.String({
-		description: "Opaque Research ID returned by a prior Research call. Resumes only this parent-owned Research session.",
-		minLength: 38,
-		maxLength: 38,
-		pattern: "^r_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-	})),
-}, { additionalProperties: false });
+		context: Type.Optional(
+			Type.String({
+				description:
+					"Unverified caller material, constraints, or supplied evidence",
+			}),
+		),
+		files: Type.Optional(
+			Type.Array(
+				Type.String({ description: "Repository-relative evidence target" }),
+			),
+		),
+		webResearch: Type.Optional(
+			StringEnum(["auto", "required", "disabled"] as const, {
+				description: "Web research policy. Default: auto.",
+				default: "auto",
+			}),
+		),
+		effort: Type.Optional(
+			StringEnum(["standard", "deep"] as const, {
+				description:
+					"Research breadth and contradiction checking. Default: standard.",
+				default: "standard",
+			}),
+		),
+		researchId: Type.Optional(
+			Type.String({
+				description:
+					"Opaque Research ID returned by a prior Research call. Resumes only this parent-owned Research session.",
+				minLength: 38,
+				maxLength: 38,
+				pattern:
+					"^r_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+			}),
+		),
+	},
+	{ additionalProperties: false },
+);
 
 const SubagentParams = Type.Object({
-	agent: Type.Optional(Type.String({ description: "Name of the agent to invoke (single mode)", minLength: 1, maxLength: 160 })),
-	task: Type.Optional(Type.String({ description: "Task to delegate (single mode)", minLength: 1 })),
-	cwd: Type.Optional(Type.String({ description: "Working directory, resolved from the parent cwd (single mode)" })),
+	agent: Type.Optional(
+		Type.String({
+			description: "Name of the agent to invoke (single mode)",
+			minLength: 1,
+			maxLength: 160,
+		}),
+	),
+	task: Type.Optional(
+		Type.String({
+			description: "Task to delegate (single mode)",
+			minLength: 1,
+		}),
+	),
+	cwd: Type.Optional(
+		Type.String({
+			description:
+				"Working directory, resolved from the parent cwd (single mode)",
+		}),
+	),
 	tasks: Type.Optional(
 		Type.Array(TaskItem, {
-			description: "Tasks to execute in parallel, with at most four children running concurrently",
+			description:
+				"Tasks to execute in parallel, with at most four children running concurrently",
 			minItems: 1,
 			maxItems: MAX_PARALLEL_TASKS,
 		}),
 	),
 	chain: Type.Optional(
 		Type.Array(ChainItem, {
-			description: "Steps to execute sequentially; {previous} receives the immediately preceding final output",
+			description:
+				"Steps to execute sequentially; {previous} receives the immediately preceding final output",
 			minItems: 1,
 			maxItems: MAX_CHAIN_STEPS,
 		}),
 	),
 	agentScope: Type.Optional(AgentScopeSchema),
 	confirmProjectAgents: Type.Optional(
-		Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
+		Type.Boolean({
+			description: "Prompt before running project-local agents. Default: true.",
+			default: true,
+		}),
 	),
 });
 
-export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExtensionOptions = {}) {
+export function registerSubagentExtension(
+	pi: ExtensionAPI,
+	options: SubagentExtensionOptions = {},
+) {
 	registerToolResultMiddleware(pi);
-	const researchBoundaryTracker = options.researchBoundaryTracker ?? new ResearchBoundaryTracker();
-	const researchSessionStore = options.researchSessionStore ?? new ResearchSessionStore();
+	const researchBoundaryTracker =
+		options.researchBoundaryTracker ?? new ResearchBoundaryTracker();
+	const researchSessionStore =
+		options.researchSessionStore ?? new ResearchSessionStore();
 	registerResearchBoundary(pi, researchBoundaryTracker);
 	registerResearchContext(pi, options.researchContext);
 	const runResearch = options.runResearch ?? defaultResearchLifecycle;
@@ -529,8 +714,10 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 	pi.registerTool({
 		name: "research",
 		label: "Research",
-		description: "Run isolated read-only Research for iterative multi-source synthesis, conflicting evidence, or source-sensitive reports. For a narrow lookup or known URL, use websearch or webfetch directly. Do not repeat delegated Research with parent web tools.",
-		promptSnippet: "Use isolated Research for iterative multi-source synthesis and source-sensitive reports",
+		description:
+			"Run isolated read-only Research for iterative multi-source synthesis, conflicting evidence, or source-sensitive reports. For a narrow lookup or known URL, use websearch or webfetch directly. Do not repeat delegated Research with parent web tools.",
+		promptSnippet:
+			"Use isolated Research for iterative multi-source synthesis and source-sensitive reports",
 		promptGuidelines: [
 			"Use Research for iterative multi-source synthesis, conflicting evidence, and source-sensitive reports.",
 			"Use websearch or webfetch directly only for one narrow discovery lookup or one known URL.",
@@ -557,29 +744,51 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 			}
 
 			let session: ResearchSessionTarget | undefined;
+			let workBudgetInvocationId: string | undefined;
 			let sessionOperationStarted = false;
 			let locked = false;
 			try {
 				assertCanDelegate();
 				const discovery = discoverAgents(ctx.cwd, "user");
 				const agent = selectUserResearcherAgent(discovery.agents);
-				effectiveTools = preflightResearchTools(agent.tools ?? [], pi.getActiveTools(), input);
+				effectiveTools = preflightResearchTools(
+					agent.tools ?? [],
+					pi.getActiveTools(),
+					input,
+				);
 				const parent = ctx.sessionManager;
 				// The real ExtensionContext always has a SessionManager. The fallback
 				// keeps the narrow lifecycle test harness from creating test sessions.
 				if (parent) {
 					sessionOperationStarted = true;
 					session = input.researchId
-						? researchSessionStore.resume(parent, ctx.cwd, input.researchId, effectiveTools)
+						? researchSessionStore.resume(
+								parent,
+								ctx.cwd,
+								input.researchId,
+								effectiveTools,
+							)
 						: researchSessionStore.create(parent, ctx.cwd, effectiveTools);
 					researchSessionStore.lock(session);
 					locked = true;
-					pi.appendEntry(RESEARCH_MAPPING_ENTRY, researchSessionStore.mapping(session));
+					workBudgetInvocationId = researchSessionStore.startWorkBudget(
+						session,
+						input,
+					)?.invocationId;
+					pi.appendEntry(
+						RESEARCH_MAPPING_ENTRY,
+						researchSessionStore.mapping(session),
+					);
 				}
 				const prompt = composeResearchPrompt(input, effectiveTools);
-				const clonedAgent = cloneResearcherAgent(agent, effectiveTools) as AgentConfig;
+				const clonedAgent = cloneResearcherAgent(
+					agent,
+					effectiveTools,
+				) as AgentConfig;
 				const dispatchDefaults: DispatchDefaults = {
-					model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+					model: ctx.model
+						? `${ctx.model.provider}/${ctx.model.id}`
+						: undefined,
 					thinkingLevel: ctx.thinkingLevel,
 				};
 				const genericDetails = (results: SingleResult[]): SubagentDetails => ({
@@ -601,35 +810,126 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 								const current = partial.details?.results[0];
 								if (!current) return;
 								onUpdate({
-									content: [{ type: "text", text: boundResearchResult(getResultOutput(current) || "(running...)") }],
-									details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [current], isFailedResult(current), session)),
+									content: [
+										{
+											type: "text",
+											text: boundResearchResult(
+												getResultOutput(current) || "(running...)",
+											),
+										},
+									],
+									details: withResearchFailureState(
+										makeResearchDetails(
+											input,
+											effectiveTools,
+											[current],
+											isFailedResult(current),
+											session,
+											session
+												? researchSessionStore.maskingTelemetry(session)
+												: undefined,
+											session && workBudgetInvocationId
+												? researchSessionStore.workBudgetDetails(
+														session,
+														workBudgetInvocationId,
+													)
+												: undefined,
+										),
+									),
 								});
 							}
 						: undefined,
 					makeDetails: genericDetails,
 				});
-				if (session) pi.appendEntry(RESEARCH_MAPPING_ENTRY, researchSessionStore.mapping(session));
+				researchSessionStore.finalizeWorkBudget(
+					session,
+					workBudgetInvocationId,
+				);
+				if (session)
+					pi.appendEntry(
+						RESEARCH_MAPPING_ENTRY,
+						researchSessionStore.mapping(session),
+					);
 				const failed = isFailedResult(result);
-				const researchId = session ? `[Research ID: ${session.researchId}]\n\n` : "";
+				const researchId = session
+					? `[Research ID: ${session.researchId}]\n\n`
+					: "";
 				const response = {
-					content: [{ type: "text" as const, text: boundResearchResult(`${researchId}${getResultOutput(result)}`) }],
-					details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [result], failed, session, session ? researchSessionStore.maskingTelemetry(session) : undefined), failed),
+					content: [
+						{
+							type: "text" as const,
+							text: boundResearchResult(
+								`${researchId}${getResultOutput(result)}`,
+							),
+						},
+					],
+					details: withResearchFailureState(
+						makeResearchDetails(
+							input,
+							effectiveTools,
+							[result],
+							failed,
+							session,
+							session
+								? researchSessionStore.maskingTelemetry(session)
+								: undefined,
+							session && workBudgetInvocationId
+								? researchSessionStore.workBudgetDetails(
+										session,
+										workBudgetInvocationId,
+									)
+								: undefined,
+						),
+						failed,
+					),
 				};
 				researchBoundaryTracker.record(response, _toolCallId);
 				return response;
 			} catch (error) {
-				const message = sessionOperationStarted ? researchSessionError(error) : error instanceof Error ? error.message : String(error);
+				researchSessionStore.finalizeWorkBudget(
+					session,
+					workBudgetInvocationId,
+				);
+				const message = sessionOperationStarted
+					? researchSessionError(error)
+					: error instanceof Error
+						? error.message
+						: String(error);
 				return {
 					content: [{ type: "text", text: boundResearchResult(message) }],
-					details: makeResearchDetails(input, effectiveTools, [], true, session, session ? researchSessionStore.maskingTelemetry(session) : undefined),
+					details: makeResearchDetails(
+						input,
+						effectiveTools,
+						[],
+						true,
+						session,
+						session
+							? researchSessionStore.maskingTelemetry(session)
+							: undefined,
+						session && workBudgetInvocationId
+							? researchSessionStore.workBudgetDetails(
+									session,
+									workBudgetInvocationId,
+								)
+							: undefined,
+					),
 				};
 			} finally {
+				researchSessionStore.finalizeWorkBudget(
+					session,
+					workBudgetInvocationId,
+				);
 				if (session && locked) researchSessionStore.release(session);
 			}
 		},
 
 		renderCall(args, theme) {
-			return renderDedicatedSingleCall("research", args.task ?? "...", theme, singleRenderAdapter);
+			return renderDedicatedSingleCall(
+				"research",
+				args.task ?? "...",
+				theme,
+				singleRenderAdapter,
+			);
 		},
 
 		renderResult(result, options, theme) {
@@ -637,20 +937,39 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 			if (!details?.results.length) {
 				const content = result.content[0];
 				const text = content?.type === "text" ? content.text : "(no output)";
-				const status = details?.failed ? theme.fg("error", "x") : theme.fg("success", "ok");
+				const status = details?.failed
+					? theme.fg("error", "x")
+					: theme.fg("success", "ok");
 				const body = details?.failed ? theme.fg("error", text) : text;
-				return new Text(`${status} ${theme.fg("toolTitle", theme.bold("research"))}\n${body}`, 0, 0);
+				return new Text(
+					`${status} ${theme.fg("toolTitle", theme.bold("research"))}\n${body}`,
+					0,
+					0,
+				);
 			}
 			const rendered = renderSingleResult(
 				details.results[0],
-				{ ...options, failed: isFailedResult(details.results[0]), descriptor: { label: "research", showSource: false } },
+				{
+					...options,
+					failed: isFailedResult(details.results[0]),
+					descriptor: { label: "research", showSource: false },
+				},
 				theme,
 				singleRenderAdapter,
 			);
 			if (!details.session) return rendered;
 			const lineage = new Container();
 			lineage.addChild(rendered);
-			lineage.addChild(new Text(theme.fg("dim", `Research ID: ${details.session.researchId}${details.session.resumed ? " (resumed)" : ""}`), 0, 0));
+			lineage.addChild(
+				new Text(
+					theme.fg(
+						"dim",
+						`Research ID: ${details.session.researchId}${details.session.resumed ? " (resumed)" : ""}`,
+					),
+					0,
+					0,
+				),
+			);
 			return lineage;
 		},
 	});
@@ -669,12 +988,17 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const agentScope: AgentScope = params.agentScope ?? "user";
 			const selectedMode = validateDispatchMode(params);
-			const emptyDetails = (mode: "single" | "parallel" | "chain"): SubagentDetails => ({
+			const emptyDetails = (
+				mode: "single" | "parallel" | "chain",
+			): SubagentDetails => ({
 				mode,
 				agentScope,
 				projectAgentsDir: null,
 				results: [],
-				totalSteps: mode === "chain" && Array.isArray(params.chain) ? params.chain.length : undefined,
+				totalSteps:
+					mode === "chain" && Array.isArray(params.chain)
+						? params.chain.length
+						: undefined,
 			});
 			if ("error" in selectedMode) {
 				return {
@@ -686,7 +1010,12 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 				assertCanDelegate();
 			} catch (error) {
 				return {
-					content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+					content: [
+						{
+							type: "text",
+							text: error instanceof Error ? error.message : String(error),
+						},
+					],
 					details: { ...emptyDetails(selectedMode.mode), failed: true },
 				};
 			}
@@ -709,22 +1038,36 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 						: [params.agent!],
 			);
 			const projectAgents = [...requestedNames]
-				.map((name) => discovery.agents.find((candidate) => candidate.name === name))
+				.map((name) =>
+					discovery.agents.find((candidate) => candidate.name === name),
+				)
 				.filter((agent): agent is AgentConfig => agent?.source === "project");
 			if (projectAgents.length > 0 && (params.confirmProjectAgents ?? true)) {
 				if (!ctx.hasUI) {
 					return {
-						content: [{ type: "text", text: "Denied: project-local agents require confirmation, but no UI is available." }],
+						content: [
+							{
+								type: "text",
+								text: "Denied: project-local agents require confirmation, but no UI is available.",
+							},
+						],
 						details: { ...makeDetails(selectedMode.mode)([]), failed: true },
 					};
 				}
 				const approved = await ctx.ui.confirm(
-					projectAgents.length === 1 ? "Run project-local agent?" : "Run project-local agents?",
+					projectAgents.length === 1
+						? "Run project-local agent?"
+						: "Run project-local agents?",
 					`Agents: ${projectAgents.map((agent) => agent.name).join(", ")}\nSource: ${discovery.projectAgentsDir ?? "(unknown)"}\n\nOnly continue for a trusted repository.`,
 				);
 				if (!approved) {
 					return {
-						content: [{ type: "text", text: "Canceled: project-local agents not approved." }],
+						content: [
+							{
+								type: "text",
+								text: "Canceled: project-local agents not approved.",
+							},
+						],
 						details: { ...makeDetails(selectedMode.mode)([]), failed: true },
 					};
 				}
@@ -755,9 +1098,17 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 								? (partial) => {
 										const current = partial.details?.results[0];
 										if (!current) return;
-										const snapshot = cloneProgressResults([...completedResults, current]);
+										const snapshot = cloneProgressResults([
+											...completedResults,
+											current,
+										]);
 										onUpdate({
-											content: [{ type: "text", text: formatChainUpdate(current, index, chain.length) }],
+											content: [
+												{
+													type: "text",
+													text: formatChainUpdate(current, index, chain.length),
+												},
+											],
 											details: chainDetails(snapshot),
 										});
 									}
@@ -770,13 +1121,24 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 				if (execution.failedIndex !== undefined) {
 					const failed = execution.results[execution.failedIndex];
 					return {
-						content: [{ type: "text", text: formatChainFailure(failed, execution.failedIndex, chain.length) }],
+						content: [
+							{
+								type: "text",
+								text: formatChainFailure(
+									failed,
+									execution.failedIndex,
+									chain.length,
+								),
+							},
+						],
 						details: { ...chainDetails(execution.results), failed: true },
 					};
 				}
 				const final = execution.results.at(-1)!;
 				return {
-					content: [{ type: "text", text: boundModelOutput(getResultOutput(final)) }],
+					content: [
+						{ type: "text", text: boundModelOutput(getResultOutput(final)) },
+					],
 					details: chainDetails(execution.results),
 				};
 			}
@@ -795,45 +1157,61 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 					if (!onUpdate) return;
 					const snapshot = cloneProgressResults(allResults);
 					onUpdate({
-						content: [{ type: "text", text: boundModelOutput(parallelProgress(snapshot)) }],
+						content: [
+							{
+								type: "text",
+								text: boundModelOutput(parallelProgress(snapshot)),
+							},
+						],
 						details: makeDetails("parallel")(snapshot),
 					});
 				};
 				emitParallelUpdate();
 
-				const results = await mapWithConcurrencyLimit(tasks, MAX_PARALLEL_CONCURRENCY, async (task, index) => {
-					if (signal?.aborted) {
-						const aborted = makeFailure(task.agent, task.task, "Subagent was aborted before spawn.");
-						allResults[index] = aborted;
-						emitParallelUpdate();
-						return aborted;
-					}
-					allResults[index] = { ...allResults[index], status: "running" };
-					emitParallelUpdate();
-					const result = await runSingleAgent(
-						ctx.cwd,
-						dispatchDefaults,
-						parentActiveTools,
-						discovery.agents,
-						task.agent,
-						task.task,
-						task.cwd,
-						signal,
-						(partial) => {
-							const current = partial.details?.results[0];
-							if (!current) return;
-							allResults[index] = current;
+				const results = await mapWithConcurrencyLimit(
+					tasks,
+					MAX_PARALLEL_CONCURRENCY,
+					async (task, index) => {
+						if (signal?.aborted) {
+							const aborted = makeFailure(
+								task.agent,
+								task.task,
+								"Subagent was aborted before spawn.",
+							);
+							allResults[index] = aborted;
 							emitParallelUpdate();
-						},
-						makeDetails("parallel"),
-					);
-					allResults[index] = result;
-					emitParallelUpdate();
-					return result;
-				});
+							return aborted;
+						}
+						allResults[index] = { ...allResults[index], status: "running" };
+						emitParallelUpdate();
+						const result = await runSingleAgent(
+							ctx.cwd,
+							dispatchDefaults,
+							parentActiveTools,
+							discovery.agents,
+							task.agent,
+							task.task,
+							task.cwd,
+							signal,
+							(partial) => {
+								const current = partial.details?.results[0];
+								if (!current) return;
+								allResults[index] = current;
+								emitParallelUpdate();
+							},
+							makeDetails("parallel"),
+						);
+						allResults[index] = result;
+						emitParallelUpdate();
+						return result;
+					},
+				);
 				return {
 					content: [{ type: "text", text: formatParallelModelOutput(results) }],
-					details: { ...makeDetails("parallel")(results), failed: results.some(isFailedResult) || undefined },
+					details: {
+						...makeDetails("parallel")(results),
+						failed: results.some(isFailedResult) || undefined,
+					},
 				};
 			}
 
@@ -851,7 +1229,9 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 			);
 			const failed = isFailedResult(result);
 			return {
-				content: [{ type: "text", text: boundModelOutput(getResultOutput(result)) }],
+				content: [
+					{ type: "text", text: boundModelOutput(getResultOutput(result)) },
+				],
 				details: { ...makeDetails("single")([result]), failed },
 			};
 		},
@@ -866,10 +1246,12 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 				for (let index = 0; index < Math.min(args.chain.length, 3); index++) {
 					const step = args.chain[index];
 					const cleanTask = step.task.replaceAll("{previous}", "").trim();
-					const preview = cleanTask.length > 40 ? `${cleanTask.slice(0, 40)}...` : cleanTask;
+					const preview =
+						cleanTask.length > 40 ? `${cleanTask.slice(0, 40)}...` : cleanTask;
 					text += `\n  ${theme.fg("muted", `${index + 1}.`)} ${theme.fg("accent", step.agent)}${theme.fg("dim", ` ${preview}`)}`;
 				}
-				if (args.chain.length > 3) text += `\n  ${theme.fg("muted", `... +${args.chain.length - 3} more`)}`;
+				if (args.chain.length > 3)
+					text += `\n  ${theme.fg("muted", `... +${args.chain.length - 3} more`)}`;
 				return new Text(text, 0, 0);
 			}
 			if (args.tasks) {
@@ -878,26 +1260,42 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 					theme.fg("accent", `parallel (${args.tasks.length} tasks)`) +
 					theme.fg("muted", ` [${scope}]`);
 				for (const task of args.tasks.slice(0, 3)) {
-					const preview = task.task.length > 40 ? `${task.task.slice(0, 40)}...` : task.task;
+					const preview =
+						task.task.length > 40 ? `${task.task.slice(0, 40)}...` : task.task;
 					text += `\n  ${theme.fg("accent", task.agent)}${theme.fg("dim", ` ${preview}`)}`;
 				}
-				if (args.tasks.length > 3) text += `\n  ${theme.fg("muted", `... +${args.tasks.length - 3} more`)}`;
+				if (args.tasks.length > 3)
+					text += `\n  ${theme.fg("muted", `... +${args.tasks.length - 3} more`)}`;
 				return new Text(text, 0, 0);
 			}
-			return renderGenericSingleCall(args.agent ?? "...", scope, args.task ?? "...", theme, singleRenderAdapter);
+			return renderGenericSingleCall(
+				args.agent ?? "...",
+				scope,
+				args.task ?? "...",
+				theme,
+				singleRenderAdapter,
+			);
 		},
 
 		renderResult(result, { expanded, isPartial }, theme) {
 			const details = result.details as SubagentDetails | undefined;
 			if (!details?.results.length) {
 				const content = result.content[0];
-				return new Text(content?.type === "text" ? content.text : "(no output)", 0, 0);
+				return new Text(
+					content?.type === "text" ? content.text : "(no output)",
+					0,
+					0,
+				);
 			}
 			if (details.mode === "chain") {
 				const totalSteps = details.totalSteps ?? details.results.length;
-				const completed = details.results.filter((item) => item.status === "completed").length;
+				const completed = details.results.filter(
+					(item) => item.status === "completed",
+				).length;
 				const failedIndex = details.results.findIndex(isFailedResult);
-				const inProgress = details.results.some((item) => item.status === "queued" || item.status === "running");
+				const inProgress = details.results.some(
+					(item) => item.status === "queued" || item.status === "running",
+				);
 				const icon = inProgress
 					? theme.fg("warning", "...")
 					: failedIndex >= 0
@@ -912,11 +1310,17 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 				if (expanded && !inProgress) {
 					const container = new Container();
 					container.addChild(
-						new Text(`${icon} ${theme.fg("toolTitle", theme.bold("chain "))}${theme.fg("accent", summary)}`, 0, 0),
+						new Text(
+							`${icon} ${theme.fg("toolTitle", theme.bold("chain "))}${theme.fg("accent", summary)}`,
+							0,
+							0,
+						),
 					);
 					for (let index = 0; index < details.results.length; index++) {
 						const item = details.results[index];
-						const itemIcon = isFailedResult(item) ? theme.fg("error", "x") : theme.fg("success", "ok");
+						const itemIcon = isFailedResult(item)
+							? theme.fg("error", "x")
+							: theme.fg("success", "ok");
 						const displayItems = getDisplayItems(item.messages);
 						const finalOutput = getFinalOutput(item.messages);
 						const diagnostic = getFailureDiagnostic(item);
@@ -928,12 +1332,23 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 								0,
 							),
 						);
-						container.addChild(new Text(theme.fg("muted", "Task: ") + theme.fg("dim", item.task), 0, 0));
+						container.addChild(
+							new Text(
+								theme.fg("muted", "Task: ") + theme.fg("dim", item.task),
+								0,
+								0,
+							),
+						);
 						for (const displayItem of displayItems) {
 							if (displayItem.type === "toolCall") {
 								container.addChild(
 									new Text(
-										theme.fg("muted", "-> ") + formatToolCall(displayItem.name, displayItem.args, theme.fg.bind(theme)),
+										theme.fg("muted", "-> ") +
+											formatToolCall(
+												displayItem.name,
+												displayItem.args,
+												theme.fg.bind(theme),
+											),
 										0,
 										0,
 									),
@@ -942,16 +1357,25 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 						}
 						if (finalOutput) {
 							container.addChild(new Spacer(1));
-							container.addChild(new Markdown(finalOutput.trim(), 0, 0, getMarkdownTheme()));
-						} else if (!diagnostic) container.addChild(new Text(theme.fg("muted", "(no output)"), 0, 0));
-						if (diagnostic) container.addChild(new Text(theme.fg("error", diagnostic), 0, 0));
+							container.addChild(
+								new Markdown(finalOutput.trim(), 0, 0, getMarkdownTheme()),
+							);
+						} else if (!diagnostic)
+							container.addChild(
+								new Text(theme.fg("muted", "(no output)"), 0, 0),
+							);
+						if (diagnostic)
+							container.addChild(new Text(theme.fg("error", diagnostic), 0, 0));
 						const stepUsage = formatUsageStats(item.usage, item.model);
-						if (stepUsage) container.addChild(new Text(theme.fg("dim", stepUsage), 0, 0));
+						if (stepUsage)
+							container.addChild(new Text(theme.fg("dim", stepUsage), 0, 0));
 					}
 					const totalUsage = formatUsageStats(aggregateUsage(details.results));
 					if (totalUsage) {
 						container.addChild(new Spacer(1));
-						container.addChild(new Text(theme.fg("dim", `Total: ${totalUsage}`), 0, 0));
+						container.addChild(
+							new Text(theme.fg("dim", `Total: ${totalUsage}`), 0, 0),
+						);
 					}
 					return container;
 				}
@@ -968,7 +1392,10 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 					const displayItems = getDisplayItems(item.messages);
 					const visibleItems = displayItems.slice(-5);
 					const diagnostic = getFailureDiagnostic(item);
-					const taskPreview = item.task.length > 120 ? `${item.task.slice(0, 120)}...` : item.task;
+					const taskPreview =
+						item.task.length > 120
+							? `${item.task.slice(0, 120)}...`
+							: item.task;
 					text += `\n\n${theme.fg("muted", `--- Step ${index + 1}: `)}${theme.fg("accent", item.agent)} ${itemIcon}`;
 					text += `\n${theme.fg("muted", "Task: ")}${theme.fg("dim", taskPreview)}`;
 					if (displayItems.length > visibleItems.length) {
@@ -982,24 +1409,38 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 						}
 					}
 					if (diagnostic) text += `\n${theme.fg("error", diagnostic)}`;
-					else if (!visibleItems.length) text += `\n${theme.fg("muted", item.status === "running" ? "(running...)" : "(no output)")}`;
+					else if (!visibleItems.length)
+						text += `\n${theme.fg("muted", item.status === "running" ? "(running...)" : "(no output)")}`;
 					const stepUsage = formatUsageStats(item.usage, item.model);
 					if (stepUsage) text += `\n${theme.fg("dim", stepUsage)}`;
 				}
 				if (!inProgress) {
 					const totalUsage = formatUsageStats(aggregateUsage(details.results));
-					if (totalUsage) text += `\n\n${theme.fg("dim", `Total: ${totalUsage}`)}`;
+					if (totalUsage)
+						text += `\n\n${theme.fg("dim", `Total: ${totalUsage}`)}`;
 				}
 				if (!expanded) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
 				return new Text(text, 0, 0);
 			}
 			if (details.mode === "parallel") {
-				const running = details.results.filter((item) => item.status === "running").length;
-				const queued = details.results.filter((item) => item.status === "queued").length;
-				const completed = details.results.filter((item) => item.status === "completed").length;
-				const failed = details.results.filter((item) => item.status === "failed").length;
+				const running = details.results.filter(
+					(item) => item.status === "running",
+				).length;
+				const queued = details.results.filter(
+					(item) => item.status === "queued",
+				).length;
+				const completed = details.results.filter(
+					(item) => item.status === "completed",
+				).length;
+				const failed = details.results.filter(
+					(item) => item.status === "failed",
+				).length;
 				const inProgress = running + queued > 0;
-				const icon = inProgress ? theme.fg("warning", "...") : failed ? theme.fg("warning", "!") : theme.fg("success", "ok");
+				const icon = inProgress
+					? theme.fg("warning", "...")
+					: failed
+						? theme.fg("warning", "!")
+						: theme.fg("success", "ok");
 				const summary = inProgress
 					? `${completed + failed}/${details.results.length} done, ${running} running, ${queued} queued`
 					: `${completed}/${details.results.length} succeeded`;
@@ -1007,23 +1448,44 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 				if (expanded && !inProgress) {
 					const container = new Container();
 					container.addChild(
-						new Text(`${icon} ${theme.fg("toolTitle", theme.bold("parallel "))}${theme.fg("accent", summary)}`, 0, 0),
+						new Text(
+							`${icon} ${theme.fg("toolTitle", theme.bold("parallel "))}${theme.fg("accent", summary)}`,
+							0,
+							0,
+						),
 					);
 					for (const item of details.results) {
-						const itemIcon = isFailedResult(item) ? theme.fg("error", "x") : theme.fg("success", "ok");
+						const itemIcon = isFailedResult(item)
+							? theme.fg("error", "x")
+							: theme.fg("success", "ok");
 						const displayItems = getDisplayItems(item.messages);
 						const finalOutput = getFinalOutput(item.messages);
 						const diagnostic = getFailureDiagnostic(item);
 						container.addChild(new Spacer(1));
 						container.addChild(
-							new Text(`${theme.fg("muted", "--- ")}${theme.fg("accent", item.agent)} ${itemIcon}`, 0, 0),
+							new Text(
+								`${theme.fg("muted", "--- ")}${theme.fg("accent", item.agent)} ${itemIcon}`,
+								0,
+								0,
+							),
 						);
-						container.addChild(new Text(theme.fg("muted", "Task: ") + theme.fg("dim", item.task), 0, 0));
+						container.addChild(
+							new Text(
+								theme.fg("muted", "Task: ") + theme.fg("dim", item.task),
+								0,
+								0,
+							),
+						);
 						for (const displayItem of displayItems) {
 							if (displayItem.type === "toolCall") {
 								container.addChild(
 									new Text(
-										theme.fg("muted", "-> ") + formatToolCall(displayItem.name, displayItem.args, theme.fg.bind(theme)),
+										theme.fg("muted", "-> ") +
+											formatToolCall(
+												displayItem.name,
+												displayItem.args,
+												theme.fg.bind(theme),
+											),
 										0,
 										0,
 									),
@@ -1032,16 +1494,25 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 						}
 						if (finalOutput) {
 							container.addChild(new Spacer(1));
-							container.addChild(new Markdown(finalOutput.trim(), 0, 0, getMarkdownTheme()));
-						} else if (!diagnostic) container.addChild(new Text(theme.fg("muted", "(no output)"), 0, 0));
-						if (diagnostic) container.addChild(new Text(theme.fg("error", diagnostic), 0, 0));
+							container.addChild(
+								new Markdown(finalOutput.trim(), 0, 0, getMarkdownTheme()),
+							);
+						} else if (!diagnostic)
+							container.addChild(
+								new Text(theme.fg("muted", "(no output)"), 0, 0),
+							);
+						if (diagnostic)
+							container.addChild(new Text(theme.fg("error", diagnostic), 0, 0));
 						const taskUsage = formatUsageStats(item.usage, item.model);
-						if (taskUsage) container.addChild(new Text(theme.fg("dim", taskUsage), 0, 0));
+						if (taskUsage)
+							container.addChild(new Text(theme.fg("dim", taskUsage), 0, 0));
 					}
 					const totalUsage = formatUsageStats(aggregateUsage(details.results));
 					if (totalUsage) {
 						container.addChild(new Spacer(1));
-						container.addChild(new Text(theme.fg("dim", `Total: ${totalUsage}`), 0, 0));
+						container.addChild(
+							new Text(theme.fg("dim", `Total: ${totalUsage}`), 0, 0),
+						);
 					}
 					return container;
 				}
@@ -1072,7 +1543,12 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 					}
 					if (diagnostic) text += `\n${theme.fg("error", diagnostic)}`;
 					else if (!visibleItems.length) {
-						const empty = item.status === "queued" ? "(queued)" : item.status === "running" ? "(running...)" : "(no output)";
+						const empty =
+							item.status === "queued"
+								? "(queued)"
+								: item.status === "running"
+									? "(running...)"
+									: "(no output)";
 						text += `\n${theme.fg("muted", empty)}`;
 					}
 					const taskUsage = formatUsageStats(item.usage, item.model);
@@ -1080,7 +1556,8 @@ export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExt
 				}
 				if (!inProgress) {
 					const totalUsage = formatUsageStats(aggregateUsage(details.results));
-					if (totalUsage) text += `\n\n${theme.fg("dim", `Total: ${totalUsage}`)}`;
+					if (totalUsage)
+						text += `\n\n${theme.fg("dim", `Total: ${totalUsage}`)}`;
 				}
 				if (!expanded) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
 				return new Text(text, 0, 0);

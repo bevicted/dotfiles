@@ -1158,10 +1158,16 @@ test("registered Research rejects concurrent continuation and permits cancellati
 		const research = registered.find((tool) => tool.name === "research")!;
 		const cancel = new AbortController();
 		cancel.abort();
-		const cancelled = await research.execute("fresh", { task: "fresh" }, cancel.signal, undefined, { cwd: root, sessionManager: parent, model: undefined, thinkingLevel: undefined, hasUI: false });
+		const cancelled = await research.execute("fresh", { task: "fresh", webResearch: "disabled" }, cancel.signal, undefined, { cwd: root, sessionManager: parent, model: undefined, thinkingLevel: undefined, hasUI: false });
+		assert.equal(cancelled.details.workBudget, undefined);
 		const researchId = cancelled.details.session.researchId;
 		assert.equal(calls, 1);
-		const cancelledTarget = store.resume(parent, root, researchId, active);
+		const cancelledTarget = store.resume(
+			parent,
+			root,
+			researchId,
+			["read", "grep", "find", "ls"],
+		);
 		assert.equal(JSON.stringify(cancelled.details).includes(cancelledTarget.sessionFile), false, "details must not disclose child paths");
 		assert.deepEqual(cancelled.details.maskingTelemetry, [{ originalBytes: 32_768, deliveredBytes: 4_096, originalTokenEstimate: 8_192, deliveredTokenEstimate: 1_024, maskedResults: 4 }], "Research details must recover persisted child masking telemetry after the child exits");
 		assert.equal(fs.existsSync(cancelledTarget.sessionFile), true);
@@ -1169,15 +1175,15 @@ test("registered Research rejects concurrent continuation and permits cancellati
 		wait = true;
 		const started = Promise.withResolvers<void>();
 		entered = started.resolve;
-		const first = research.execute("resume-1", { task: "resume", researchId }, new AbortController().signal, undefined, { cwd: root, sessionManager: parent, model: undefined, thinkingLevel: undefined, hasUI: false });
+		const first = research.execute("resume-1", { task: "resume", researchId, webResearch: "disabled" }, new AbortController().signal, undefined, { cwd: root, sessionManager: parent, model: undefined, thinkingLevel: undefined, hasUI: false });
 		await started.promise;
-		const concurrent = await research.execute("resume-2", { task: "resume", researchId }, new AbortController().signal, undefined, { cwd: root, sessionManager: parent, model: undefined, thinkingLevel: undefined, hasUI: false });
+		const concurrent = await research.execute("resume-2", { task: "resume", researchId, webResearch: "disabled" }, new AbortController().signal, undefined, { cwd: root, sessionManager: parent, model: undefined, thinkingLevel: undefined, hasUI: false });
 		assert.match(concurrent.content[0].text, /already running/);
 		assert.equal(calls, 2, "concurrent continuation must fail before child spawn");
 		gate.resolve();
 		await first;
 		wait = false;
-		const resumed = await research.execute("resume-3", { task: "resume", researchId }, new AbortController().signal, undefined, { cwd: root, sessionManager: parent, model: undefined, thinkingLevel: undefined, hasUI: false });
+		const resumed = await research.execute("resume-3", { task: "resume", researchId, webResearch: "disabled" }, new AbortController().signal, undefined, { cwd: root, sessionManager: parent, model: undefined, thinkingLevel: undefined, hasUI: false });
 		assert.equal(resumed.details.failed, false);
 		assert.equal(calls, 3);
 	} finally {
