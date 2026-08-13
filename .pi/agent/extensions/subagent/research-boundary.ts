@@ -78,11 +78,37 @@ function sameContent(left: SafeContent | undefined, right: SafeContent | undefin
 
 const STRUCTURAL_VALUE_KEYS = new Set(["type", "role", "toolName", "name"]);
 const OPAQUE_ID_KEYS = new Set(["id", "toolCallId", "call_id", "tool_use_id"]);
-// These are the only child final-message values that may also occur in a parent
-// request. Keep this path-specific: generic IDs and signatures are private.
-const FINAL_ASSISTANT_METADATA_KEYS = new Set(["model", "provider", "responseId", "response_id"]);
 const FINAL_REASONING_METADATA_KEYS = new Set(["encrypted_content"]);
 const FINAL_THINKING_METADATA_KEYS = new Set(["thinkingSignature", "encrypted_content"]);
+const KNOWN_PROVIDER_APIS = new Set(["openai-responses", "openai-codex-responses", "azure-openai-responses", "anthropic-messages", "openai-completions"]);
+const KNOWN_STOP_REASONS = new Set(["stop", "end", "toolUse", "length", "error", "aborted", "completed"]);
+const KNOWN_FORMATS = new Set(["text", "markdown", "html"]);
+// These exact values are emitted by the supported textual web tools. A MIME
+// parameter is not generic protocol metadata: it can carry child evidence.
+const SHARED_CONTENT_TYPES = new Set([
+	"text/plain",
+	"text/plain; charset=utf-8",
+	"text/html",
+	"text/html; charset=utf-8",
+	"text/markdown",
+	"application/json",
+]);
+
+/**
+ * Shared values are protocol vocabulary, not child evidence, only at these
+ * exact keys and only with their native type. Diagnostics, timestamps, and
+ * arbitrary values fail closed even when their field names look familiar.
+ */
+function isSharedProtocolValue(key: string, value: unknown): boolean {
+	if (key === "api") return typeof value === "string" && KNOWN_PROVIDER_APIS.has(value);
+	if (key === "stopReason" || key === "rawStopReason") return typeof value === "string" && KNOWN_STOP_REASONS.has(value);
+	if (key === "format") return typeof value === "string" && KNOWN_FORMATS.has(value);
+	if (key === "contentType") return typeof value === "string" && SHARED_CONTENT_TYPES.has(value);
+	if (key === "status") return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599;
+	if (key === "responseBytes" || key === "outputBytes") return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+	if (key === "truncated" || key === "isError") return typeof value === "boolean";
+	return false;
+}
 
 /** A deterministic fingerprint preserves non-string private values without scalar taint. */
 function fingerprint(value: unknown): string | undefined {
@@ -115,9 +141,14 @@ function addStructures(value: unknown, structures: Set<string>): void {
 }
 
 /** Collect child-created private observations, never child field names or bare generic scalars. */
+function isBoundedSynthesisUrl(value: string, boundedSynthesis: string): boolean {
+	return /^https?:\/\/\S+$/i.test(value) && boundedSynthesis.includes(value);
+}
+
 function addPrivateObservation(value: unknown, fragments: Set<string>, opaqueIds: Set<string>, structures: Set<string>, boundedSynthesis: string, key?: string, keyedScalars = false): void {
+	if (isSharedProtocolValue(key ?? "", value)) return;
 	if (typeof value === "string") {
-		if (!value || value === boundedSynthesis || STRUCTURAL_VALUE_KEYS.has(key ?? "")) return;
+		if (!value || value === boundedSynthesis || isBoundedSynthesisUrl(value, boundedSynthesis) || STRUCTURAL_VALUE_KEYS.has(key ?? "")) return;
 		if (OPAQUE_ID_KEYS.has(key ?? "")) opaqueIds.add(value);
 		else if (keyedScalars) {
 			const encoded = scalarFingerprint(value, key);
@@ -141,10 +172,16 @@ function addPrivateObservation(value: unknown, fragments: Set<string>, opaqueIds
 		addPrivateObservation(child, fragments, opaqueIds, structures, boundedSynthesis, childKey, keyedScalars);
 }
 
-/** Only final assistant protocol metadata may recur in a parent provider request. */
+function addNonFinalAssistantPrivateOrigins(message: Record<string, unknown>, fragments: Set<string>, opaqueIds: Set<string>, structures: Set<string>, boundedSynthesis: string): void {
+	for (const [key, value] of Object.entries(message)) {
+		if (key === "role" || isSharedProtocolValue(key, value)) continue;
+		addPrivateObservation(value, fragments, opaqueIds, structures, boundedSynthesis, key);
+	}
+}
+
 function addFinalAssistantPrivateOrigins(message: Record<string, unknown>, fragments: Set<string>, opaqueIds: Set<string>, structures: Set<string>, boundedSynthesis: string): void {
 	for (const [key, value] of Object.entries(message)) {
-		if (key === "role" || FINAL_ASSISTANT_METADATA_KEYS.has(key)) continue;
+		if (key === "role" || isSharedProtocolValue(key, value)) continue;
 		if (key === "reasoning" && isRecord(value)) {
 			const privateReasoning = Object.fromEntries(Object.entries(value).filter(([reasoningKey]) => !FINAL_REASONING_METADATA_KEYS.has(reasoningKey)));
 			if (Object.keys(privateReasoning).length > 0) addPrivateObservation(privateReasoning, fragments, opaqueIds, structures, boundedSynthesis, key);
@@ -189,10 +226,12 @@ function privateOrigins(results: readonly unknown[], outerDetails: unknown, boun
 			if (!isRecord(message) || message.role === "user") continue;
 			if (message.role === "assistant" && index === finalAssistant && Array.isArray(message.content))
 				addFinalAssistantPrivateOrigins(message, fragments, opaqueIds, structures, boundedSynthesis);
+			else if (message.role === "assistant")
+				addNonFinalAssistantPrivateOrigins(message, fragments, opaqueIds, structures, boundedSynthesis);
 			else addPrivateObservation(message, fragments, opaqueIds, structures, boundedSynthesis);
 		}
 		for (const [key, value] of Object.entries(result)) {
-			if (["agent", "agentSource", "task", "status", "messages", "usage", "details"].includes(key)) continue;
+			if (["agent", "agentSource", "task", "messages", "usage", "details"].includes(key) || isSharedProtocolValue(key, value)) continue;
 			addPrivateObservation(value, fragments, opaqueIds, structures, boundedSynthesis, key);
 		}
 		addPrivateObservation(result.details, fragments, opaqueIds, structures, boundedSynthesis);
@@ -269,10 +308,10 @@ function containsPrivateStructure(value: unknown, structures: readonly string[],
 	return false;
 }
 
-function containsPrivateOrigin(value: unknown, run: PrivateRun): boolean {
+function containsPrivateOrigin(value: unknown, run: PrivateRun, key?: string): boolean {
 	return containsPrivateText(value, run.privateFragments, run.trustedParentStrings, run.safeContent[0].text)
 		|| containsOpaqueId(value, run.privateOpaqueIds, run.trustedParentStrings)
-		|| containsPrivateStructure(value, run.privateStructures, run.trustedParentStructures);
+		|| containsPrivateStructure(value, run.privateStructures, run.trustedParentStructures, key);
 }
 
 function isResearchToolResult(message: unknown): message is AgentMessage & { role: "toolResult"; toolName: "research"; toolCallId: string } {
@@ -350,7 +389,7 @@ function namedTools(payload: Record<string, unknown>): { payload: Record<string,
 	return { payload: changed ? { ...payload, tools } : payload, valid };
 }
 
-function providerCheck(payload: unknown, runs: readonly PrivateRun[]): ProviderCheck {
+function providerCheck(payload: unknown, runs: readonly PrivateRun[], fallback?: ProviderModelContext): ProviderCheck {
 	const leakingRunIds = new Set<string>();
 	const correlatedRunIds = new Set<string>();
 	if (!isRecord(payload)) return { leakingRunIds, correlatedRunIds, invalidPayload: true };
@@ -394,13 +433,20 @@ function providerCheck(payload: unknown, runs: readonly PrivateRun[]): ProviderC
 			correlatedRunIds.add(run.toolCallId);
 		}
 	};
-	const hasPrivate = (value: unknown) => {
-		for (const run of runs) if (containsPrivateOrigin(value, run)) leakingRunIds.add(run.toolCallId);
+	const selectedModel = typeof fallback === "string" ? fallback : fallback?.id;
+	const hasPrivate = (value: unknown, key?: string, topLevel = false) => {
+		// This is a provider-selected Model identity from the trusted hook context,
+		// not child metadata. Do not generalize this exception to arbitrary model
+		// strings or nested fields.
+		if (topLevel && key === "model" && typeof selectedModel === "string" && value === selectedModel) return;
+		for (const run of runs) if (containsPrivateOrigin(value, run, key)) leakingRunIds.add(run.toolCallId);
+		if (Array.isArray(value)) for (const item of value) hasPrivate(item);
+		else if (isRecord(value)) for (const [childKey, child] of Object.entries(value)) hasPrivate(child, childKey, false);
 	};
 	// Payload-only fields such as instructions, metadata, tool configuration,
 	// and provider extensions are model-visible too. Inspect the complete
 	// serialized payload rather than only its message envelope.
-	hasPrivate(current);
+	for (const [key, value] of Object.entries(current)) hasPrivate(value, key, true);
 	// First select exactly one native Research call for every presented run.
 	for (const item of input) {
 		if (!isRecord(item)) continue;
@@ -561,7 +607,7 @@ export class ResearchBoundaryTracker {
 	}
 
 	inspectProvider(payload: unknown, api?: ProviderApi, fallback?: ProviderModelContext): { leaked: boolean; payload?: unknown; runIds: Set<string> } {
-		const check = providerCheck(payload, this.pending);
+		const check = providerCheck(payload, this.pending, fallback);
 		for (const run of this.pending) if (run.contextLeakDetected) check.leakingRunIds.add(run.toolCallId);
 		const unmatchedContextLeak = this.unmatchedContextLeak;
 		this.unmatchedContextLeak = false;

@@ -65,7 +65,7 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 - Verification results: Independent review passed all seven criteria. Parent verification passed 73 focused Research/subagent tests, including actual OpenAI Responses, Anthropic, generic, guarded diagnostic transport, unguarded replacement abort/retry, same-session/reload, parallel/interleaved, cancellation/failure/no-marker, exact-v7, and greater-than-100-KiB cases. Both web suites passed 89/91 with two optional live tests skipped. Offline loading of subagent, webfetch, and websearch extensions, fixture JSON validation, `git diff --check`, tracked task/history mutation checks, and repository status checks passed.
 - Remaining risks or follow-ups: Authenticated production-provider fresh, downstream, restart, and continuation qualification remains Task 02. Provider-native metadata variants introduced by future Pi versions may require additional exact-path classification.
 
-## [ ] 2026-08-13-research-provider-boundary-remediation-02: Prove production fresh, downstream, and resumed Research behavior
+## [x] 2026-08-13-research-provider-boundary-remediation-02: Prove production fresh, downstream, and resumed Research behavior
 
 **Delivers:** Normal Pi processes can complete fresh Research, a tools-disabled downstream parent turn, and explicit continuation after restart without leaking child evidence or corrupting provider state.
 
@@ -79,13 +79,13 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 
 **Acceptance criteria:**
 
-- [ ] A fresh persisted parent creates one isolated child, fetches the planned local sources, returns a valid bounded report and public Research ID, and completes the next parent provider request successfully.
-- [ ] A tools-disabled downstream invocation reloads the persisted parent with the production boundary active, advertises no provider tools, retains only bounded Research content, and completes with zero raw markers in both `context` and provider payload captures.
-- [ ] After a parent process restart, explicit continuation resolves the same trusted child, preserves prior A/B provenance, fetches new C evidence once, starts a fresh invocation budget, and returns a valid resumed report.
-- [ ] The resumed provider request preserves every required parent function-call pair and contains no orphan call ID, missing output, unnamed tool schema, `None` model, or Research isolation fallback unless a real leak fixture is injected.
-- [ ] Child JSONL contains no copied parent history or undeclared extension entries; normal masking, compaction, export, deletion, cancellation-then-resume, and lineage audit behavior still work.
-- [ ] Direct web tools, ordinary Pi sessions, and generic subagents retain existing behavior.
-- [ ] One authenticated local-fixture pilot uses `openai-codex/gpt-5.6-sol:high` and records lossless context/provider captures, usage, child session hashes, and repository status. It is explicitly unscored and does not alter historical audit artifacts.
+- [x] A fresh persisted parent creates one isolated child, fetches the planned local sources, returns a valid bounded report and public Research ID, and completes the next parent provider request successfully.
+- [x] A tools-disabled downstream invocation reloads the persisted parent with the production boundary active, advertises no provider tools, retains only bounded Research content, and completes with zero raw markers in both `context` and provider payload captures.
+- [x] After a parent process restart, explicit continuation resolves the same trusted child, preserves prior A/B provenance, fetches new C evidence once, starts a fresh invocation budget, and returns a valid resumed report.
+- [x] The resumed provider request preserves every required parent function-call pair and contains no orphan call ID, missing output, unnamed tool schema, `None` model, or Research isolation fallback unless a real leak fixture is injected.
+- [x] Child JSONL contains no copied parent history or undeclared extension entries; normal masking, compaction, export, deletion, cancellation-then-resume, and lineage audit behavior still work.
+- [x] Direct web tools, ordinary Pi sessions, and generic subagents retain existing behavior.
+- [x] One authenticated local-fixture pilot uses `openai-codex/gpt-5.6-sol:high` and records lossless context/provider captures, usage, child session hashes, and repository status. It is explicitly unscored and does not alter historical audit artifacts.
 
 **Verification:**
 
@@ -96,10 +96,10 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 
 **Completion notes:**
 
-- Changes: <fill when complete>
-- Decisions or deviations: <fill when complete>
-- Verification results: <fill when complete>
-- Remaining risks or follow-ups: <fill when complete>
+- Changes: Added the tracked Task 02 local fixture, terminal native-provider capture extension and deterministic capture test, reproducible authenticated pilot, source/repository manifests, and retained unscored results. The pilot exercises fresh A/B Research, a restarted tools-disabled downstream turn, and a restarted explicit C continuation in the same trusted child. It retains terminal transport payloads, pre-terminal context diagnostics, sessions, usage, budgets, lineage, hashes, fixture access, export/deletion, command output/status, and collapsed/expanded rendering. Boundary metadata exceptions are restricted to exact typed provider vocabulary and six canonical content types; arbitrary diagnostics, timestamps, MIME parameters, and lookalikes remain private.
+- Decisions or deviations: Final provider evidence comes from a capture provider loaded before the production subagent guard, so it records only after the terminal `onPayload` transformation. Raw context is retained separately and is not claimed as the sanitized provider boundary. The pilot is intentionally unscored and uses a new ignored audit path; source manifests bind HEAD, index, and executed worktree bytes independently because qualification ran before this task commit.
+- Verification results: Independent review passed all seven criteria. The retained authenticated run `audit/task-02/20260813T215038Z/` used `openai-codex/gpt-5.6-sol:high`; fetched `/a.txt`, `/b.txt`, and `/c.txt` exactly once; preserved one child and Research ID across restart; used two invocation budgets; emitted valid fresh and resumed native pairs; exposed no downstream tools, raw markers, unnamed schema, `None` model, or fallback; and passed export, deletion, and interactive rendering checks. Parent verification passed 76 focused tests including terminal capture, 89/91 web tests with two optional live skips, offline loading, Python compilation, diff checks, source-manifest equality, retained-audit assertions, and the unchanged v3-v7 aggregate hash `62eebe5fa19a20f3f6d467d368e65ff4dba56bb926dd549a3c8d03734c01331b`.
+- Remaining risks or follow-ups: Future provider protocol values or content types require explicit typed allowlist entries plus adversarial coverage. Pre-terminal context and authenticated raw artifacts remain private ignored evidence. Scored evaluation preflight and extraction are Tasks 03-06.
 
 ## [ ] 2026-08-13-research-provider-boundary-remediation-03: Add a reproducible preflight and provider-shape gate
 

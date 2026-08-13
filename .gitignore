@@ -73,6 +73,9 @@ vanity/node_modules/
 # Task 06 lossless evaluation artifacts
 /.agents/2026-08-13-research-context-isolation/audit/
 
+# Task 02 unscored authenticated qualification artifacts
+/.agents/2026-08-13-research-provider-boundary-remediation/audit/task-02/
+
 # other
 /AGENTS.md
 

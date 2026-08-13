@@ -793,6 +793,99 @@ test("Research boundary permits bounded cited synthesis that overlaps fetched ev
 	assert.equal(JSON.stringify(delivered).includes("Research isolation failure"), false);
 });
 
+test("Research boundary retains cited bounded URLs in later parent turns without retaining child details", () => {
+	const source = "https://source.example/release";
+	const synthesis = `## Answer\nRelease passed [source](${source}).`;
+	const tracker = new ResearchBoundaryTracker();
+	tracker.record({
+		content: [{ type: "text", text: synthesis }],
+		details: { results: [{ messages: [
+			{ role: "assistant", content: [{ type: "toolCall", id: "private-fetch", name: "webfetch", arguments: { url: source } }] },
+			{ role: "toolResult", toolCallId: "private-fetch", toolName: "webfetch", content: [{ type: "text", text: "raw private source body" }] },
+			{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+		] }] },
+	}, "research-citation-followup");
+	const context = tracker.inspectContext([
+		{ role: "assistant", content: [{ type: "toolCall", id: "research-citation-followup", name: "research", arguments: {} }] },
+		{ role: "toolResult", toolName: "research", toolCallId: "research-citation-followup", content: [{ type: "text", text: synthesis }] },
+		{ role: "assistant", content: [{ type: "text", text: `Use ${source} as the cited source.` }] },
+	] as never);
+	assert.equal(context.leaked, false);
+	assert.equal(JSON.stringify(context.messages).includes("raw private source body"), false);
+	const provider = tracker.inspectProvider({ input: [
+		{ type: "function_call", call_id: "research-citation-followup", name: "research", arguments: "{}" },
+		{ type: "function_call_output", call_id: "research-citation-followup", output: synthesis },
+		{ role: "assistant", content: [{ type: "output_text", text: `Use ${source} as the cited source.` }] },
+	] }, "openai-responses");
+	assert.equal(provider.leaked, false);
+});
+
+test("Research boundary allows only typed shared protocol values and fails closed for lookalikes", () => {
+	const source = "https://source.example/metadata";
+	const synthesis = `## Answer\nPassed [source](${source}).`;
+	const allowed: Array<[string, unknown]> = [
+		["api", "openai-codex-responses"], ["stopReason", "toolUse"], ["rawStopReason", "stop"], ["rawStopReason", "completed"],
+		["format", "markdown"],
+		...[
+			"text/plain",
+			"text/plain; charset=utf-8",
+			"text/html",
+			"text/html; charset=utf-8",
+			"text/markdown",
+			"application/json",
+		].map((contentType): [string, unknown] => ["contentType", contentType]),
+		["status", 200],
+		["responseBytes", 42], ["outputBytes", 42], ["truncated", false], ["isError", false],
+	];
+	const inspect = (key: string, value: unknown) => {
+		const marker = `raw-private-${key}`;
+		const tracker = new ResearchBoundaryTracker();
+		tracker.record({
+			content: [{ type: "text", text: synthesis }],
+			details: { results: [{ messages: [
+				{ role: "assistant", content: [{ type: "toolCall", id: "private-fetch", name: "webfetch", arguments: { url: source } }] },
+				{ role: "toolResult", toolCallId: "private-fetch", toolName: "webfetch", content: [{ type: "text", text: marker }], details: { [key]: value } },
+				{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+			] }] },
+		}, "research-protocol-metadata");
+		tracker.inspectContext([{ role: "toolResult", toolName: "research", toolCallId: "research-protocol-metadata", content: [{ type: "text", text: synthesis }] }] as never);
+		const payload = { [key]: value, input: [
+			{ type: "function_call", call_id: "research-protocol-metadata", name: "research", arguments: "{}" },
+			{ type: "function_call_output", call_id: "research-protocol-metadata", output: synthesis },
+		] };
+		return { marker, payload, inspected: tracker.inspectProvider(payload, "openai-responses") };
+	};
+	for (const [key, value] of allowed) {
+		const { marker, payload, inspected } = inspect(key, value);
+		assert.equal(inspected.leaked, false, `${key} accepts only its native protocol value`);
+		assert.equal(inspected.payload, undefined);
+		assert.equal(JSON.stringify(payload).includes(marker), false, "raw evidence remains private");
+	}
+	const rejected: Array<[string, unknown]> = [
+		["api", "attacker-api"], ["stopReason", "attacker-stop"], ["rawStopReason", { value: "stop" }],
+		["format", "attacker-format"],
+		// MIME grammar is not sufficient: only exact values emitted by supported
+		// web tools are protocol values. These variants carry private evidence.
+		["contentType", "text/plain; evidence=PRIVATE"],
+		["contentType", "text/plain; evidence=\"PRIVATE\""],
+		["contentType", "application/x-private"],
+		["contentType", "text/x-private"],
+		["contentType", "Text/Plain"],
+		["contentType", "text/plain;charset=utf-8"],
+		["contentType", "text/plain; charset=UTF-8"],
+		["contentType", { type: "text/plain" }],
+		["contentType", "not a MIME value"], ["status", "200"],
+		["responseBytes", -1], ["outputBytes", 1.5], ["truncated", "false"], ["isError", 0],
+		["errorMessage", "private diagnostic"], ["timestamp", "2026-08-13T00:00:00Z"],
+	];
+	for (const [key, value] of rejected) {
+		const { marker, inspected } = inspect(key, value);
+		assert.equal(inspected.leaked, true, `${key} lookalike fails closed`);
+		assert.equal(JSON.stringify(inspected.payload).includes(marker), false, "raw evidence is removed from the diagnostic payload");
+		assert.equal(JSON.stringify(inspected.payload).includes(JSON.stringify(value)), false, `${key} value is private`);
+	}
+});
+
 test("Research boundary reload rebuilds persisted private fingerprints before the next provider request", () => {
 	const marker = "persisted-private-marker";
 	const synthesis = "## Answer\nBounded persisted synthesis.";
@@ -1465,21 +1558,21 @@ test("terminal provider proxy preserves class providers, options, and replacemen
 	assert.equal(first.calls > 0, true);
 });
 
-test("Research boundary keeps final assistant protocol metadata public while retaining private diagnostics", () => {
+test("Research boundary keeps final assistant diagnostics private", () => {
 	const synthesis = "bounded final synthesis";
 	const privateMarkers = {
 		usage: "private-final-usage", details: "private-final-details", diagnostics: "private-final-diagnostics",
 		metadata: "private-final-metadata", outer: "private-result-metadata",
 	};
 	const protocolMetadata = {
-		provider: "final-provider", model: "final-model", responseId: "final-response", thinkingSignature: "final-signature", encryptedContent: "final-encrypted-content",
+		thinkingSignature: "final-signature", encryptedContent: "final-encrypted-content",
 	};
 	const prepare = () => {
 		const tracker = new ResearchBoundaryTracker();
 		tracker.record({
 			content: [{ type: "text", text: synthesis }],
 			details: { auditMetadata: { marker: privateMarkers.outer }, results: [{ metadata: { marker: "result-metadata" }, messages: [{
-				role: "assistant", provider: protocolMetadata.provider, model: protocolMetadata.model, responseId: protocolMetadata.responseId,
+				role: "assistant", provider: "private-final-provider", model: "private-final-model", responseId: "private-final-response", timestamp: "2026-08-13T00:00:00Z", errorMessage: "private final error",
 				reasoning: { encrypted_content: protocolMetadata.encryptedContent },
 				content: [{ type: "thinking", thinking: "private final reasoning", thinkingSignature: protocolMetadata.thinkingSignature }, { type: "text", text: synthesis }],
 				usage: { marker: privateMarkers.usage }, details: { marker: privateMarkers.details }, diagnostics: { marker: privateMarkers.diagnostics }, metadata: { marker: privateMarkers.metadata },
@@ -1496,13 +1589,14 @@ test("Research boundary keeps final assistant protocol metadata public while ret
 		assert.equal(inspected.leaked, true, `${marker} is private child diagnostics`);
 		assert.equal(JSON.stringify(inspected.payload).includes(marker), false);
 	}
-	const payload = { model: protocolMetadata.model, provider: protocolMetadata.provider, responseId: protocolMetadata.responseId, input: [
-		{ type: "function_call", call_id: "final-call", name: "research", arguments: "{}", reasoning: { encrypted_content: protocolMetadata.encryptedContent } },
-		{ type: "function_call_output", call_id: "final-call", output: synthesis },
-	] };
-	const inspected = prepare().inspectProvider(payload, "openai-responses");
-	assert.equal(inspected.leaked, false, "final assistant protocol metadata is not private merely because it recurs");
-	assert.equal(inspected.payload, undefined, "a valid OpenAI Responses payload remains unchanged");
+	for (const [key, value] of Object.entries({ provider: "private-final-provider", model: "private-final-model", responseId: "private-final-response", timestamp: "2026-08-13T00:00:00Z", errorMessage: "private final error" })) {
+		const inspected = prepare().inspectProvider({ metadata: { [key]: value }, input: [
+			{ type: "function_call", call_id: "final-call", name: "research", arguments: "{}" },
+			{ type: "function_call_output", call_id: "final-call", output: synthesis },
+		] }, "openai-responses");
+		assert.equal(inspected.leaked, true, `final assistant ${key} remains private`);
+		assert.equal(JSON.stringify(inspected.payload).includes(value), false);
+	}
 });
 
 test("Research boundary fails closed for top-level final assistant opaque metadata", () => {
@@ -1626,7 +1720,7 @@ test("reloaded parents preserve the Research call-result pair while removing pri
 	}
 });
 
-test("Research boundary ignores metadata keys while redacting child detail values", () => {
+test("Research boundary redacts child metadata and detail values", () => {
 	const tracker = new ResearchBoundaryTracker();
 	const safeSynthesis = "bounded synthesis";
 	tracker.record({
@@ -1654,7 +1748,8 @@ test("Research boundary ignores metadata keys while redacting child detail value
 		{ type: "function_call", call_id: "research-call", name: "research", arguments: "{}" },
 		{ type: "function_call_output", call_id: "research-call", output: safeSynthesis },
 	] }, "openai-responses");
-	assert.equal(metadata.leaked, false, "provider metadata remains public when a child happens to use the same value");
+	assert.equal(metadata.leaked, true, "arbitrary child metadata remains private even when a provider field happens to match");
+	assert.equal(JSON.stringify(metadata.payload).includes("child-model"), false);
 
 	const detailsTracker = new ResearchBoundaryTracker();
 	const detailsMarker = "private-details-only-marker";
