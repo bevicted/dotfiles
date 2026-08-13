@@ -135,3 +135,60 @@ No metrics, usage calculations, output scores, citation audits, fixture artifact
 ### Measurements, scoring, citation audit, and gates
 
 No fixture, trace, session, envelope, usage calculation, metric, score, or citation audit was created. These values are unmeasured and are not reported as zero. V5 launched zero cells, so all four Task 06 gates fail. `TASKS.md` is unchanged; Task 06 remains unchecked and Task 07 remains blocked.
+
+## v6 scored attempt
+
+**Disposition:** Invalid retained scored attempt. All 22 fixed-order Pi invocations launched once, with no retry. Task 06 remains unchecked and Task 07 was not started.
+
+### Preconditions
+
+| Check | Result |
+| --- | --- |
+| I | `1a97775c30f96f0ab0516ca6cab81204dd97f660` |
+| D and E | `3cf98010fc1c0555f706012179dcf6dbc7a8c81d` for both, recorded from two full `git rev-parse HEAD` outputs |
+| Revision eligibility artifact | Exact retained executable; SHA-256 `d0598f639fa095be169ed53428792a3f28f13ba2c129a07efe0bb17e35b18a46`; eligibility passed |
+| Runtime preflight | Passed: Pi `0.84.1`, Node `v26.7.0`, Darwin 25.2.0, exact catalog row, ready auth, audit ignore rule, child argv/path policy, and four pinned child-file hashes |
+| Fixture preflight | Passed: ten ordered routes, C1 `[40960,40960,40960]`, total `122880` bytes |
+| Top-level environment | Every retained preflight, server, fixture-preflight, and scored argv has `env -u PI_SUBAGENT_DEPTH`; selected environment records `present: false` |
+
+Raw records are lossless under `audit/v6/`. `preflight/` contains command argv, stdout, stderr, status, the verified eligibility artifact, policy record, and run manifest. `analysis-summary.json`, `metrics.json`, `scoring.json`, `citation-audit.json`, and `child-session-audit.json` are derived audits, not replacements for raw files.
+
+### Observations
+
+All Pi processes exited 0 and stayed within their 600-second cell limits. C5 isolated continuation nevertheless ended before a new Research result with the retained provider error `Codex error: No tool call found for function call output with call_id call_12O6wa2oMJ3vGIjZYP1Na103.` It made no C5-C fetch, created no new work-budget ledger, and produced no continuation envelope or report. This is a launched invalid phase, not a retry candidate.
+
+| Cell | Arm | locally valid phases / phases | input | output | cache read | requests | cost | elapsed ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| C1 | direct | 2/2 | 60,359 | 907 | 28,672 | 5 | 0.343341 | 34,955 |
+| C1 | isolated | 1/2 | 36,230 | 1,252 | 36,352 | 7 | 0.236886 | 59,087 |
+| C2 | direct | 2/2 | 8,635 | 732 | 0 | 4 | 0.065135 | 28,277 |
+| C2 | isolated | 1/2 | 9,734 | 1,003 | 6,144 | 6 | 0.081832 | 46,081 |
+| C3 | direct | 2/2 | 4,511 | 434 | 0 | 3 | 0.035575 | 19,184 |
+| C3 | isolated | 1/2 | 10,037 | 708 | 0 | 5 | 0.071425 | 30,179 |
+| C4 | direct | 2/2 | 4,721 | 476 | 0 | 3 | 0.037885 | 22,927 |
+| C4 | isolated | 1/2 | 5,219 | 1,028 | 5,120 | 5 | 0.059495 | 47,293 |
+| C5 | direct | 3/3 | 15,148 | 1,030 | 2,560 | 6 | 0.107920 | 43,727 |
+| C5 | isolated | 1/3 | 9,893 | 956 | 6,144 | 7 | 0.081217 | 50,887 |
+
+The table reports total usage; `metrics.json` and every phase `extracted.json` separately report parent, child, and total requests/input/output/cache read/cache write/cost/elapsed time; `extracted.json` also records tool calls. Cache write was zero in every phase. Direct calls used the required 3/2/1/1/C5-2+1 fetch counts; completed isolated calls used the matching child fetches, while C5 continuation made none after its provider error.
+
+C1 direct retained exactly 122,880 parent-visible fetched text bytes. For C1-C4 and C5 fresh, the post-tool context capture contains one bounded Research text result, and the next provider payload sends that same text as the function-call output. These envelopes match the raw Research content, have 212-216 bytes of overhead, and have no raw case marker or private-child-field leakage in their captured parent contexts or provider payloads. The 117-byte `Research isolation failure...` text is an assistant/provider failure response, not the Research tool envelope. C5 isolated continuation has no new Research result or envelope.
+
+Every isolated downstream `context` capture leaked its applicable marker set, while its paired provider payload capture had zero markers: C1 A/B/C 507 each; C2 Operations 78 and Legal 82; C3 76; C4 74; C5 A/B 88 each. This violates Section 8, which requires zero markers in both boundaries. Therefore each isolated cell is invalid even where its Research phase passed local envelope checks. Child-session copies passed their recorded SHA-256 before and after audit; their custom-type sequences contained only the four allowed Research custom types, no `plannotator`, and the C5 fresh and continuation copies identify the same child session. Details are in `child-session-audit.json`.
+
+### Scores and citation audit
+
+`analysis-summary.json` and `metrics.json` use one validity model: `localValid` is a phase-local raw-artifact observation; `valid` and `scoreEligible` require the entire cell arm to be valid. Direct outputs were score-eligible: research totals C1 14/14, C2 14/14, C3 14/14, C4 13/14, C5 fresh 14/14, C5 continuation 14/14; all five direct downstream outputs were 6/6. No isolated output is score-eligible. C1-C4 and C5 fresh Research 14/14 observations, the C1-C5 downstream 6/6, 4/6, 6/6, 6/6, and 2/6 observations, and the continuation's zero-output rubric fields are retained only as qualitative observations; downstream marker leakage invalidates every isolated cell, and C5 also lacks a completed continuation.
+
+`citation-audit.json` independently records every cited fixture URL, full supporting source line, source role, fetch provenance, and entailment. It separately records the C2 conflict, C3 injection, C4 evidence boundary, and failed C5 resumed A/B/C provenance. No citation or quality observation cures an invalid phase.
+
+### Gates
+
+1. **Comparable valid cells: fail.** Every isolated cell is invalid: all isolated downstream contexts leak markers, and C5 isolated continuation also failed before Research completed.
+2. **Parent isolation: fail.** Although C1 direct meets 122,880 bytes and completed isolated Research envelopes are bounded, every isolated downstream context leaks raw markers and C5 continuation lacks a new Research envelope.
+3. **Downstream quality: fail/not measurable.** No isolated downstream score is eligible. C2's retained qualitative correct-decision score is 0/2 and C5's is 0/2.
+4. **Evidence/report quality: reported, but not a passing gate.** Scores, claim counts, and full-source citation audits are retained; invalid cells preclude a valid evaluation.
+
+### Final verification
+
+Retained `audit/v6/final-verification/` records show 57/57 focused subagent/Research tests passed; 89/91 web tests passed with two optional live tests skipped; and offline subagent extension loading passed. Each command retained `env -u PI_SUBAGENT_DEPTH` and `present: false`. The recorded `git diff --check` passed. This retained-artifact review changed only derived v6 analysis, this results report, and Task 06 notes; it did not alter raw artifacts, the frozen v6 design, or implementation. No cell was rerun, Task 07 was not started, and no commit was made.
