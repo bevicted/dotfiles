@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import type {
 	AgentToolResult,
 	ThinkingLevel,
@@ -23,6 +22,8 @@ import {
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
+import { childExtensionArgs } from "./child-extensions.ts";
+export { childExtensionArgs, isolatedChildExtensions } from "./child-extensions.ts";
 import {
 	formatToolCall,
 	formatUsageStats,
@@ -319,26 +320,6 @@ async function writePromptToTempFile(
 		await fs.promises.rm(dir, { recursive: true, force: true });
 		throw error;
 	}
-}
-
-/**
- * Research child processes must not discover user-global extensions. In
- * particular, extension state is written to the active child session before any
- * tool runs. Load only the extensions this delegation implementation declares.
- */
-export function isolatedChildExtensions(): string[] {
-	const directory = path.dirname(fileURLToPath(import.meta.url));
-	return [
-		path.join(directory, "index.ts"),
-		path.join(directory, "..", "web-fetch", "index.ts"),
-		path.join(directory, "..", "web-search", "index.ts"),
-	];
-}
-
-export function childExtensionArgs(isResearch: boolean): string[] {
-	return isResearch
-		? ["--no-extensions", ...isolatedChildExtensions().flatMap((extension) => ["--extension", extension])]
-		: [];
 }
 
 function getPiInvocation(args: string[]): { command: string; args: string[] } {

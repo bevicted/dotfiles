@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
 	boundResearchOutput,
@@ -817,14 +817,24 @@ test("Research boundary reload rebuilds persisted private fingerprints before th
 	assert.match(serialized, /Research isolation failure/);
 });
 
-test("child argv disables global extensions and declares only child-safe extensions", async () => {
-	const { childExtensionArgs, isolatedChildExtensions } = await import("./index.ts");
-	assert.deepEqual(childExtensionArgs(false), []);
-	const args = childExtensionArgs(true);
-	assert.equal(args[0], "--no-extensions");
-	assert.equal(args.filter((arg: string) => arg === "--extension").length, 3);
-	assert.deepEqual(args.filter((arg: string) => arg.endsWith("index.ts")), isolatedChildExtensions());
-	assert.equal(args.some((arg: string) => arg.includes("plannotator")), false);
+test("child extension helper imports in plain Node with the exact Research argv", () => {
+	const expectedResearchArgs = [
+		"--no-extensions",
+		"--extension", fileURLToPath(new URL("./index.ts", import.meta.url)),
+		"--extension", fileURLToPath(new URL("../web-fetch/index.ts", import.meta.url)),
+		"--extension", fileURLToPath(new URL("../web-search/index.ts", import.meta.url)),
+	];
+	const helperUrl = new URL("./child-extensions.ts", import.meta.url).href;
+	const output = execFileSync(process.execPath, [
+		"--input-type=module",
+		"--eval",
+		`import { childExtensionArgs } from ${JSON.stringify(helperUrl)}; process.stdout.write(JSON.stringify({ generic: childExtensionArgs(false), research: childExtensionArgs(true) }));`,
+	], { encoding: "utf8", env: {} });
+
+	assert.deepEqual(JSON.parse(output), {
+		generic: [],
+		research: expectedResearchArgs,
+	});
 });
 
 test("Research boundary checks every parallel Research result and preserves provider payload fields", () => {
@@ -1126,7 +1136,7 @@ test("Research boundary fails closed before a provider request with one bounded 
 test("normal Pi isolates child extensions, writes the normalized Research handoff, and can resume a cancelled child session", async () => {
 	const { SessionManager } = await import("@earendil-works/pi-coding-agent");
 	const { ResearchSessionStore } = await import("./research-session.ts");
-	const { childExtensionArgs } = await import("./index.ts");
+	const { childExtensionArgs } = await import("./child-extensions.ts");
 	const root = await temporaryDirectory();
 	const configDir = path.join(root, "config");
 	const sessionDir = path.join(root, "sessions");
