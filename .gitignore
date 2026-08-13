@@ -70,6 +70,9 @@ work.sh
 # vanity worker tooling (go.bevicted.dev cloudflare worker)
 vanity/node_modules/
 
+# Task 06 lossless evaluation artifacts
+/.agents/2026-08-13-research-context-isolation/audit/
+
 # other
 /AGENTS.md
 
