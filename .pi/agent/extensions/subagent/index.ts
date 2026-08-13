@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
 	AgentToolResult,
 	ThinkingLevel,
@@ -320,6 +321,26 @@ async function writePromptToTempFile(
 	}
 }
 
+/**
+ * Research child processes must not discover user-global extensions. In
+ * particular, extension state is written to the active child session before any
+ * tool runs. Load only the extensions this delegation implementation declares.
+ */
+export function isolatedChildExtensions(): string[] {
+	const directory = path.dirname(fileURLToPath(import.meta.url));
+	return [
+		path.join(directory, "index.ts"),
+		path.join(directory, "..", "web-fetch", "index.ts"),
+		path.join(directory, "..", "web-search", "index.ts"),
+	];
+}
+
+export function childExtensionArgs(isResearch: boolean): string[] {
+	return isResearch
+		? ["--no-extensions", ...isolatedChildExtensions().flatMap((extension) => ["--extension", extension])]
+		: [];
+}
+
 function getPiInvocation(args: string[]): { command: string; args: string[] } {
 	const currentScript = process.argv[1];
 	const isBunVirtualScript = currentScript?.startsWith("/$bunfs/root/");
@@ -404,7 +425,10 @@ async function runSingleAgent(
 	}
 
 	const model = agent.model ?? dispatchDefaults.model;
-	const args = ["--mode", "json", "-p"];
+	// Research has a fixed, isolated extension allowlist. Generic subagents
+	// retain the parent's normal extension discovery so selected parent tools
+	// remain registered in the child process.
+	const args = ["--mode", "json", "-p", ...childExtensionArgs(researchSession !== undefined)];
 	if (researchSession) args.push("--session", researchSession.sessionFile);
 	else args.push("--no-session");
 	if (model) args.push("--model", model);

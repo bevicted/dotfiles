@@ -747,6 +747,86 @@ test("Research provider boundary retains over 100 KiB of private child evidence 
 	assert.equal(telemetry.childUsage.input, 12);
 });
 
+test("Research boundary permits bounded cited synthesis that overlaps fetched evidence", () => {
+	const tracker = new ResearchBoundaryTracker();
+	const source = "https://source.example/release";
+	const quotedEvidence = "R7 passed the capacity gate.";
+	const synthesis = `## Answer\nRelease R7: ${quotedEvidence} [source](${source}).`;
+	tracker.record({
+		content: [{ type: "text", text: synthesis }],
+		details: {
+			results: [{
+				usage: {},
+				messages: [
+					{ role: "assistant", content: [{ type: "toolCall", id: "private-fetch", name: "webfetch", arguments: { url: source } }] },
+					{ role: "toolResult", toolCallId: "private-fetch", toolName: "webfetch", content: [{ type: "text", text: quotedEvidence }] },
+					{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+				],
+			}],
+		},
+	}, "research-citation");
+	const context = tracker.inspectContext([{
+		role: "toolResult", toolName: "research", toolCallId: "research-citation",
+		content: [{ type: "text", text: synthesis }], details: { private: true }, usage: { input: 1 },
+	}] as never);
+	assert.equal(context.leaked, false);
+	assert.equal((context.messages![0] as any).content[0].text, synthesis);
+	const providerInput = { messages: context.messages };
+	const provider = tracker.inspectProvider(providerInput);
+	const delivered = provider.payload ?? providerInput;
+	assert.equal(provider.leaked, false);
+	assert.deepEqual((delivered as { messages: unknown[] }).messages[0], {
+		role: "toolResult",
+		toolName: "research",
+		toolCallId: "research-citation",
+		content: [{ type: "text", text: synthesis }],
+	});
+	assert.equal(JSON.stringify(delivered).includes("Research isolation failure"), false);
+});
+
+test("Research boundary reload rebuilds persisted private fingerprints before the next provider request", () => {
+	const marker = "persisted-private-marker";
+	const synthesis = "## Answer\nBounded persisted synthesis.";
+	const persisted = {
+		role: "toolResult", toolName: "research", toolCallId: "persisted-research",
+		content: [{ type: "text", text: synthesis }],
+		details: {
+			usage: { input: 9 },
+			results: [{ usage: { input: 7 }, messages: [
+				{ role: "assistant", content: [{ type: "text", text: "private partial snapshot" }], usage: { input: 1 } },
+				{ role: "toolResult", toolName: "webfetch", content: [{ type: "text", text: marker }], details: { raw: marker } },
+				{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+			] }],
+		},
+	};
+	// This represents a fresh extension instance after SessionManager reload.
+	const tracker = new ResearchBoundaryTracker();
+	const context = tracker.inspectContext([structuredClone(persisted)] as never);
+	assert.equal(JSON.stringify(context.messages).includes(marker), false);
+	assert.equal(JSON.stringify(context.messages).includes('"details"'), false);
+	const provider = tracker.inspectProvider({
+		messages: [
+			{ role: "assistant", content: [{ type: "text", text: marker }], usage: { input: 99 } },
+			{ role: "tool", tool_call_id: "persisted-research", content: synthesis, details: { raw: marker }, usage: { input: 9 } },
+		],
+	});
+	const serialized = JSON.stringify(provider.payload);
+	assert.equal(serialized.includes(marker), false);
+	assert.equal(serialized.includes('"details"'), false);
+	assert.equal(serialized.includes('"usage"'), false);
+	assert.match(serialized, /Research isolation failure/);
+});
+
+test("child argv disables global extensions and declares only child-safe extensions", async () => {
+	const { childExtensionArgs, isolatedChildExtensions } = await import("./index.ts");
+	assert.deepEqual(childExtensionArgs(false), []);
+	const args = childExtensionArgs(true);
+	assert.equal(args[0], "--no-extensions");
+	assert.equal(args.filter((arg: string) => arg === "--extension").length, 3);
+	assert.deepEqual(args.filter((arg: string) => arg.endsWith("index.ts")), isolatedChildExtensions());
+	assert.equal(args.some((arg: string) => arg.includes("plannotator")), false);
+});
+
 test("Research boundary checks every parallel Research result and preserves provider payload fields", () => {
 	const tracker = new ResearchBoundaryTracker();
 	const calls = ["research-1", "research-2"];
@@ -780,7 +860,20 @@ test("Research boundary checks every parallel Research result and preserves prov
 	const contextResult = handlers.get("context")!(contextEvent);
 	assert.deepEqual(contextResult.messages, contextEvent.messages);
 	assert.equal(JSON.stringify(contextEvent.messages).includes('"details":'), false);
-	const provider = { model: "required-model-field", stream: true, messages: contextEvent.messages.map((message, index) => ({ ...message, content: [{ type: "text", text: `${message.content[0].text} parallel-private-${index} private-progress-${index}` }], privateToolCall: privateToolCalls[index] })) };
+	const provider = {
+		model: "required-model-field",
+		stream: true,
+		messages: contextEvent.messages.map((message, index) => {
+			const { toolCallId, ...rest } = message;
+			return {
+				...rest,
+				role: "tool",
+				tool_call_id: toolCallId,
+				content: [{ type: "text", text: `${message.content[0].text} parallel-private-${index} private-progress-${index}` }],
+				privateToolCall: privateToolCalls[index],
+			};
+		}),
+	};
 	const providerResult = handlers.get("before_provider_request")!({ payload: provider });
 	assert.equal(providerResult.model, "required-model-field");
 	assert.equal(providerResult.stream, true);
@@ -789,6 +882,9 @@ test("Research boundary checks every parallel Research result and preserves prov
 		assert.equal(serialized.includes(`parallel-private-${index}`), false);
 		assert.equal(serialized.includes(`private-call-${index}`), false);
 		assert.equal(serialized.includes(`private-progress-${index}`), false);
+		assert.equal(serialized.includes("toolCall"), false);
+		assert.equal(serialized.includes("webfetch"), false);
+		assert.equal(serialized.includes(`https://private.test/${index}`), false);
 	}
 	assert.deepEqual(entries.map((entry) => (entry as { toolCallId: string }).toolCallId), calls);
 	assert.deepEqual(entries.map((entry) => (entry as { childUsage: { input: number } }).childUsage.input), [1, 2]);
@@ -947,6 +1043,65 @@ test("Research provider boundary executes the registered tool through Pi and a l
 	}
 });
 
+test("reloaded persisted parent sessions keep Research details private under normal extension loading", async () => {
+	const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
+	const { registerSubagentExtension } = await import("./index.ts");
+	const root = await temporaryDirectory();
+	const marker = "persisted-normal-loader-private";
+	const synthesis = "## Answer\nA bounded persisted synthesis cites [source](https://source.example/release).";
+	const parent = SessionManager.create(root, path.join(root, "sessions"));
+	parent.appendMessage({ role: "user", content: [{ type: "text", text: "first invocation" }], timestamp: Date.now() });
+	parent.appendMessage({ role: "assistant", content: [{ type: "toolCall", id: "persisted-call", name: "research", arguments: { task: "persisted" } }], provider: "test", model: "test", usage: {}, stopReason: "toolUse", timestamp: Date.now() });
+	parent.appendMessage({
+		role: "toolResult", toolName: "research", toolCallId: "persisted-call",
+		content: [{ type: "text", text: synthesis }],
+		details: { usage: { input: 5 }, results: [{ usage: { input: 4 }, messages: [
+			{ role: "assistant", content: [{ type: "text", text: "private partial snapshot" }], usage: { input: 1 } },
+			{ role: "toolResult", toolName: "webfetch", content: [{ type: "text", text: marker }], details: { raw: marker } },
+			{ role: "assistant", content: [{ type: "text", text: synthesis }] },
+		] }] },
+		timestamp: Date.now(),
+	} as never);
+	const captures: unknown[] = [];
+	const originalFetch = globalThis.fetch;
+	(globalThis as { fetch: typeof fetch }).fetch = async (_input, init) => {
+		captures.push(JSON.parse(String(init?.body)));
+		const chunk = { id: "persisted", object: "chat.completion.chunk", choices: [{ index: 0, delta: { role: "assistant", content: "continued" }, finish_reason: "stop" }] };
+		return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, { status: 200, headers: { "content-type": "text/event-stream" } });
+	};
+	try {
+		const loader = new DefaultResourceLoader({
+			cwd: root,
+			agentDir: root,
+			extensionFactories: [(pi) => {
+				pi.registerProvider("persisted-boundary-fake", { baseUrl: "http://persisted-boundary.invalid/v1", apiKey: "test", api: "openai-completions", models: [{ id: "fake", name: "Fake", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 }] });
+				registerSubagentExtension(pi);
+			}],
+		});
+		await loader.reload();
+		const reloaded = SessionManager.open(parent.getSessionFile()!, parent.getSessionDir());
+		const model = { id: "fake", name: "Fake", api: "openai-completions" as const, provider: "persisted-boundary-fake", baseUrl: "http://persisted-boundary.invalid/v1", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 };
+		const { session } = await createAgentSession({ cwd: root, resourceLoader: loader, sessionManager: reloaded, settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }), tools: [], thinkingLevel: "off", model });
+		try {
+			await session.prompt("later invocation");
+		} finally {
+			session.dispose();
+		}
+		assert.equal(captures.length, 1);
+		const serialized = JSON.stringify(captures[0]);
+		assert.match(serialized, /bounded persisted synthesis/);
+		assert.equal(serialized.includes(marker), false);
+		assert.equal(serialized.includes("private partial snapshot"), false);
+		assert.equal(serialized.includes('"details"'), false);
+		assert.equal(serialized.includes('"usage"'), false);
+	} finally {
+		(globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+		for (const child of await SessionManager.listAll())
+			if (child.cwd === root || child.cwd === await fs.promises.realpath(root)) await fs.promises.rm(child.path, { force: true });
+		await fs.promises.rm(root, { recursive: true, force: true });
+	}
+});
+
 test("Research boundary fails closed before a provider request with one bounded actionable error", () => {
 	const tracker = new ResearchBoundaryTracker();
 	const privateEvidence = Array.from({ length: 128 }, (_, index) => `research-private-leak-${index}-${"x".repeat(900)}`);
@@ -968,9 +1123,10 @@ test("Research boundary fails closed before a provider request with one bounded 
 	assert.deepEqual(payload, { messages: [{ role: "tool", content: "Research isolation failure: private child evidence was removed before the provider request. Inspect Research details." }] });
 });
 
-test("normal Pi writes the normalized Research handoff and can resume a cancelled child session", async () => {
+test("normal Pi isolates child extensions, writes the normalized Research handoff, and can resume a cancelled child session", async () => {
 	const { SessionManager } = await import("@earendil-works/pi-coding-agent");
 	const { ResearchSessionStore } = await import("./research-session.ts");
+	const { childExtensionArgs } = await import("./index.ts");
 	const root = await temporaryDirectory();
 	const configDir = path.join(root, "config");
 	const sessionDir = path.join(root, "sessions");
@@ -1010,9 +1166,10 @@ test("normal Pi writes the normalized Research handoff and can resume a cancelle
 		const tools = ["read"];
 		const handoff = composeResearchPrompt(input, tools);
 		const target = store.create(parent, root, tools);
+		const childExtensions = childExtensionArgs(true);
 		const invocation = {
 			command: "pi",
-			args: ["--mode", "json", "-p", "--session", target.sessionFile, "--model", "test/fake", "--no-tools"],
+			args: ["--mode", "json", "-p", ...childExtensions, "--session", target.sessionFile, "--model", "test/fake", "--no-tools"],
 			cwd: root,
 			env: { PI_CODING_AGENT_DIR: configDir },
 		};
@@ -1022,11 +1179,12 @@ test("normal Pi writes the normalized Research handoff and can resume a cancelle
 		const firstUser = freshEntries.find((entry) => entry.type === "message" && entry.message?.role === "user");
 		assert.equal(firstUser.message.content[0].text, `Task: ${handoff}`);
 		assert.equal(JSON.stringify(freshEntries).includes("parent-history-must-not-cross"), false);
+		assert.equal(freshEntries.some((entry) => entry.type === "custom" && entry.customType === "plannotator"), false, "undeclared global extensions must not write child state");
 
 		const cancelledTarget = store.create(parent, root, tools);
 		holdRequest = true;
 		const cancellation = new AbortController();
-		const cancelledRun = runChild({ ...invocation, args: ["--mode", "json", "-p", "--session", cancelledTarget.sessionFile, "--model", "test/fake", "--no-tools"], task: handoff, signal: cancellation.signal });
+		const cancelledRun = runChild({ ...invocation, args: ["--mode", "json", "-p", ...childExtensions, "--session", cancelledTarget.sessionFile, "--model", "test/fake", "--no-tools"], task: handoff, signal: cancellation.signal });
 		await requestStarted.promise;
 		cancellation.abort();
 		const cancelled = await cancelledRun;
@@ -1035,7 +1193,7 @@ test("normal Pi writes the normalized Research handoff and can resume a cancelle
 		assert.equal(cancelledEntries.find((entry) => entry.type === "message" && entry.message?.role === "user")?.message.content[0].text, `Task: ${handoff}`);
 
 		holdRequest = false;
-		const resumed = await runChild({ ...invocation, args: ["--mode", "json", "-p", "--session", cancelledTarget.sessionFile, "--model", "test/fake", "--no-tools"], task: "Continue from the existing Research evidence." });
+		const resumed = await runChild({ ...invocation, args: ["--mode", "json", "-p", ...childExtensions, "--session", cancelledTarget.sessionFile, "--model", "test/fake", "--no-tools"], task: "Continue from the existing Research evidence." });
 		assert.equal(resumed.exitCode, 0);
 		const resumedEntries = (await fs.promises.readFile(cancelledTarget.sessionFile, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
 		assert.ok(resumedEntries.some((entry) => entry.type === "message" && entry.message?.role === "assistant" && entry.message.content[0].text === "child completed"));

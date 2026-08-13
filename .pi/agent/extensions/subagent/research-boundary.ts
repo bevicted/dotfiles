@@ -107,6 +107,8 @@ function privateFragments(messages: readonly unknown[]): string[] {
 	for (const [index, message] of messages.entries()) {
 		if (!isRecord(message) || !Array.isArray(message.content)) continue;
 		if (message.role === "toolResult") {
+			// Raw tool-result values are private. Their exact values identify a
+			// passthrough without treating cited URLs as private evidence.
 			addPrivateValue(message.content, fragments);
 			continue;
 		}
@@ -116,8 +118,14 @@ function privateFragments(messages: readonly unknown[]): string[] {
 				addPrivateValue(part, fragments);
 				continue;
 			}
-			const finalText = index === lastAssistant && part.type === "text";
-			addPrivateValue(part, fragments, finalText);
+			if (index === lastAssistant && part.type === "text") continue;
+			if (part.type === "toolCall") {
+				// A transformed tool call is detected by its opaque call ID. URLs
+				// are allowed to recur in the bounded report as citations.
+				if (typeof part.id === "string" && part.id) fragments.add(part.id);
+				continue;
+			}
+			addPrivateValue(part, fragments);
 		}
 	}
 	return [...fragments];
@@ -149,13 +157,19 @@ function toolCallIds(value: unknown, knownIds: ReadonlySet<string>, found = new 
 }
 
 function isResearchEnvelope(value: Record<string, unknown>, knownIds: ReadonlySet<string>): boolean {
-	return value.toolName === "research" || value.name === "research" || toolCallIds(value, knownIds).size > 0;
+	if (value.toolName === "research") return true;
+	return ["toolCallId", "tool_call_id", "toolUseId", "tool_use_id"].some(
+		(key) => typeof value[key] === "string" && knownIds.has(value[key]),
+	);
 }
 
 function safeResearchMessage(message: AgentMessage, run: PrivateRun | undefined): AgentMessage {
 	const candidate = message as unknown as Record<string, unknown>;
 	const content = safeContent(candidate.content);
-	const unsafe = !content || (run !== undefined && !sameContent(content, run.safeContent)) || (run !== undefined && containsPrivate(candidate.content, run.privateFragments));
+	// The bounded Research text is the sole public channel. It may quote a
+	// source or cite a URL also present in private tool results, so content
+	// overlap alone is not evidence of a transcript leak.
+	const unsafe = !content || (run !== undefined && !sameContent(content, run.safeContent));
 	const safe: Record<string, unknown> = {
 		role: "toolResult",
 		toolName: "research",
@@ -195,6 +209,30 @@ function providerContentIsSafe(value: unknown, run: PrivateRun | undefined): boo
 	return (typeof value === "string" && value === run.safeContent[0].text) || sameContent(safeContent(value), run.safeContent);
 }
 
+/**
+ * Rebuild a provider Research envelope instead of walking it. Provider formats
+ * differ, but these fields are sufficient to identify a tool result and carry
+ * its single public text result. In particular, no child-call structure can
+ * survive inside a correlated envelope.
+ */
+function safeProviderResearchEnvelope(value: Record<string, unknown>, run: PrivateRun | undefined): Record<string, unknown> {
+	const content = value.content;
+	const contentIsSafe = providerContentIsSafe(content, run);
+	const safe: Record<string, unknown> = {};
+	if (typeof value.role === "string") safe.role = value.role;
+	if (value.type === "tool_result" || value.type === "toolResult") safe.type = value.type;
+	if (value.toolName === "research") safe.toolName = "research";
+	for (const key of ["toolCallId", "tool_call_id", "toolUseId", "tool_use_id"] as const)
+		if (typeof value[key] === "string") safe[key] = value[key];
+	if (typeof value.isError === "boolean") safe.isError = value.isError;
+	safe.content = contentIsSafe
+		? content
+		: typeof content === "string"
+			? RESEARCH_ISOLATION_ERROR
+			: [{ type: "text", text: RESEARCH_ISOLATION_ERROR }];
+	return safe;
+}
+
 interface ProviderSanitization {
 	payload: unknown;
 	changed: boolean;
@@ -210,7 +248,7 @@ function sanitizeProvider(payload: unknown, runs: readonly PrivateRun[]): Provid
 	const byId = new Map(runs.map((run) => [run.toolCallId, run]));
 	const knownIds = new Set(byId.keys());
 	const providerRunIds = toolCallIds(payload, knownIds);
-	const leakingRunIds = new Set(runs.filter((run) => run.contextLeakDetected || containsPrivate(payload, run.privateFragments)).map((run) => run.toolCallId));
+	const leakingRunIds = new Set(runs.filter((run) => run.contextLeakDetected).map((run) => run.toolCallId));
 	const allFragments = runs.flatMap((run) => run.privateFragments);
 	let changed = false;
 	let wroteFallbackError = false;
@@ -226,25 +264,22 @@ function sanitizeProvider(payload: unknown, runs: readonly PrivateRun[]): Provid
 		const run = [...ids].map((id) => byId.get(id)).find((candidate): candidate is PrivateRun => candidate !== undefined);
 		const research = isResearchEnvelope(value, knownIds);
 		const privateHere = containsPrivate(value, allFragments);
+		if (research) {
+			const safe = safeProviderResearchEnvelope(value, run);
+			if (!providerContentIsSafe(value.content, run) && run)
+				leakingRunIds.add(run.toolCallId);
+			if (JSON.stringify(safe) !== JSON.stringify(value)) changed = true;
+			return safe;
+		}
 		if (!research && privateHere && typeof value.role === "string") {
+			for (const candidate of runs)
+				if (containsPrivate(value, candidate.privateFragments)) leakingRunIds.add(candidate.toolCallId);
 			changed = true;
 			return { role: value.role, content: typeof value.content === "string" ? RESEARCH_ISOLATION_ERROR : [{ type: "text", text: RESEARCH_ISOLATION_ERROR }] };
 		}
 		const next: Record<string, unknown> = {};
 		for (const [key, item] of Object.entries(value)) {
-			if (research && (key === "details" || key === "usage")) {
-				changed = true;
-				continue;
-			}
-			if (research && key === "content") {
-				const forceError = Boolean(run && (run.contextLeakDetected || containsPrivate(value, run.privateFragments)));
-				if (forceError || !providerContentIsSafe(item, run)) {
-					next.content = typeof item === "string" ? RESEARCH_ISOLATION_ERROR : [{ type: "text", text: RESEARCH_ISOLATION_ERROR }];
-					changed = true;
-				} else next.content = visit(item);
-				continue;
-			}
-			if (!research && containsPrivate(item, allFragments) && !Array.isArray(item) && !isRecord(item)) {
+			if (containsPrivate(item, allFragments) && !Array.isArray(item) && !isRecord(item)) {
 				// This is a tainted scalar in a transformed child block. Its enclosing
 				// message will retain only the bounded fallback error below.
 				changed = true;
@@ -252,8 +287,10 @@ function sanitizeProvider(payload: unknown, runs: readonly PrivateRun[]): Provid
 			}
 			next[key] = visit(item);
 		}
-		if (!research && privateHere && !wroteFallbackError && "content" in next) {
+		if (privateHere && !wroteFallbackError && "content" in next) {
 			next.content = typeof value.content === "string" ? RESEARCH_ISOLATION_ERROR : [{ type: "text", text: RESEARCH_ISOLATION_ERROR }];
+			for (const run of runs)
+				if (containsPrivate(value, run.privateFragments)) leakingRunIds.add(run.toolCallId);
 			wroteFallbackError = true;
 			changed = true;
 		}
@@ -266,11 +303,16 @@ function sanitizeProvider(payload: unknown, runs: readonly PrivateRun[]): Provid
 /** Tracks completed Research results until their own parent provider request. */
 export class ResearchBoundaryTracker {
 	private readonly pending: PrivateRun[] = [];
+	/** Avoid rehydrating historical parent results on every later request. */
+	private readonly observed = new Set<string>();
 
 	record(result: ResearchToolResult, toolCallId: string): void {
+		this.observed.add(toolCallId);
 		const child = result.details?.results?.[0];
 		const content = safeContent(result.content);
 		if (!child || !content) return;
+		const existing = this.pending.findIndex((run) => run.toolCallId === toolCallId);
+		if (existing >= 0) this.pending.splice(existing, 1);
 		this.pending.push({
 			toolCallId,
 			safeContent: content,
@@ -283,6 +325,12 @@ export class ResearchBoundaryTracker {
 	}
 
 	inspectContext(messages: AgentMessage[]): { leaked: boolean; messages?: AgentMessage[] } {
+		// A later Pi invocation creates a new extension instance. Rebuild the
+		// private transcript fingerprints from the persisted parent audit entry
+		// before sanitizing its first context.
+		for (const message of messages)
+			if (isResearchToolResult(message) && !this.observed.has(message.toolCallId))
+				this.record(message as unknown as ResearchToolResult, message.toolCallId);
 		const byId = new Map(this.pending.map((run) => [run.toolCallId, run]));
 		let leaked = false;
 		const delivered = messages.map((message) => {
