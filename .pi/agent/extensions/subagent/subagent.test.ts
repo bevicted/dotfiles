@@ -1053,29 +1053,41 @@ test("Research provider boundary executes the registered tool through Pi and a l
 	}
 });
 
-test("reloaded persisted parent sessions keep Research details private under normal extension loading", async () => {
+test("reloaded parents preserve the Research call-result pair while removing private child evidence", async () => {
 	const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
 	const { registerSubagentExtension } = await import("./index.ts");
 	const root = await temporaryDirectory();
-	const marker = "persisted-normal-loader-private";
+	const markers = Array.from({ length: 128 }, (_, index) => `persisted-normal-loader-private-${index}-${"x".repeat(900)}`);
+	assert.ok(Buffer.byteLength(markers.join("\n"), "utf8") > 100 * 1024);
 	const synthesis = "## Answer\nA bounded persisted synthesis cites [source](https://source.example/release).";
 	const parent = SessionManager.create(root, path.join(root, "sessions"));
 	parent.appendMessage({ role: "user", content: [{ type: "text", text: "first invocation" }], timestamp: Date.now() });
-	parent.appendMessage({ role: "assistant", content: [{ type: "toolCall", id: "persisted-call", name: "research", arguments: { task: "persisted" } }], provider: "test", model: "test", usage: {}, stopReason: "toolUse", timestamp: Date.now() });
+	parent.appendMessage({
+		role: "assistant",
+		content: [
+			{ type: "thinking", thinking: "parent reasoning remains valid", thinkingSignature: "parent-thinking-signature" },
+			{ type: "toolCall", id: "persisted-call", name: "research", arguments: { task: "persisted" } },
+		],
+		provider: "test", model: "test", usage: {}, stopReason: "toolUse", timestamp: Date.now(),
+	} as never);
 	parent.appendMessage({
 		role: "toolResult", toolName: "research", toolCallId: "persisted-call",
 		content: [{ type: "text", text: synthesis }],
 		details: { usage: { input: 5 }, results: [{ usage: { input: 4 }, messages: [
-			{ role: "assistant", content: [{ type: "text", text: "private partial snapshot" }], usage: { input: 1 } },
-			{ role: "toolResult", toolName: "webfetch", content: [{ type: "text", text: marker }], details: { raw: marker } },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "private partial snapshot", thinkingSignature: "thinkingSignature" },
+				{ type: "toolCall", id: "child-webfetch-call", name: "webfetch", arguments: { url: "https://private.example/evidence" } },
+			], usage: { input: 1 } },
+			...markers.map((text, index) => ({ role: "toolResult", toolCallId: `child-fetch-${index}`, toolName: "webfetch", content: [{ type: "text", text }], details: { raw: text }, usage: { input: 1 } })),
 			{ role: "assistant", content: [{ type: "text", text: synthesis }] },
 		] }] },
 		timestamp: Date.now(),
 	} as never);
-	const captures: unknown[] = [];
+	const contextCaptures: unknown[] = [];
+	const providerCaptures: unknown[] = [];
 	const originalFetch = globalThis.fetch;
 	(globalThis as { fetch: typeof fetch }).fetch = async (_input, init) => {
-		captures.push(JSON.parse(String(init?.body)));
+		providerCaptures.push(JSON.parse(String(init?.body)));
 		const chunk = { id: "persisted", object: "chat.completion.chunk", choices: [{ index: 0, delta: { role: "assistant", content: "continued" }, finish_reason: "stop" }] };
 		return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, { status: 200, headers: { "content-type": "text/event-stream" } });
 	};
@@ -1086,6 +1098,7 @@ test("reloaded persisted parent sessions keep Research details private under nor
 			extensionFactories: [(pi) => {
 				pi.registerProvider("persisted-boundary-fake", { baseUrl: "http://persisted-boundary.invalid/v1", apiKey: "test", api: "openai-completions", models: [{ id: "fake", name: "Fake", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 1_024 }] });
 				registerSubagentExtension(pi);
+				pi.on("context", (event) => { contextCaptures.push(structuredClone(event.messages)); });
 			}],
 		});
 		await loader.reload();
@@ -1097,19 +1110,78 @@ test("reloaded persisted parent sessions keep Research details private under nor
 		} finally {
 			session.dispose();
 		}
-		assert.equal(captures.length, 1);
-		const serialized = JSON.stringify(captures[0]);
-		assert.match(serialized, /bounded persisted synthesis/);
-		assert.equal(serialized.includes(marker), false);
-		assert.equal(serialized.includes("private partial snapshot"), false);
-		assert.equal(serialized.includes('"details"'), false);
-		assert.equal(serialized.includes('"usage"'), false);
+		assert.equal(contextCaptures.length, 1);
+		assert.equal(providerCaptures.length, 1);
+		const contextMessages = (contextCaptures[0] as { role: string; content: Array<{ type: string; id?: string; name?: string; text?: string }>; toolCallId?: string }[]);
+		const contextCall = contextMessages.find((message) => message.role === "assistant" && message.content.some((part) => part.type === "toolCall" && part.name === "research"));
+		const contextResult = contextMessages.find((message) => message.role === "toolResult" && message.toolCallId === "persisted-call");
+		assert.equal(contextCall?.content.find((part) => part.type === "toolCall")?.id, "persisted-call");
+		assert.equal(contextResult?.content[0]?.text, synthesis);
+		assert.ok(Buffer.byteLength(contextResult!.content[0]!.text!, "utf8") <= RESEARCH_MAX_BYTES);
+		assert.equal(JSON.stringify(contextResult).includes('"details"'), false);
+		assert.equal(JSON.stringify(contextResult).includes('"usage"'), false);
+
+		const providerMessages = (providerCaptures[0] as { messages: Array<{ role: string; content?: string; tool_calls?: Array<{ id: string; function: { name: string } }>; tool_call_id?: string }> }).messages;
+		const providerCall = providerMessages.find((message) => message.tool_calls?.some((call) => call.id === "persisted-call" && call.function.name === "research"));
+		const providerResult = providerMessages.find((message) => message.role === "tool" && message.tool_call_id === "persisted-call");
+		assert.ok(providerCall, "the tool_call_id output must not be orphaned from its parent Research function call");
+		assert.equal(providerResult?.content, synthesis);
+		assert.ok(Buffer.byteLength(providerResult!.content!, "utf8") <= RESEARCH_MAX_BYTES);
+
+		for (const capture of [...contextCaptures, ...providerCaptures]) {
+			const serialized = JSON.stringify(capture);
+			assert.match(serialized, /bounded persisted synthesis/);
+			assert.equal(serialized.includes("private partial snapshot"), false);
+			assert.equal(serialized.includes("child-webfetch-call"), false);
+			assert.equal(serialized.includes("https://private.example/evidence"), false);
+			assert.equal(serialized.includes('"name":"webfetch"'), false);
+			assert.equal(serialized.includes('"details"'), false);
+			for (const marker of markers) assert.equal(serialized.includes(marker), false);
+		}
+		assert.equal(JSON.stringify(providerCaptures[0]).includes('"usage"'), false);
 	} finally {
 		(globalThis as { fetch: typeof fetch }).fetch = originalFetch;
 		for (const child of await SessionManager.listAll())
 			if (child.cwd === root || child.cwd === await fs.promises.realpath(root)) await fs.promises.rm(child.path, { force: true });
 		await fs.promises.rm(root, { recursive: true, force: true });
 	}
+});
+
+test("Research boundary ignores metadata keys while redacting child detail values", () => {
+	const tracker = new ResearchBoundaryTracker();
+	const safeSynthesis = "bounded synthesis";
+	tracker.record({
+		content: [{ type: "text", text: safeSynthesis }],
+		details: { results: [{ messages: [
+			{ role: "assistant", content: [{ type: "thinking", thinking: "thinkingSignature", thinkingSignature: "child-signature" }] },
+			{ role: "assistant", content: [{ type: "text", text: safeSynthesis }] },
+		] }] },
+	}, "research-call");
+	const parentCall = {
+		role: "assistant",
+		content: [
+			{ type: "thinking", thinking: "parent reasoning", thinkingSignature: "parent-signature" },
+			{ type: "toolCall", id: "research-call", name: "research", arguments: { task: "task" } },
+		],
+	} as never;
+	const parentResult = {
+		role: "toolResult", toolName: "research", toolCallId: "research-call",
+		content: [{ type: "text", text: safeSynthesis }],
+	} as never;
+	const context = tracker.inspectContext([parentCall, parentResult]).messages!;
+	assert.deepEqual(context[0], parentCall, "a child value matching a parent metadata key must not replace the parent Research call");
+	assert.equal((context[1] as { content: Array<{ text: string }> }).content[0].text, safeSynthesis);
+
+	const detailsTracker = new ResearchBoundaryTracker();
+	const detailsMarker = "private-details-only-marker";
+	detailsTracker.record({
+		content: [{ type: "text", text: safeSynthesis }],
+		details: { results: [{ messages: [{ role: "toolResult", content: [], details: { raw: detailsMarker } }] }] },
+	}, "details-call");
+	const provider = detailsTracker.inspectProvider({ messages: [{ role: "assistant", content: "public", details: { raw: detailsMarker } }] });
+	assert.equal(provider.leaked, true);
+	assert.equal(JSON.stringify(provider.payload).includes(detailsMarker), false);
+	assert.equal((provider.payload as { messages: Array<{ content: string }> }).messages[0].content, "Research isolation failure: private child evidence was removed before the provider request. Inspect Research details.");
 });
 
 test("Research boundary fails closed before a provider request with one bounded actionable error", () => {

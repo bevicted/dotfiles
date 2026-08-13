@@ -87,12 +87,12 @@ function addPrivateValue(value: unknown, fragments: Set<string>, skipText = fals
 	}
 	if (!isRecord(value)) return;
 	for (const [key, item] of Object.entries(value)) {
-		// Protocol discriminators occur in ordinary parent/provider payloads. Data
-		// values remain tainted; unusual long keys cover transformed non-text data.
+		// Field names are protocol metadata shared by child and parent messages
+		// (for example, thinkingSignature). Only child values are evidence.
 		if (["type", "role", "toolName", "name", "content", "text", "id", "arguments", "input", "url"].includes(key)) {
 			if (skipText && key === "text") continue;
 			if (["type", "role", "toolName", "name"].includes(key)) continue;
-		} else if (key.length >= 12) fragments.add(key);
+		}
 		addPrivateValue(item, fragments, skipText && key === "text");
 	}
 }
@@ -105,7 +105,13 @@ function privateFragments(messages: readonly unknown[]): string[] {
 	const fragments = new Set<string>();
 	const lastAssistant = messages.findLastIndex((message) => isRecord(message) && message.role === "assistant");
 	for (const [index, message] of messages.entries()) {
-		if (!isRecord(message) || !Array.isArray(message.content)) continue;
+		if (!isRecord(message)) continue;
+		// Child details and other non-content fields are private too. A provider
+		// can transform them into standalone blocks, so fingerprint their values
+		// even when the child message has no content.
+		for (const [key, value] of Object.entries(message))
+			if (key !== "role" && key !== "content") addPrivateValue(value, fragments);
+		if (!Array.isArray(message.content)) continue;
 		if (message.role === "toolResult") {
 			// Raw tool-result values are private. Their exact values identify a
 			// passthrough without treating cited URLs as private evidence.
@@ -136,7 +142,7 @@ function containsPrivate(value: unknown, fragments: readonly string[]): boolean 
 	if (typeof value === "string") return fragments.some((fragment) => value.includes(fragment));
 	if (Array.isArray(value)) return value.some((item) => containsPrivate(item, fragments));
 	if (!isRecord(value)) return false;
-	return Object.entries(value).some(([key, item]) => containsPrivate(key, fragments) || containsPrivate(item, fragments));
+	return Object.values(value).some((item) => containsPrivate(item, fragments));
 }
 
 function isResearchToolResult(message: unknown): message is AgentMessage & { role: "toolResult"; toolName: "research"; toolCallId: string } {
@@ -186,7 +192,7 @@ function removePrivateFields(value: unknown, fragments: readonly string[]): unkn
 	if (Array.isArray(value)) return value.flatMap((item) => containsPrivate(item, fragments) ? [] : [removePrivateFields(item, fragments)]);
 	return Object.fromEntries(
 		Object.entries(value as Record<string, unknown>)
-			.filter(([key, item]) => !containsPrivate(key, fragments) && !containsPrivate(item, fragments))
+			.filter(([, item]) => !containsPrivate(item, fragments))
 			.map(([key, item]) => [key, removePrivateFields(item, fragments)]),
 	);
 }
