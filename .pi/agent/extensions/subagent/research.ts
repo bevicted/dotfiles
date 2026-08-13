@@ -6,6 +6,7 @@ export const RESEARCH_MODEL = "openai-codex/gpt-5.6-sol:high";
 export const RESEARCH_TOOLS = ["read", "grep", "find", "ls", "websearch", "webfetch"] as const;
 export const RESEARCH_MAX_BYTES = 8 * 1024;
 export const RESEARCH_MAX_LINES = 400;
+export const RESEARCH_ID_PATTERN = /^r_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export type WebResearchMode = "auto" | "required" | "disabled";
 export type ResearchEffort = "standard" | "deep";
@@ -16,6 +17,7 @@ export interface ResearchInput {
 	files?: string[];
 	webResearch?: WebResearchMode;
 	effort?: ResearchEffort;
+	researchId?: string;
 }
 
 export interface NormalizedResearchInput {
@@ -24,6 +26,7 @@ export interface NormalizedResearchInput {
 	files: string[];
 	webResearch: WebResearchMode;
 	effort: ResearchEffort;
+	researchId?: string;
 }
 
 export interface ResearchAgentConfig {
@@ -114,7 +117,7 @@ export function normalizeResearchFiles(files: unknown, cwd: string): string[] {
 
 export function normalizeResearchInput(input: unknown, cwd: string): NormalizedResearchInput {
 	if (!isRecord(input)) throw new Error("Research input must be an object.");
-	const allowed = new Set(["task", "context", "files", "webResearch", "effort"]);
+	const allowed = new Set(["task", "context", "files", "webResearch", "effort", "researchId"]);
 	for (const key of Object.keys(input)) {
 		if (!allowed.has(key)) throw new Error(`Unknown Research input field: ${key}.`);
 	}
@@ -130,14 +133,19 @@ export function normalizeResearchInput(input: unknown, cwd: string): NormalizedR
 	if (input.effort !== undefined && input.effort !== "standard" && input.effort !== "deep") {
 		throw new Error('Research effort must be "standard" or "deep".');
 	}
+	if (input.researchId !== undefined && (typeof input.researchId !== "string" || !RESEARCH_ID_PATTERN.test(input.researchId.trim()))) {
+		throw new Error("Research researchId must be a generated non-blank Research ID.");
+	}
 
 	const context = input.context?.trim();
+	const researchId = input.researchId?.trim();
 	return {
 		task: input.task.trim(),
 		context: context || undefined,
 		files: normalizeResearchFiles(input.files, cwd),
 		webResearch: input.webResearch ?? "auto",
 		effort: input.effort ?? "standard",
+		...(researchId ? { researchId } : {}),
 	};
 }
 

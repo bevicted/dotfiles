@@ -49,11 +49,12 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "websearch",
     label: "Web Search",
-    description: "Search the web for current or post-cutoff information. Returns Exa source URLs and excerpts for the agent to analyze. Defaults to 5 results and 4,000 context characters; context can be increased to 10,000 characters only when the default omits needed evidence. Oversized output is truncated.",
-    promptSnippet: "Search the web through Exa and return source URLs and excerpts",
+    description: "Search the web for one narrow current-fact lookup. Returns Exa source URLs and excerpts for the agent to analyze. Use Research for iterative, multi-source, adaptive, conflicting, or source-sensitive work. Defaults to 5 results and 4,000 context characters; context can be increased to 10,000 characters only when the default omits needed evidence. Oversized output is truncated.",
+    promptSnippet: "Search the web through Exa for one narrow lookup and return source URLs and excerpts",
     promptGuidelines: [
-      "Use websearch for current facts and research requiring citations.",
-      "Increase websearch result breadth or context only when the default omits evidence needed for the task.",
+      "Use websearch for one narrow bounded current-fact lookup.",
+      "Use Research for iterative, multi-source, adaptive, conflicting, or source-sensitive investigation.",
+      "Increase websearch result breadth or context only when the default omits evidence needed for the single lookup.",
     ],
     parameters: websearchSchema,
     async execute(_toolCallId, params, signal) {

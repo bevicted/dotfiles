@@ -35,10 +35,12 @@ export default function webFetchExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "webfetch",
     label: "Web Fetch",
-    description: "Retrieve a known direct HTTP(S) URL as Markdown, plain text, raw HTML, or a raster image. Use websearch to discover a URL or source first. Responses and tool output are bounded.",
-    promptSnippet: "Retrieve a known direct URL as Markdown, text, HTML, or a raster image",
+    description: "Retrieve one known direct HTTP(S) URL as Markdown, plain text, raw HTML, or a raster image. Use websearch to discover a URL or source first. Use Research for iterative, multi-source, adaptive, conflicting, or source-sensitive work, and do not duplicate delegated Research. Responses and tool output are bounded.",
+    promptSnippet: "Retrieve one known direct URL as Markdown, text, HTML, or a raster image",
     promptGuidelines: [
-      "Use webfetch for a known direct URL; use websearch when the URL or source must be discovered.",
+      "Use webfetch for one known direct URL; use websearch when the URL or source must be discovered.",
+      "Use Research for iterative, multi-source, adaptive, conflicting, or source-sensitive investigation.",
+      "Do not repeat a delegated Research investigation with parent webfetch calls.",
     ],
     parameters: webfetchSchema,
     async execute(_toolCallId, params, signal) {

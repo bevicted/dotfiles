@@ -31,6 +31,9 @@ import {
 	type SingleRenderAdapter,
 } from "./single-render.ts";
 import { registerToolResultMiddleware } from "./tool-result-middleware.ts";
+import { registerResearchBoundary, ResearchBoundaryTracker } from "./research-boundary.ts";
+import { registerResearchContext, type ResearchContextOptions } from "./research-context.ts";
+import type { ResearchContextTelemetry } from "./research-context-audit.ts";
 import {
 	boundResearchOutput,
 	cloneResearcherAgent,
@@ -47,6 +50,13 @@ import {
 	type ResearchEffort,
 	type WebResearchMode,
 } from "./research.ts";
+import {
+	RESEARCH_MAPPING_ENTRY,
+	ResearchSessionStore,
+	researchSessionError,
+	researchSessionMetadataForDetails,
+	type ResearchSessionTarget,
+} from "./research-session.ts";
 import {
 	assertCanDelegate,
 	boundParallelOutput,
@@ -65,9 +75,9 @@ import {
 	validateDispatchMode,
 } from "./runner.ts";
 
-type TaskStatus = "queued" | "running" | "completed" | "failed";
+export type TaskStatus = "queued" | "running" | "completed" | "failed";
 
-interface SingleResult extends Omit<ChildRunResult, "messages"> {
+export interface SingleResult extends Omit<ChildRunResult, "messages"> {
 	agent: string;
 	agentSource: "user" | "project" | "unknown";
 	task: string;
@@ -75,7 +85,7 @@ interface SingleResult extends Omit<ChildRunResult, "messages"> {
 	status: TaskStatus;
 }
 
-interface SubagentDetails {
+export interface SubagentDetails {
 	mode: "single" | "parallel" | "chain";
 	agentScope: AgentScope;
 	projectAgentsDir: string | null;
@@ -84,12 +94,12 @@ interface SubagentDetails {
 	failed?: boolean;
 }
 
-interface DispatchDefaults {
+export interface DispatchDefaults {
 	model?: string;
 	thinkingLevel?: ThinkingLevel;
 }
 
-interface ResearchDetails {
+export interface ResearchDetails {
 	kind: "research";
 	agentScope: "user";
 	model: typeof RESEARCH_MODEL;
@@ -102,9 +112,50 @@ interface ResearchDetails {
 	usage: UsageStats;
 	results: SingleResult[];
 	failed: boolean;
+	/** Persisted child masking events, excluded from parent model context. */
+	maskingTelemetry?: ResearchContextTelemetry[];
+	session?: Omit<ResearchSessionTarget, "sessionFile">;
 }
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
+
+export interface ResearchLifecycleRequest {
+	cwd: string;
+	dispatchDefaults: DispatchDefaults;
+	parentActiveTools: readonly string[];
+	agent: AgentConfig;
+	prompt: string;
+	signal: AbortSignal | undefined;
+	onUpdate: OnUpdateCallback | undefined;
+	makeDetails: (results: SingleResult[]) => SubagentDetails;
+	session?: ResearchSessionTarget;
+}
+
+/** The one Research execution seam. Production uses runSingleAgent/runChild. */
+export type ResearchLifecycle = (request: ResearchLifecycleRequest) => Promise<SingleResult>;
+
+export interface SubagentExtensionOptions {
+	runResearch?: ResearchLifecycle;
+	researchBoundaryTracker?: ResearchBoundaryTracker;
+	researchContext?: ResearchContextOptions;
+	researchSessionStore?: ResearchSessionStore;
+}
+
+function defaultResearchLifecycle(request: ResearchLifecycleRequest): Promise<SingleResult> {
+	return runSingleAgent(
+		request.cwd,
+		request.dispatchDefaults,
+		request.parentActiveTools,
+		[request.agent],
+		RESEARCH_AGENT_NAME,
+		request.prompt,
+		undefined,
+		request.signal,
+		request.onUpdate,
+		request.makeDetails,
+		request.session,
+	);
+}
 
 function emptyUsage(): UsageStats {
 	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 };
@@ -166,6 +217,8 @@ function makeResearchDetails(
 	effectiveTools: readonly string[],
 	results: SingleResult[],
 	failed = false,
+	session?: ResearchSessionTarget,
+	maskingTelemetry?: readonly ResearchContextTelemetry[],
 ): ResearchDetails {
 	return {
 		kind: "research",
@@ -178,8 +231,12 @@ function makeResearchDetails(
 		webResearch: input.webResearch,
 		effort: input.effort,
 		usage: aggregateUsage(results),
-		results,
+		// Tool details are an immutable audit snapshot, including during progress
+		// updates. They never participate in the parent model context.
+		results: structuredClone(results),
 		failed,
+		maskingTelemetry: maskingTelemetry?.map((telemetry) => ({ ...telemetry })),
+		session: session ? researchSessionMetadataForDetails(session) : undefined,
 	};
 }
 
@@ -242,6 +299,7 @@ async function runSingleAgent(
 	signal: AbortSignal | undefined,
 	onUpdate: OnUpdateCallback | undefined,
 	makeDetails: (results: SingleResult[]) => SubagentDetails,
+	researchSession?: ResearchSessionTarget,
 ): Promise<SingleResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) {
@@ -257,7 +315,9 @@ async function runSingleAgent(
 	}
 
 	const model = agent.model ?? dispatchDefaults.model;
-	const args = ["--mode", "json", "-p", "--no-session"];
+	const args = ["--mode", "json", "-p"];
+	if (researchSession) args.push("--session", researchSession.sessionFile);
+	else args.push("--no-session");
 	if (model) args.push("--model", model);
 	if (!agent.model && dispatchDefaults.thinkingLevel) args.push("--thinking", dispatchDefaults.thinkingLevel);
 	const tools = selectChildTools(agent.tools, parentActiveTools);
@@ -276,6 +336,7 @@ async function runSingleAgent(
 		const child = await runChild({
 			...invocation,
 			task,
+			env: researchSession ? { PI_RESEARCH_CHILD_SESSION_ID: researchSession.childSessionId } : undefined,
 			cwd: resolvedCwd,
 			signal,
 			onUpdate: onUpdate
@@ -425,6 +486,12 @@ const ResearchParams = Type.Object({
 			default: "standard",
 		}),
 	),
+	researchId: Type.Optional(Type.String({
+		description: "Opaque Research ID returned by a prior Research call. Resumes only this parent-owned Research session.",
+		minLength: 38,
+		maxLength: 38,
+		pattern: "^r_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+	})),
 }, { additionalProperties: false });
 
 const SubagentParams = Type.Object({
@@ -451,17 +518,23 @@ const SubagentParams = Type.Object({
 	),
 });
 
-export default function (pi: ExtensionAPI) {
+export function registerSubagentExtension(pi: ExtensionAPI, options: SubagentExtensionOptions = {}) {
 	registerToolResultMiddleware(pi);
+	const researchBoundaryTracker = options.researchBoundaryTracker ?? new ResearchBoundaryTracker();
+	const researchSessionStore = options.researchSessionStore ?? new ResearchSessionStore();
+	registerResearchBoundary(pi, researchBoundaryTracker);
+	registerResearchContext(pi, options.researchContext);
+	const runResearch = options.runResearch ?? defaultResearchLifecycle;
 
 	pi.registerTool({
 		name: "research",
 		label: "Research",
-		description: "Run isolated read-only Research for iterative multi-source synthesis, conflicting evidence, or source-sensitive reports. For a narrow lookup or known URL, use websearch or webfetch directly.",
+		description: "Run isolated read-only Research for iterative multi-source synthesis, conflicting evidence, or source-sensitive reports. For a narrow lookup or known URL, use websearch or webfetch directly. Do not repeat delegated Research with parent web tools.",
 		promptSnippet: "Use isolated Research for iterative multi-source synthesis and source-sensitive reports",
 		promptGuidelines: [
 			"Use Research for iterative multi-source synthesis, conflicting evidence, and source-sensitive reports.",
-			"Use websearch or webfetch directly for a narrow discovery lookup or known URL.",
+			"Use websearch or webfetch directly only for one narrow discovery lookup or one known URL.",
+			"After delegating Research, use its bounded synthesis and do not duplicate its investigation with parent web tools.",
 		],
 		parameters: ResearchParams,
 
@@ -483,11 +556,26 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
+			let session: ResearchSessionTarget | undefined;
+			let sessionOperationStarted = false;
+			let locked = false;
 			try {
 				assertCanDelegate();
 				const discovery = discoverAgents(ctx.cwd, "user");
 				const agent = selectUserResearcherAgent(discovery.agents);
 				effectiveTools = preflightResearchTools(agent.tools ?? [], pi.getActiveTools(), input);
+				const parent = ctx.sessionManager;
+				// The real ExtensionContext always has a SessionManager. The fallback
+				// keeps the narrow lifecycle test harness from creating test sessions.
+				if (parent) {
+					sessionOperationStarted = true;
+					session = input.researchId
+						? researchSessionStore.resume(parent, ctx.cwd, input.researchId, effectiveTools)
+						: researchSessionStore.create(parent, ctx.cwd, effectiveTools);
+					researchSessionStore.lock(session);
+					locked = true;
+					pi.appendEntry(RESEARCH_MAPPING_ENTRY, researchSessionStore.mapping(session));
+				}
 				const prompt = composeResearchPrompt(input, effectiveTools);
 				const clonedAgent = cloneResearcherAgent(agent, effectiveTools) as AgentConfig;
 				const dispatchDefaults: DispatchDefaults = {
@@ -500,38 +588,43 @@ export default function (pi: ExtensionAPI) {
 					projectAgentsDir: null,
 					results,
 				});
-				const result = await runSingleAgent(
-					ctx.cwd,
+				const result = await runResearch({
+					cwd: ctx.cwd,
 					dispatchDefaults,
-					pi.getActiveTools(),
-					[clonedAgent],
-					RESEARCH_AGENT_NAME,
+					parentActiveTools: pi.getActiveTools(),
+					agent: clonedAgent,
 					prompt,
-					undefined,
 					signal,
-					onUpdate
+					session,
+					onUpdate: onUpdate
 						? (partial) => {
 								const current = partial.details?.results[0];
 								if (!current) return;
 								onUpdate({
 									content: [{ type: "text", text: boundResearchResult(getResultOutput(current) || "(running...)") }],
-									details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [current]), isFailedResult(current)),
+									details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [current], isFailedResult(current), session)),
 								});
 							}
 						: undefined,
-					genericDetails,
-				);
+					makeDetails: genericDetails,
+				});
+				if (session) pi.appendEntry(RESEARCH_MAPPING_ENTRY, researchSessionStore.mapping(session));
 				const failed = isFailedResult(result);
-				return {
-					content: [{ type: "text", text: boundResearchResult(getResultOutput(result)) }],
-					details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [result]), failed),
+				const researchId = session ? `[Research ID: ${session.researchId}]\n\n` : "";
+				const response = {
+					content: [{ type: "text" as const, text: boundResearchResult(`${researchId}${getResultOutput(result)}`) }],
+					details: withResearchFailureState(makeResearchDetails(input, effectiveTools, [result], failed, session, session ? researchSessionStore.maskingTelemetry(session) : undefined), failed),
 				};
+				researchBoundaryTracker.record(response, _toolCallId);
+				return response;
 			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
+				const message = sessionOperationStarted ? researchSessionError(error) : error instanceof Error ? error.message : String(error);
 				return {
 					content: [{ type: "text", text: boundResearchResult(message) }],
-					details: makeResearchDetails(input, effectiveTools, [], true),
+					details: makeResearchDetails(input, effectiveTools, [], true, session, session ? researchSessionStore.maskingTelemetry(session) : undefined),
 				};
+			} finally {
+				if (session && locked) researchSessionStore.release(session);
 			}
 		},
 
@@ -548,12 +641,17 @@ export default function (pi: ExtensionAPI) {
 				const body = details?.failed ? theme.fg("error", text) : text;
 				return new Text(`${status} ${theme.fg("toolTitle", theme.bold("research"))}\n${body}`, 0, 0);
 			}
-			return renderSingleResult(
+			const rendered = renderSingleResult(
 				details.results[0],
 				{ ...options, failed: isFailedResult(details.results[0]), descriptor: { label: "research", showSource: false } },
 				theme,
 				singleRenderAdapter,
 			);
+			if (!details.session) return rendered;
+			const lineage = new Container();
+			lineage.addChild(rendered);
+			lineage.addChild(new Text(theme.fg("dim", `Research ID: ${details.session.researchId}${details.session.resumed ? " (resumed)" : ""}`), 0, 0));
+			return lineage;
 		},
 	});
 
@@ -995,4 +1093,8 @@ export default function (pi: ExtensionAPI) {
 			);
 		},
 	});
+}
+
+export default function (pi: ExtensionAPI) {
+	registerSubagentExtension(pi);
 }

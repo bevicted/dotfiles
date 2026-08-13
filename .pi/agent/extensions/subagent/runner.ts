@@ -86,6 +86,8 @@ export interface RunChildOptions {
 	args: string[];
 	task: string;
 	cwd: string;
+	/** Additional child-only environment values, primarily for isolated test providers. */
+	env?: NodeJS.ProcessEnv;
 	signal?: AbortSignal;
 	onUpdate?: (snapshot: ChildRunResult) => void;
 	spawn?: SpawnChild;
@@ -395,7 +397,7 @@ export async function runChild(options: RunChildOptions): Promise<ChildRunResult
 	try {
 		child = spawn(options.command, options.args, {
 			cwd: options.cwd,
-			env: { ...process.env, [CHILD_DEPTH_ENV]: "1" },
+			env: { ...process.env, ...options.env, [CHILD_DEPTH_ENV]: "1" },
 			shell: false,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
