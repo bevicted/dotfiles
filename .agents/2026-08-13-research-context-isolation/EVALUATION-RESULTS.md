@@ -114,3 +114,24 @@ The retained raw records establish two independent runtime-preflight failures: t
 ### Measurements, scoring, and gates
 
 No metrics, usage calculations, output scores, citation audits, fixture artifacts, traces, sessions, or envelopes were created. They are not reported as zero. V4 launched zero cells, so all four Task 06 gates fail. `TASKS.md` records this retained invalid v4 attempt; Task 06 remains unchecked and Task 07 remains unstarted.
+
+## v5 preflight-only attempt
+
+**Disposition:** Runtime preflight failed. No fixture server or cell launched; Task 06 remains unchecked and Task 07 was not started. The retained v3 and v4 invalid attempts above are unchanged and were not retried.
+
+### Revision and retained preflight
+
+| Item | Result |
+| --- | --- |
+| Implementation baseline `I` | `0da9582362f5363451841446595ad6e3a11173e4` |
+| Design seal `D`; execution revision `E` | `ef80ae4ea7ea4a12a555e84964644a7a997e3c59`; same revision |
+| Worktree before runtime preflight | Pass. `worktree-cleanliness.stdout` is empty; only ignored `audit/v5/preflight/` artifacts were then created. |
+| Revision static assertions | Pass as observed. The retained stdout reports the full `I`, `D`, and `E` values and only the permitted v5 path/blob difference after Git resolved the supplied prefixes. This does not satisfy the required invocation form. |
+| Revision eligibility | **Fail (required invocation form).** The retained argv records `ef80ae4` for both `DESIGN_SEAL` and `EXECUTION_REVISION`, rather than the full commit IDs required by v5 Section 2. It is therefore not the required revision-eligibility invocation. `PI_SUBAGENT_DEPTH` is correctly absent in its executed environment. |
+| Eligibility program evidence | Not independently verifiable. `python3 -` received the eligibility program on stdin, but the retained artifacts contain neither that stdin body nor its SHA-256. The argv, stdout, and status records cannot prove that the frozen eligibility script was executed. This does not repair or add to the terminal invocation-form failure. |
+
+`audit/v5/preflight/` retains the captured argv, stdout, stderr, and status records for `revision-discovery`, `worktree-cleanliness`, and `revision-eligibility`; `run-manifest.json` records the failure and full resolved revisions. The eligibility program supplied on stdin is not among those retained raw artifacts. The failure was not adapted or retried. Later runtime checks, fixture preflight, fixture server, and scored commands were not run. Any future replacement design must retain the stdin program body or its SHA-256 before executing it.
+
+### Measurements, scoring, citation audit, and gates
+
+No fixture, trace, session, envelope, usage calculation, metric, score, or citation audit was created. These values are unmeasured and are not reported as zero. V5 launched zero cells, so all four Task 06 gates fail. `TASKS.md` is unchanged; Task 06 remains unchecked and Task 07 remains blocked.
