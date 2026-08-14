@@ -36,7 +36,7 @@ Remove rather than replace complexity. Do not add a new sanitizer, provider wrap
 
 Pick any unchecked task whose blockers are complete. Before starting, read this complete task set and the relevant production paths. Implement only the named simplification. Exercise actual behavior, record completion notes, and check a heading only after every criterion and verification item succeeds.
 
-## [ ] 2026-08-14-research-simplification-01: Replace Research with a one-shot isolated child
+## [x] 2026-08-14-research-simplification-01: Replace Research with a one-shot isolated child
 
 **Delivers:** The registered `research` tool runs one fixed read-only child and returns its bounded final answer without persistence, validation, provider interception, or child-context policy.
 
@@ -53,15 +53,15 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 
 **Acceptance criteria:**
 
-- [ ] The public schema accepts exactly `{ task: string }`, trims it, and rejects blank tasks, wrong types, and every unknown field. Removed inputs are not silently accepted.
-- [ ] A call discovers the valid user `researcher`, builds one small untrusted-data handoff from the task, and runs it through the existing `runSingleAgent`/`runChild` path with the fixed model and exactly the six read-only tools.
-- [ ] The child command uses stdin, `--no-session`, `--no-extensions`, and only the explicit web-fetch and web-search extension paths. It has no parent messages, Research lineage environment, subagent extension, shell tool, mutation tool, or delegation tool.
-- [ ] A completed child response is returned unchanged except for the existing 8 KiB/400-line UTF-8-safe head bound. Tables, nested lists, arbitrary headings, and missing citations do not turn success red.
-- [ ] A completed child with no final assistant text is a failed Research result with parent-visible text `Research completed without a final answer.` and the child result retained in details. Child process failure, cancellation, malformed output, and preflight failure likewise return a bounded visible diagnostic. No diagnostic tells the parent model to inspect inaccessible details.
-- [ ] Ordinary child messages and usage remain available in tool details and the existing collapsed/expanded renderer. No Research mapping, masking, budget, evidence, isolation, or provider-replacement custom entry is written.
-- [ ] Registering Research installs no `context`, `before_provider_request`, provider proxy, child budget/masking hook, or session lifecycle hook. Generic subagent registration and behavior remain unchanged.
-- [ ] `.pi/agent/agents/researcher.md` retains its fixed model and six-tool frontmatter and uses the exact short body in this task context. It has no continuation, internal ledger, atomic-claim audit, mandatory response headings, stopping protocol, or per-claim citation rule.
-- [ ] `.pi/agent/extensions/subagent/README.md` describes Research as context reduction, not a security sandbox, and documents the one-shot task-only interface and normal direct-tool routing.
+- [x] The public schema accepts exactly `{ task: string }`, trims it, and rejects blank tasks, wrong types, and every unknown field. Removed inputs are not silently accepted.
+- [x] A call discovers the valid user `researcher`, builds one small untrusted-data handoff from the task, and runs it through the existing `runSingleAgent`/`runChild` path with the fixed model and exactly the six read-only tools.
+- [x] The child command uses stdin, `--no-session`, `--no-extensions`, and only the explicit web-fetch and web-search extension paths. It has no parent messages, Research lineage environment, subagent extension, shell tool, mutation tool, or delegation tool.
+- [x] A completed child response is returned unchanged except for the existing 8 KiB/400-line UTF-8-safe head bound. Tables, nested lists, arbitrary headings, and missing citations do not turn success red.
+- [x] A completed child with no final assistant text is a failed Research result with parent-visible text `Research completed without a final answer.` and the child result retained in details. Child process failure, cancellation, malformed output, and preflight failure likewise return a bounded visible diagnostic. No diagnostic tells the parent model to inspect inaccessible details.
+- [x] Ordinary child messages and usage remain available in tool details and the existing collapsed/expanded renderer. No Research mapping, masking, budget, evidence, isolation, or provider-replacement custom entry is written.
+- [x] Registering Research installs no `context`, `before_provider_request`, provider proxy, child budget/masking hook, or session lifecycle hook. Generic subagent registration and behavior remain unchanged.
+- [x] `.pi/agent/agents/researcher.md` retains its fixed model and six-tool frontmatter and uses the exact short body in this task context. It has no continuation, internal ledger, atomic-claim audit, mandatory response headings, stopping protocol, or per-claim citation rule.
+- [x] `.pi/agent/extensions/subagent/README.md` describes Research as context reduction, not a security sandbox, and documents the one-shot task-only interface and normal direct-tool routing.
 
 **Verification:**
 
@@ -74,10 +74,10 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 
 **Completion notes:**
 
-- Changes: <fill when complete>
-- Decisions or deviations: <fill when complete>
-- Verification results: <fill when complete>
-- Remaining risks or follow-ups: <fill when complete>
+- Changes: Replaced Research with a strict task-only one-shot child on the existing `runSingleAgent`/`runChild` path; fixed its model and six tools; isolated child extensions to web-fetch and web-search; removed active session, validation, provider-boundary, budget, evidence, and telemetry integration; simplified the researcher prompt, README, renderer details, and focused tests.
+- Decisions or deviations: Retained one injectable Research lifecycle seam. The Research discriminator selects isolated argv and removes the two retired lineage environment variables before spawn. Retired dead modules and their standalone test remain for Task 02 as required.
+- Verification results: Reviewer PASS. Parent ran the registered Research, provider-payload, production argv/stdin/environment, success, truncation, empty-output, failure, malformed-output, cancellation, and registered generic single/parallel/chain cases in `subagent.test.ts` and `research.test.ts` (29 passed); direct web tests passed (89 passed, 2 opt-in live tests skipped); offline subagent extension load and `git diff --check` passed.
+- Remaining risks or follow-ups: Task 02 must delete the now-dead enforcement modules, fixture, and obsolete `research-context.test.ts` coverage.
 
 ## [ ] 2026-08-14-research-simplification-02: Delete the retired Research enforcement stack
 

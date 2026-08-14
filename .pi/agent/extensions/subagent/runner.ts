@@ -88,6 +88,8 @@ export interface RunChildOptions {
 	cwd: string;
 	/** Additional child-only environment values, primarily for isolated test providers. */
 	env?: NodeJS.ProcessEnv;
+	/** Remove retired Research session lineage variables from an isolated Research child. */
+	isResearch?: boolean;
 	signal?: AbortSignal;
 	onUpdate?: (snapshot: ChildRunResult) => void;
 	spawn?: SpawnChild;
@@ -393,11 +395,16 @@ export async function runChild(options: RunChildOptions): Promise<ChildRunResult
 	const spawn = options.spawn ?? (nodeSpawn as unknown as SpawnChild);
 	const schedule = options.setTimeout ?? setTimeout;
 	const cancelTimer = options.clearTimeout ?? clearTimeout;
+	const env = { ...process.env, ...options.env, [CHILD_DEPTH_ENV]: "1" };
+	if (options.isResearch) {
+		delete env.PI_RESEARCH_CHILD_SESSION_ID;
+		delete env.PI_RESEARCH_PARENT_SESSION_ID;
+	}
 	let child: SpawnedChild;
 	try {
 		child = spawn(options.command, options.args, {
 			cwd: options.cwd,
-			env: { ...process.env, ...options.env, [CHILD_DEPTH_ENV]: "1" },
+			env,
 			shell: false,
 			stdio: ["pipe", "pipe", "pipe"],
 		});

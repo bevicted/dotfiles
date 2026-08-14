@@ -37,48 +37,17 @@ import {
 } from "./single-render.ts";
 import { registerToolResultMiddleware } from "./tool-result-middleware.ts";
 import {
-	registerResearchBoundary,
-	ResearchBoundaryTracker,
-} from "./research-boundary.ts";
-import {
-	registerResearchContext,
-	type ResearchContextOptions,
-} from "./research-context.ts";
-import type { ResearchWorkBudgetDetails } from "./research-budget-audit.ts";
-import type { ResearchContextTelemetry } from "./research-context-audit.ts";
-import {
-	addResearchIdToAnswer,
-	boundStructuredResearchOutput,
-	evidenceFromChildMessages,
-	researchExecutionFailure,
-	researchValidationFailure,
-	validateResearchOutput,
-	type ResearchEvidenceDetails,
-} from "./research-evidence.ts";
-import {
 	boundResearchOutput,
-	cloneResearcherAgent,
 	composeResearchPrompt,
 	normalizeResearchInput,
-	preflightResearchTools,
 	RESEARCH_AGENT_NAME,
 	RESEARCH_MAX_BYTES,
 	RESEARCH_MAX_LINES,
 	RESEARCH_MODEL,
+	RESEARCH_TOOLS,
 	selectUserResearcherAgent,
-	withResearchFailureState,
 	type NormalizedResearchInput,
-	type ResearchEffort,
-	type WebResearchMode,
 } from "./research.ts";
-import {
-	RESEARCH_MAPPING_ENTRY,
-	RESEARCH_PARENT_ENV,
-	ResearchSessionStore,
-	researchSessionError,
-	researchSessionMetadataForDetails,
-	type ResearchSessionTarget,
-} from "./research-session.ts";
 import {
 	assertCanDelegate,
 	boundParallelOutput,
@@ -125,22 +94,11 @@ export interface ResearchDetails {
 	kind: "research";
 	agentScope: "user";
 	model: typeof RESEARCH_MODEL;
-	reasoningLevel: "high";
 	effectiveTools: string[];
 	input: NormalizedResearchInput;
-	files: string[];
-	webResearch: WebResearchMode;
-	effort: ResearchEffort;
 	usage: UsageStats;
 	results: SingleResult[];
 	failed: boolean;
-	/** Persisted child masking events, excluded from parent model context. */
-	maskingTelemetry?: ResearchContextTelemetry[];
-	/** Per-invocation and cumulative child-only web work measurements. */
-	workBudget?: ResearchWorkBudgetDetails;
-	/** Successful and limited fetch provenance, excluded from parent model context. */
-	evidence?: ResearchEvidenceDetails;
-	session?: Omit<ResearchSessionTarget, "sessionFile">;
 }
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
@@ -154,7 +112,7 @@ export interface ResearchLifecycleRequest {
 	signal: AbortSignal | undefined;
 	onUpdate: OnUpdateCallback | undefined;
 	makeDetails: (results: SingleResult[]) => SubagentDetails;
-	session?: ResearchSessionTarget;
+	isResearch: true;
 }
 
 /** The one Research execution seam. Production uses runSingleAgent/runChild. */
@@ -164,9 +122,6 @@ export type ResearchLifecycle = (
 
 export interface SubagentExtensionOptions {
 	runResearch?: ResearchLifecycle;
-	researchBoundaryTracker?: ResearchBoundaryTracker;
-	researchContext?: ResearchContextOptions;
-	researchSessionStore?: ResearchSessionStore;
 }
 
 function defaultResearchLifecycle(
@@ -183,7 +138,7 @@ function defaultResearchLifecycle(
 		request.signal,
 		request.onUpdate,
 		request.makeDetails,
-		request.session,
+		request.isResearch,
 	);
 }
 
@@ -259,43 +214,23 @@ function boundResearchResult(output: string): string {
 	);
 }
 
-/** Completed results retain their required headings even when the child overflows. */
-function boundCompletedResearchResult(output: string): string {
-	return boundStructuredResearchOutput(output, {
-		maxLines: RESEARCH_MAX_LINES,
-		maxBytes: RESEARCH_MAX_BYTES,
-	});
-}
-
 function makeResearchDetails(
 	input: NormalizedResearchInput,
 	effectiveTools: readonly string[],
 	results: SingleResult[],
 	failed = false,
-	session?: ResearchSessionTarget,
-	maskingTelemetry?: readonly ResearchContextTelemetry[],
-	workBudget?: ResearchWorkBudgetDetails,
-	evidence?: ResearchEvidenceDetails,
 ): ResearchDetails {
 	return {
 		kind: "research",
 		agentScope: "user",
 		model: RESEARCH_MODEL,
-		reasoningLevel: "high",
 		effectiveTools: [...effectiveTools],
-		input: { ...input, files: [...input.files] },
-		files: [...input.files],
-		webResearch: input.webResearch,
-		effort: input.effort,
+		input: { ...input },
 		usage: aggregateUsage(results),
-		// Tool details are an immutable audit snapshot, including during progress
-		// updates. They never participate in the parent model context.
+		// Pi keeps tool details out of model context. Retain the ordinary child
+		// transcript here for the user-facing collapsed and expanded renderers.
 		results: structuredClone(results),
 		failed,
-		maskingTelemetry: maskingTelemetry?.map((telemetry) => ({ ...telemetry })),
-		workBudget: workBudget ? structuredClone(workBudget) : undefined,
-		evidence: evidence ? structuredClone(evidence) : undefined,
-		session: session ? researchSessionMetadataForDetails(session) : undefined,
 	};
 }
 
@@ -378,7 +313,7 @@ async function runSingleAgent(
 	signal: AbortSignal | undefined,
 	onUpdate: OnUpdateCallback | undefined,
 	makeDetails: (results: SingleResult[]) => SubagentDetails,
-	researchSession?: ResearchSessionTarget,
+	isResearch = false,
 ): Promise<SingleResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) {
@@ -406,12 +341,9 @@ async function runSingleAgent(
 	}
 
 	const model = agent.model ?? dispatchDefaults.model;
-	// Research has a fixed, isolated extension allowlist. Generic subagents
-	// retain the parent's normal extension discovery so selected parent tools
-	// remain registered in the child process.
-	const args = ["--mode", "json", "-p", ...childExtensionArgs(researchSession !== undefined)];
-	if (researchSession) args.push("--session", researchSession.sessionFile);
-	else args.push("--no-session");
+	// Research alone uses the fixed isolated extension allowlist. Generic
+	// subagents retain normal extension discovery and behavior.
+	const args = ["--mode", "json", "-p", "--no-session", ...childExtensionArgs(isResearch)];
 	if (model) args.push("--model", model);
 	if (!agent.model && dispatchDefaults.thinkingLevel)
 		args.push("--thinking", dispatchDefaults.thinkingLevel);
@@ -438,12 +370,7 @@ async function runSingleAgent(
 		const child = await runChild({
 			...invocation,
 			task,
-			env: researchSession
-				? {
-						PI_RESEARCH_CHILD_SESSION_ID: researchSession.childSessionId,
-						[RESEARCH_PARENT_ENV]: researchSession.parentSessionId,
-					}
-				: undefined,
+			isResearch,
 			cwd: resolvedCwd,
 			signal,
 			onUpdate: onUpdate
@@ -637,44 +564,11 @@ const ChainItem = Type.Object({
 const ResearchParams = Type.Object(
 	{
 		task: Type.String({
-			description: "Research question and requested deliverable",
+			description:
+				"One-shot research task. Include context, file paths, requested depth, and source constraints here.",
 			minLength: 1,
 			pattern: "\\S",
 		}),
-		context: Type.Optional(
-			Type.String({
-				description:
-					"Unverified caller material, constraints, or supplied evidence",
-			}),
-		),
-		files: Type.Optional(
-			Type.Array(
-				Type.String({ description: "Repository-relative evidence target" }),
-			),
-		),
-		webResearch: Type.Optional(
-			StringEnum(["auto", "required", "disabled"] as const, {
-				description: "Web research policy. Default: auto.",
-				default: "auto",
-			}),
-		),
-		effort: Type.Optional(
-			StringEnum(["standard", "deep"] as const, {
-				description:
-					"Research breadth and contradiction checking. Default: standard.",
-				default: "standard",
-			}),
-		),
-		researchId: Type.Optional(
-			Type.String({
-				description:
-					"Opaque Research ID returned by a prior Research call. Resumes only this parent-owned Research session.",
-				minLength: 38,
-				maxLength: 38,
-				pattern:
-					"^r_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-			}),
-		),
 	},
 	{ additionalProperties: false },
 );
@@ -729,99 +623,40 @@ export function registerSubagentExtension(
 	options: SubagentExtensionOptions = {},
 ) {
 	registerToolResultMiddleware(pi);
-	const researchBoundaryTracker =
-		options.researchBoundaryTracker ?? new ResearchBoundaryTracker();
-	const researchSessionStore =
-		options.researchSessionStore ?? new ResearchSessionStore();
-	registerResearchBoundary(pi, researchBoundaryTracker);
-	registerResearchContext(pi, options.researchContext);
 	const runResearch = options.runResearch ?? defaultResearchLifecycle;
 
 	pi.registerTool({
 		name: "research",
 		label: "Research",
 		description:
-			"Run isolated read-only Research for iterative multi-source synthesis, conflicting evidence, or source-sensitive reports. For a narrow lookup or known URL, use websearch or webfetch directly. Do not repeat delegated Research with parent web tools.",
+			"Run one isolated read-only researcher for iterative multi-source synthesis, conflicting evidence, or source-sensitive reports. Put all context and constraints in task. For a narrow lookup or known URL, use websearch or webfetch directly.",
 		promptSnippet:
-			"Use isolated Research for iterative multi-source synthesis and source-sensitive reports",
+			"Use one-shot Research for iterative multi-source synthesis and source-sensitive reports",
 		promptGuidelines: [
-			"Use Research for iterative multi-source synthesis, conflicting evidence, and source-sensitive reports.",
+			"Use one-shot Research for iterative multi-source synthesis, conflicting evidence, and source-sensitive reports.",
+			"Put all context, file paths, requested depth, and source constraints in task.",
 			"Use websearch or webfetch directly only for one narrow discovery lookup or one known URL.",
-			"After delegating Research, use its bounded synthesis and do not duplicate its investigation with parent web tools.",
 		],
 		parameters: ResearchParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			let input: NormalizedResearchInput;
-			let effectiveTools: string[] = [];
 			try {
-				input = normalizeResearchInput(params, ctx.cwd);
+				input = normalizeResearchInput(params);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				return {
-					content: [
-						{
-							type: "text",
-							text: boundCompletedResearchResult(
-								researchExecutionFailure(undefined, message),
-							),
-						},
-					],
-					details: makeResearchDetails(
-						{ task: "", files: [], webResearch: "auto", effort: "standard" },
-						[],
-						[],
-						true,
-					),
+					content: [{ type: "text", text: boundResearchResult(`Research failed: ${message}`) }],
+					details: makeResearchDetails({ task: "" }, [], [], true),
 				};
 			}
 
-			let session: ResearchSessionTarget | undefined;
-			let workBudgetInvocationId: string | undefined;
-			let sessionOperationStarted = false;
-			let locked = false;
+			const effectiveTools = [...RESEARCH_TOOLS];
 			try {
 				assertCanDelegate();
-				const discovery = discoverAgents(ctx.cwd, "user");
-				const agent = selectUserResearcherAgent(discovery.agents);
-				effectiveTools = preflightResearchTools(
-					agent.tools ?? [],
-					pi.getActiveTools(),
-					input,
-				);
-				const parent = ctx.sessionManager;
-				// The real ExtensionContext always has a SessionManager. The fallback
-				// keeps the narrow lifecycle test harness from creating test sessions.
-				if (parent) {
-					sessionOperationStarted = true;
-					session = input.researchId
-						? researchSessionStore.resume(
-								parent,
-								ctx.cwd,
-								input.researchId,
-								effectiveTools,
-							)
-						: researchSessionStore.create(parent, ctx.cwd, effectiveTools);
-					researchSessionStore.lock(session);
-					locked = true;
-					workBudgetInvocationId = researchSessionStore.startWorkBudget(
-						session,
-						input,
-					)?.invocationId;
-					pi.appendEntry(
-						RESEARCH_MAPPING_ENTRY,
-						researchSessionStore.mapping(session),
-					);
-				}
-				const prompt = composeResearchPrompt(input, effectiveTools);
-				const clonedAgent = cloneResearcherAgent(
-					agent,
-					effectiveTools,
-				) as AgentConfig;
+				const agent = selectUserResearcherAgent(discoverAgents(ctx.cwd, "user").agents);
 				const dispatchDefaults: DispatchDefaults = {
-					model: ctx.model
-						? `${ctx.model.provider}/${ctx.model.id}`
-						: undefined,
+					model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
 					thinkingLevel: ctx.thinkingLevel,
 				};
 				const genericDetails = (results: SingleResult[]): SubagentDetails => ({
@@ -833,147 +668,64 @@ export function registerSubagentExtension(
 				const result = await runResearch({
 					cwd: ctx.cwd,
 					dispatchDefaults,
-					parentActiveTools: pi.getActiveTools(),
-					agent: clonedAgent,
-					prompt,
+					// Research is fixed configuration, not a parent-tool intersection.
+					// selectChildTools therefore returns all six child tools.
+					parentActiveTools: RESEARCH_TOOLS,
+					agent,
+					prompt: composeResearchPrompt(input),
 					signal,
-					session,
+					isResearch: true,
 					onUpdate: onUpdate
 						? (partial) => {
-								const current = partial.details?.results[0];
-								if (!current) return;
-								onUpdate({
-									content: [
-										{
-											type: "text",
-											text: boundResearchResult(
-												getResultOutput(current) || "(running...)",
-											),
-										},
-									],
-									details: withResearchFailureState(
-										makeResearchDetails(
-											input,
-											effectiveTools,
-											[current],
-											isFailedResult(current),
-											session,
-											session
-												? researchSessionStore.maskingTelemetry(session)
-												: undefined,
-											session && workBudgetInvocationId
-												? researchSessionStore.workBudgetDetails(
-														session,
-														workBudgetInvocationId,
-													)
-												: undefined,
-										),
+							const current = partial.details?.results[0];
+							if (!current) return;
+							onUpdate({
+								content: [{
+									type: "text",
+									text: boundResearchResult(
+										getFinalOutput(current.messages) || "(running...)",
 									),
-								});
-							}
+								}],
+								details: makeResearchDetails(
+									input,
+									effectiveTools,
+									[current],
+									isFailedResult(current),
+								),
+							});
+						}
 						: undefined,
 					makeDetails: genericDetails,
 				});
-				researchSessionStore.finalizeWorkBudget(
-					session,
-					workBudgetInvocationId,
-				);
-				if (session)
-					pi.appendEntry(
-						RESEARCH_MAPPING_ENTRY,
-						researchSessionStore.mapping(session),
-					);
-				const childOutput = getResultOutput(result);
-				const persistedEvidence = session
-					? researchSessionStore.evidenceDetails(session, childOutput)
-					: undefined;
-				const evidence = persistedEvidence ?? {
-					fetches: evidenceFromChildMessages(result.messages),
-					validation: validateResearchOutput(
-						childOutput,
-						evidenceFromChildMessages(result.messages),
-						input,
-					),
-				};
-				const childFailed = isFailedResult(result);
-				const failed = childFailed || !evidence.validation.valid;
-				const output = childFailed
-					? researchExecutionFailure(session?.researchId)
-					: !evidence.validation.valid
-						? researchValidationFailure(evidence.validation, session?.researchId)
-						: addResearchIdToAnswer(childOutput, session?.researchId);
-				const response = {
-					content: [
-						{
-							type: "text" as const,
-							text: boundCompletedResearchResult(output),
-						},
-					],
-					details: withResearchFailureState(
-						makeResearchDetails(
-							input,
-							effectiveTools,
-							[result],
-							failed,
-							session,
-							session
-								? researchSessionStore.maskingTelemetry(session)
-								: undefined,
-							session && workBudgetInvocationId
-								? researchSessionStore.workBudgetDetails(session, workBudgetInvocationId)
-								: undefined,
-							evidence,
-						),
-						failed,
-					),
-				};
-				researchBoundaryTracker.record(response, _toolCallId);
-				return response;
-			} catch (error) {
-				researchSessionStore.finalizeWorkBudget(
-					session,
-					workBudgetInvocationId,
-				);
-				const message = sessionOperationStarted
-					? researchSessionError(error)
-					: error instanceof Error
-						? error.message
-						: String(error);
+				if (isFailedResult(result)) {
+					const diagnostic = getFailureDiagnostic(result) || "Child process failed.";
+					return {
+						content: [{ type: "text", text: boundResearchResult(`Research failed: ${diagnostic}`) }],
+						details: makeResearchDetails(input, effectiveTools, [result], true),
+					};
+				}
+				const output = getFinalOutput(result.messages);
+				if (!output.trim()) {
+					const failed = {
+						...result,
+						status: "failed" as const,
+						failureMessage: "Research completed without a final answer.",
+					};
+					return {
+						content: [{ type: "text", text: "Research completed without a final answer." }],
+						details: makeResearchDetails(input, effectiveTools, [failed], true),
+					};
+				}
 				return {
-					content: [
-						{
-							type: "text",
-							text: boundCompletedResearchResult(
-								researchExecutionFailure(
-									session?.researchId,
-									message,
-								),
-							),
-						},
-					],
-					details: makeResearchDetails(
-						input,
-						effectiveTools,
-						[],
-						true,
-						session,
-						session
-							? researchSessionStore.maskingTelemetry(session)
-							: undefined,
-						session && workBudgetInvocationId
-							? researchSessionStore.workBudgetDetails(
-									session,
-									workBudgetInvocationId,
-								)
-							: undefined,
-					),
+					content: [{ type: "text", text: boundResearchResult(output) }],
+					details: makeResearchDetails(input, effectiveTools, [result]),
 				};
-			} finally {
-				researchSessionStore.finalizeWorkBudget(
-					session,
-					workBudgetInvocationId,
-				);
-				if (session && locked) researchSessionStore.release(session);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					content: [{ type: "text", text: boundResearchResult(`Research failed: ${message}`) }],
+					details: makeResearchDetails(input, effectiveTools, [], true),
+				};
 			}
 		},
 
@@ -994,14 +746,13 @@ export function registerSubagentExtension(
 				const status = details?.failed
 					? theme.fg("error", "x")
 					: theme.fg("success", "ok");
-				const body = details?.failed ? theme.fg("error", text) : text;
 				return new Text(
-					`${status} ${theme.fg("toolTitle", theme.bold("research"))}\n${body}`,
+					`${status} ${theme.fg("toolTitle", theme.bold("research"))}\n${details?.failed ? theme.fg("error", text) : text}`,
 					0,
 					0,
 				);
 			}
-			const rendered = renderSingleResult(
+			return renderSingleResult(
 				details.results[0],
 				{
 					...options,
@@ -1011,20 +762,6 @@ export function registerSubagentExtension(
 				theme,
 				singleRenderAdapter,
 			);
-			if (!details.session) return rendered;
-			const lineage = new Container();
-			lineage.addChild(rendered);
-			lineage.addChild(
-				new Text(
-					theme.fg(
-						"dim",
-						`Research ID: ${details.session.researchId}${details.session.resumed ? " (resumed)" : ""}`,
-					),
-					0,
-					0,
-				),
-			);
-			return lineage;
 		},
 	});
 

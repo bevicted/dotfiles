@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 export function isolatedChildExtensions(): string[] {
 	const directory = path.dirname(fileURLToPath(import.meta.url));
 	return [
-		path.join(directory, "index.ts"),
 		path.join(directory, "..", "web-fetch", "index.ts"),
 		path.join(directory, "..", "web-search", "index.ts"),
 	];
