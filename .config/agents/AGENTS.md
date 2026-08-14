@@ -6,6 +6,12 @@
 - Never guess. When you cannot cite at least a single source for what you're talking about, either research online or admit to not knowing. Saying that you do not know or at least not sure, is 10 times better than confidently stating a guess/inference for it.
 - Avoid slop words unless alternatives are inappropriate.
 
+# Scope control
+
+- Treat the user's request as the scope: choose the smallest verified solution, omit unrequested work, ask before any material expansion of scope, and stop once the requested outcome is verified.
+- Material expansion includes new infrastructure, abstractions, dependencies, hardening, or validation unrelated to the changed behavior.
+- Report optional improvements instead of implementing them.
+
 # Coding
 
 - If you need a paragraph-long comment to justify why the workaround is OK, the code is wrong - fix the code.
