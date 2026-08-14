@@ -79,7 +79,7 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 - Verification results: Reviewer PASS. Parent ran the registered Research, provider-payload, production argv/stdin/environment, success, truncation, empty-output, failure, malformed-output, cancellation, and registered generic single/parallel/chain cases in `subagent.test.ts` and `research.test.ts` (29 passed); direct web tests passed (89 passed, 2 opt-in live tests skipped); offline subagent extension load and `git diff --check` passed.
 - Remaining risks or follow-ups: Task 02 must delete the now-dead enforcement modules, fixture, and obsolete `research-context.test.ts` coverage.
 
-## [ ] 2026-08-14-research-simplification-02: Delete the retired Research enforcement stack
+## [x] 2026-08-14-research-simplification-02: Delete the retired Research enforcement stack
 
 **Delivers:** Only the small one-shot Research implementation and focused regressions remain; dead enforcement code and its maintenance surface are removed.
 
@@ -94,13 +94,13 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 
 **Acceptance criteria:**
 
-- [ ] Every retired boundary, persistence, continuation, masking, budget, evidence-validation, telemetry, and provider-repair module or fixture has been deleted when no remaining production import requires it.
-- [ ] Production Research types and options contain no `researchId`, session target/store, masking telemetry, work budget, evidence details, boundary tracker, provider guard, or continuation branch.
-- [ ] Production Research code contains no hard response headings, atomic-claim parser, citation gate, provider payload reconstruction, private-value fingerprint, custom Research audit entry, or fail-closed replacement request.
-- [ ] `research.ts`, the registered tool path, child extension selection, and researcher prompt contain only behavior required by the final one-shot contract. Do not retain unused abstraction for hypothetical future continuation or enforcement.
-- [ ] Removed behavior tests are deleted rather than rewritten to preserve obsolete guarantees. The remaining tests are readable and test the supported contract, not historical implementation details.
-- [ ] Direct `websearch`/`webfetch`, generic subagents, normal Pi sessions, and tool rendering still behave as before.
-- [ ] `.pi/agent/extensions/subagent/README.md` and current production comments have no claim of formal isolation, persisted continuation, mechanical citation validity, shared Research budgets, provider enforcement, or scored evaluation success.
+- [x] Every retired boundary, persistence, continuation, masking, budget, evidence-validation, telemetry, and provider-repair module or fixture has been deleted when no remaining production import requires it.
+- [x] Production Research types and options contain no `researchId`, session target/store, masking telemetry, work budget, evidence details, boundary tracker, provider guard, or continuation branch.
+- [x] Production Research code contains no hard response headings, atomic-claim parser, citation gate, provider payload reconstruction, private-value fingerprint, custom Research audit entry, or fail-closed replacement request.
+- [x] `research.ts`, the registered tool path, child extension selection, and researcher prompt contain only behavior required by the final one-shot contract. Do not retain unused abstraction for hypothetical future continuation or enforcement.
+- [x] Removed behavior tests are deleted rather than rewritten to preserve obsolete guarantees. The remaining tests are readable and test the supported contract, not historical implementation details.
+- [x] Direct `websearch`/`webfetch`, generic subagents, normal Pi sessions, and tool rendering still behave as before.
+- [x] `.pi/agent/extensions/subagent/README.md` and current production comments have no claim of formal isolation, persisted continuation, mechanical citation validity, shared Research budgets, provider enforcement, or scored evaluation success.
 
 **Verification:**
 
@@ -113,7 +113,7 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 
 **Completion notes:**
 
-- Changes: <fill when complete>
-- Decisions or deviations: <fill when complete>
-- Verification results: <fill when complete>
-- Remaining risks or follow-ups: <fill when complete>
+- Changes: Deleted the retired Research boundary, persisted session, child context masking, budget audit, context audit, evidence validation, provider fixture, and standalone enforcement test files. Removed the final retired input name from focused task-only test data.
+- Decisions or deviations: Deleted obsolete tests rather than preserving retired guarantees. Kept the fake provider registration because it exercises Pi's normal provider path and proves ordinary tool details are excluded without Research-specific interception.
+- Verification results: Reviewer PASS. Parent confirmed zero live retired imports, names, fixtures, or artifacts; inspected every remaining `evidence` and `registerProvider` match; ran the complete remaining subagent/Research suite (29 passed), direct web suites (89 passed, 2 opt-in live tests skipped), all three offline extension loads, actual local fake-provider and child-command behavior through the retained tests, and `git diff --check`.
+- Remaining risks or follow-ups: The two live public-web smoke tests remain opt-in and were not run; no task-owned follow-up remains.
