@@ -3,6 +3,10 @@
 Task set: `2026-08-13-research-context-isolation`
 Source: [PLAN.md](./PLAN.md)
 
+## Final status
+
+Stopped on 2026-08-14. Tasks 01 through 05 remain complete. Tasks 06 and 07 are intentionally closed incomplete and must not be resumed from this roadmap; their unchecked headings record that no frozen evaluation passed and no optimization baseline exists. Every deliverable, acceptance criterion, verification step, and imperative under those unchecked headings is retained as non-actionable history. The accepted follow-up scope is remediation Tasks 01 and 02 in [the remediation task set](../2026-08-13-research-provider-boundary-remediation/TASKS.md). No formal security proof, scored isolation result, or measured optimization benefit is claimed. Use and maintain Research according to [the supported scope](../../.pi/agent/extensions/subagent/README.md).
+
 ## Task context
 
 The dedicated `research` tool must keep iterative search results, fetched pages, source screening, and working evidence out of the main agent's model context. Context isolation is the primary objective. Child and total tokens, cost, and latency are an isolation premium to measure and optimize only after the boundary is proven.
@@ -35,7 +39,7 @@ Relevant starting points:
 - Pi exposes `SessionManager.create/open`, `NewSessionOptions.parentSession`, `--session`/`--session-id`, custom entries that do not enter LLM context, normal compaction, `context`, and `before_provider_request`.
 - `.pi/agent/extensions/web-search/` and `.pi/agent/extensions/web-fetch/` provide already bounded direct web tools whose ordinary parent behavior must not regress.
 
-Pick any unchecked task whose blockers are complete. Before starting, read the task context, linked source, and all applicable repository instructions. When done, exercise actual behavior, record completion notes, and change the task heading from `[ ]` to `[x]` only when every acceptance criterion is met.
+This roadmap is closed. Do not start an unchecked task or change its heading; retain the unchecked tasks as the historical record of work not completed.
 
 ## [x] 2026-08-13-research-context-isolation-01: Prove and enforce the parent provider boundary
 
@@ -228,6 +232,8 @@ Pick any unchecked task whose blockers are complete. Before starting, read the t
 
 ## [ ] 2026-08-13-research-context-isolation-06: Run the context-first v2 evaluation
 
+**Status:** Closed incomplete. The task definition below is historical and must not be executed.
+
 **Delivers:** A frozen, reproducible evaluation showing whether Research solves main-agent context bloat and preserves downstream parent quality, with its full efficiency premium reported separately.
 
 **Blocked by:** `2026-08-13-research-context-isolation-03`, `2026-08-13-research-context-isolation-05`
@@ -274,6 +280,8 @@ Pick any unchecked task whose blockers are complete. Before starting, read the t
 
 ## [ ] 2026-08-13-research-context-isolation-07: Optimize the measured isolation premium
 
+**Status:** Closed incomplete. The task definition below is historical and must not be executed.
+
 **Delivers:** Measured efficiency improvements for isolated Research without weakening the proven parent boundary, evidence quality, or read-only safety.
 
 **Blocked by:** `2026-08-13-research-context-isolation-06`
@@ -307,4 +315,4 @@ Pick any unchecked task whose blockers are complete. Before starting, read the t
 - Changes: Not implemented; no accepted v2 baseline exists.
 - Decisions or deviations: Remains blocked by incomplete Task 06.
 - Verification results: Not run; no candidate can be measured against an accepted isolation and quality baseline.
-- Remaining risks or follow-ups: Run the frozen v2 evaluation first, then measure one optimization variable at a time without weakening the boundary.
+- Remaining risks or follow-ups: No optimization work is authorized because no accepted evaluation baseline exists.

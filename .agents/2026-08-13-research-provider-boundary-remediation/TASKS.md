@@ -3,6 +3,12 @@
 Task set: `2026-08-13-research-provider-boundary-remediation`
 Source: [v3-v7 evaluation results](../2026-08-13-research-context-isolation/EVALUATION-RESULTS.md), [original task set](../2026-08-13-research-context-isolation/TASKS.md), and the current conversation at task creation
 
+## Final status
+
+Stopped after Task 02 on 2026-08-14. Tasks 03 through 10 are intentionally abandoned and must not be resumed from this roadmap. Their unchecked headings mean not completed, not pending. Every deliverable, acceptance criterion, verification step, and imperative under those unchecked headings is retained as non-actionable history. The incomplete Task 03 harness and stale audit were discarded.
+
+Commits `ebd4140` and `2b7f32f` are the accepted production baseline: the provider boundary passed focused fake-provider review, and fresh, downstream, restart, and continuation behavior passed the unscored authenticated Task 02 qualification. No frozen v8 PASS, formal security proof, isolation-premium measurement, or optimization result is claimed. Use and maintain Research according to [the supported scope](../../.pi/agent/extensions/subagent/README.md). Preserve v3-v7 and the Task 02 audit as historical evidence.
+
 ## Task context
 
 The Research child lifecycle is substantially implemented. Original tasks 01 through 05 are complete: persistent parent-owned Research sessions, explicit continuation, child-only stale-result masking, shared work budgets, successful-fetch provenance, citation validation, child extension isolation, and bounded parent-visible output have focused coverage. The original Task 06 evaluation gate has not passed, so original Task 07 optimization remains blocked.
@@ -26,7 +32,7 @@ Relevant starting points:
 - [v7 raw audit](../2026-08-13-research-context-isolation/audit/v7/) contains the exact corrupt OpenAI Responses payloads.
 - [v7 design](../2026-08-13-research-context-isolation/EVALUATION-v7.md) is the latest frozen protocol and must remain unchanged.
 
-Pick any unchecked task whose blockers are complete. Before starting, read this complete task set, every linked source needed by the selected task, and all applicable repository instructions. Implement one task at a time. Exercise actual behavior; tests alone do not establish provider correctness. Record completion notes and check a heading only after every acceptance criterion and verification item succeeds.
+This roadmap is closed. Do not start an unchecked task or change its heading; retain Tasks 03 through 10 as the historical record of work not completed.
 
 ## [x] 2026-08-13-research-provider-boundary-remediation-01: Preserve valid provider-native Research call pairs
 
@@ -99,9 +105,11 @@ Pick any unchecked task whose blockers are complete. Before starting, read this 
 - Changes: Added the tracked Task 02 local fixture, terminal native-provider capture extension and deterministic capture test, reproducible authenticated pilot, source/repository manifests, and retained unscored results. The pilot exercises fresh A/B Research, a restarted tools-disabled downstream turn, and a restarted explicit C continuation in the same trusted child. It retains terminal transport payloads, pre-terminal context diagnostics, sessions, usage, budgets, lineage, hashes, fixture access, export/deletion, command output/status, and collapsed/expanded rendering. Boundary metadata exceptions are restricted to exact typed provider vocabulary and six canonical content types; arbitrary diagnostics, timestamps, MIME parameters, and lookalikes remain private.
 - Decisions or deviations: Final provider evidence comes from a capture provider loaded before the production subagent guard, so it records only after the terminal `onPayload` transformation. Raw context is retained separately and is not claimed as the sanitized provider boundary. The pilot is intentionally unscored and uses a new ignored audit path; source manifests bind HEAD, index, and executed worktree bytes independently because qualification ran before this task commit.
 - Verification results: Independent review passed all seven criteria. The retained authenticated run `audit/task-02/20260813T215038Z/` used `openai-codex/gpt-5.6-sol:high`; fetched `/a.txt`, `/b.txt`, and `/c.txt` exactly once; preserved one child and Research ID across restart; used two invocation budgets; emitted valid fresh and resumed native pairs; exposed no downstream tools, raw markers, unnamed schema, `None` model, or fallback; and passed export, deletion, and interactive rendering checks. Parent verification passed 76 focused tests including terminal capture, 89/91 web tests with two optional live skips, offline loading, Python compilation, diff checks, source-manifest equality, retained-audit assertions, and the unchanged v3-v7 aggregate hash `62eebe5fa19a20f3f6d467d368e65ff4dba56bb926dd549a3c8d03734c01331b`.
-- Remaining risks or follow-ups: Future provider protocol values or content types require explicit typed allowlist entries plus adversarial coverage. Pre-terminal context and authenticated raw artifacts remain private ignored evidence. Scored evaluation preflight and extraction are Tasks 03-06.
+- Remaining risks or follow-ups: Future provider protocol values or content types require explicit typed allowlist entries plus adversarial coverage. Pre-terminal context and authenticated raw artifacts remain private ignored evidence. Scored evaluation and extraction work was abandoned.
 
 ## [ ] 2026-08-13-research-provider-boundary-remediation-03: Add a reproducible preflight and provider-shape gate
+
+**Status:** Abandoned. This and every later unchecked task definition are historical and must not be executed.
 
 **Delivers:** A tracked preflight harness creates deterministic evaluation inputs and rejects command, environment, fixture, or provider-envelope defects before any scored model cell launches.
 
