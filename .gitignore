@@ -15,11 +15,12 @@
 !.config/opencode/AGENTS.md
 !.config/opencode/opencode.jsonc
 
-# pi: local provider/model credentials and state should not be tracked.
+# pi: local provider/model credentials, state, and session exports should not be tracked.
 .pi/agent/models.json
 .pi/agent/settings.json
 .pi/agent/auth.json
 .pi/agent/extensions/web-fetch/node_modules/
+/pi-session-*.html
 
 # shell: local helper functions may contain private item paths.
 scripts/internal.sh
