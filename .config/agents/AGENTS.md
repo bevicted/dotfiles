@@ -23,6 +23,8 @@ Commit proactively in cohesive, self-contained units. One logical change per com
 
 Only commit verified changes. Leave unverified work uncommitted and report what needs checking. "Verified" = exercised actual behavior, not just passing tests.
 
+Stage files without bypassing Git's ignore rules. Never use `git add -f` or `git add --force` unless the user explicitly asks to track the exact ignored path. If a path does not stage, inspect it with `git check-ignore -v -- <path>`; leave ignored paths untracked and report them.
+
 Commit to current branch. Don't create or switch branches unless asked.
 
 Never push. Never ask to push. Pushing is user-only.
