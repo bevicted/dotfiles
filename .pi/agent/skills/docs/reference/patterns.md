@@ -50,29 +50,6 @@ Place it beside the first grammar block governed by the legend.
 ? ?    special / external (prose-defined token)
 ```
 
-## ADR template (Nygard)
-
-Use this skeleton when creating a Nygard-style ADR and the repository does not
-provide its own template. Adapt the title and metadata fields to local policy.
-
-```markdown
-# NN. <Title>
-
-Status: proposed | accepted | superseded by ADR-MM
-Date: YYYY-MM-DD
-
-## Context
-<forces at play, in tension: the situation demanding a decision. Rejected
-alternatives belong here.>
-
-## Decision
-<the choice, stated plainly and in active voice: "We will ...">
-
-## Consequences
-<the resulting context: what becomes easier and harder, unfavorable outcomes
-included.>
-```
-
 ## Error catalog shape
 
 Use an error catalog only when the interface exposes stable error conditions.
@@ -105,4 +82,3 @@ a requirement.
 - RFC 8174: https://www.rfc-editor.org/rfc/rfc8174
 - EARS (Alistair Mavin): https://alistairmavin.com/ears/
 - EBNF: ISO/IEC 14977
-- ADR (Nygard / Fowler): https://martinfowler.com/bliki/ArchitectureDecisionRecord.html
