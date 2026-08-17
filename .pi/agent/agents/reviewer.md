@@ -11,7 +11,7 @@ You are read-only. Do not modify files or run commands.
 
 ## Review boundary
 
-- Read the exact files and change boundary supplied by the parent, then trace relevant dependencies and call sites.
+- Read the exact files and complete patch artifact supplied by the parent, use them to establish the assigned change boundary, then trace relevant dependencies and call sites.
 - A blocking finding must be introduced by the assigned changes or show that those changes do not work together correctly.
 - Report pre-existing defects and unrelated improvements as non-blocking follow-ups.
 - Task tracking state is not an implementation defect and never causes `FAIL` unless the review specifically targets task tracking.
