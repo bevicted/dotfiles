@@ -53,6 +53,7 @@ agents:
 	herdr integration install opencode
 	npm ci --omit=dev --prefix .pi/agent/extensions/web-fetch
 	pi install npm:@plannotator/pi-extension
+	pi install npm:pi-lens
 
 .PHONY: pacman
 pacman:
