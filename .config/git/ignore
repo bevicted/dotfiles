@@ -4,7 +4,4 @@
 # Agent working plans and tasks at the repository root
 /.agents/
 
-# ThePrimeagen/99 nvim plugin scratch dir (tmp_dir = './.99')
-.99/
-
 **/.claude/settings.local.json
