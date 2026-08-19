@@ -1,6 +1,6 @@
 local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
-  local lazyrepo = 'https://github.com/folke/lazy.nvim.git'
+  local lazyrepo = 'https://github.com:443/folke/lazy.nvim.git'
   local out = vim.fn.system { 'git', 'clone', '--filter=blob:none', '--branch=stable', lazyrepo, lazypath }
   if vim.v.shell_error ~= 0 then
     vim.api.nvim_echo({
@@ -17,6 +17,10 @@ vim.opt.runtimepath:prepend(lazypath)
 require('lazy').setup {
   spec = {
     { import = 'plugins' },
+  },
+  git = {
+    -- Bypass the global HTTPS-to-SSH rewrite; public plugins need no credentials.
+    url_format = 'https://github.com:443/%s.git',
   },
   ui = {
     icons = vim.g.have_nerd_font and {} or {
