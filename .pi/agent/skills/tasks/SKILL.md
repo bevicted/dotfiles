@@ -50,7 +50,7 @@ Create a task-set manifest and linked task specifications for the task passed to
 - Give a new agent enough task-specific context to start without the originating conversation. Treat paths as starting points, not an exhaustive edit list.
 - Keep shared constraints in the manifest. In task files, point to shared context rather than copying it unless a short repeated warning prevents a material mistake.
 - Use stable acceptance IDs `AC-1`, `AC-2`, and so on. Write observable criteria without status checkboxes; the manifest is the sole owner of overall task status.
-- Put focused automated checks and actual behavior exercises in each task file. Put full-repository or cross-task gates in the manifest's final verification section instead of repeating them in every task.
+- Put focused automated checks and actual behavior exercises in each task file. Focused verification must stay task-scoped and must not mutate files outside expected implementation outputs. Use check mode or changed-file-scoped formatting; put repository-wide write-mode formatters, dependency updaters, generators, and cross-task gates in the manifest's final verification section.
 - Mark a manifest task `complete` only after its acceptance criteria are met, required task verification succeeds, and its completion record is filled.
 
 ## `TASKS.md` manifest format

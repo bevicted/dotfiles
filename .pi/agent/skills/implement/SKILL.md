@@ -6,70 +6,74 @@ disable-model-invocation: true
 
 # Implement
 
-Implement the task set passed to `/skill:implement`. Use the manifest to schedule linked task specifications. Keep task tracking, authoritative verification, repository history, and commits in the parent session.
+Implement the task set passed to `/skill:implement`. Keep task state, repository safety decisions, acceptance decisions, history, and commits in the parent session. Keep source discovery, implementation, semantic review, and context-heavy verification in isolated agents.
+
+## Context discipline
+
+- Keep full worker, review, verification, patch, and command-log artifacts outside the repository. Ask subagents to return only the verdict, failed acceptance IDs or blocking findings, changed files, command exit status, risks, and artifact paths. Do not paste full patches or full passing reports into the parent session.
+- Pass stable context by path instead of repeating file contents or prior reports. On remediation, pass the blocking findings and prior report path, not the complete report text.
+- Do not perform implementation discovery or independently reread every changed source file in the parent. Use the acceptance reviewer for complete semantic inspection. Read only the cited context needed to classify a finding, recover repository state, update task records, or commit safely.
+- Run bounded deterministic checks in the parent with verbose output redirected to external log artifacts and report concise exit summaries. Delegate context-heavy or interactive behavior checks to a fresh `worker` in verification-only mode; the parent decides whether its evidence is sufficient.
+- Preserve prior acceptance results after narrow remediation. Require delta review of affected criteria and regression risk unless the remediation is broad enough to invalidate the complete review.
 
 ## Setup
 
-1. Select one unambiguous `TASKS.md` manifest from the command arguments. Ask for its exact path when none or more than one could be selected. Read the complete manifest, its linked source, all applicable repository instructions, and the repository status and diff.
+1. Select one unambiguous `TASKS.md` manifest from the command arguments. Ask for its exact path when none or more than one could be selected. Read the complete manifest, all applicable repository instructions, and the repository status and diff. Verify linked source and task paths exist; do not read linked source or implementation code in the parent unless a later decision requires it.
 2. Validate the manifest before implementation:
-   - If the file is a legacy monolithic task set without linked task specifications, stop and ask the user to migrate it with `/skill:tasks`; do not infer or rewrite the task structure during implementation.
+   - If it is a legacy monolithic task set without linked task specifications, safety-halt and report that `/skill:tasks` migration is required; do not infer or rewrite the task structure during implementation.
    - Every task row has a stable ID, `pending` or `complete` status, an exact linked task file, and valid blocker IDs or `None`.
-   - Every linked task file exists.
-   - Availability can be derived from `pending` status plus `complete` blockers.
-   - Stop and report malformed, missing, duplicate, or contradictory task state instead of guessing.
-3. Record the task-set starting HEAD and all pre-existing changes, including the exact staged index state. Determine whether the manifest and linked task files are tracked, ignored, or untracked. Update all task artifacts locally, but include only tracked artifacts in commits and never force-add ignored files. Tell every reviewer the exact tracking mode.
-4. Identify `pending` tasks whose blockers are `complete`. If pre-existing changes overlap the files or behavior likely affected by the next task, stop before delegation and report the overlap.
+   - Every linked task file exists, IDs are unique, and availability follows from `pending` status plus `complete` blockers.
+   - Safety-halt on malformed, missing, duplicate, contradictory, or deadlocked task state instead of guessing.
+3. Record the task-set starting HEAD and exact pre-existing worktree, untracked-file, and staged-index state. Record exact content or restorable snapshots for task artifacts, including ignored artifacts. Determine their tracking mode. Update all task artifacts locally, but include only tracked artifacts in commits and never force-add ignored files.
+4. Identify `pending` tasks whose blockers are `complete`. Safety-halt before delegation if pre-existing changes overlap the next task and cannot be separated safely.
 
 ## Per-task cycle
 
-5. Choose one available task in manifest order. Read its complete linked task file and relevant source context, then record its starting HEAD. Delegate it to a fresh `worker` with this exact context:
-   - Exact manifest, selected task, linked source, and applicable instruction paths.
-   - Selected task ID, task starting HEAD, pre-existing-change boundaries, and `ALLOW_COMMIT: no`.
-   - Read the manifest shared context, complete selected task file, relevant linked source, and applicable instructions.
-   - Implement only the selected task and preserve unrelated state.
-   - Run the task file's focused verification and exercise actual behavior when possible. The parent owns authoritative verification and the manifest's final task-set gate.
-   - Do not edit task artifacts, stage, commit, or delegate.
-   - Report every acceptance ID with its implementation, exact test or behavioral command result, changed files, and remaining risks.
-6. Check repository invariants before semantic review:
-   - Confirm the worker completed its assignment, HEAD is unchanged, all task artifacts are unchanged, changed files are within scope, and `git diff --check` passes.
-   - If the task started with no staged changes and the worker created exactly one direct descendant commit containing only current-task work, recover with `git reset --mixed <task-starting-HEAD>` so all file changes remain in the worktree. Record the violation and continue.
-   - Stop if the task started with staged changes and HEAD changed, history changed in any other way, unrelated files changed, task artifacts changed, or repository state is uncertain. Do not discard, overwrite, or silently alter pre-existing index state.
-   - Create a complete task patch artifact outside the repository for read-only review. Account for every changed file, including untracked files, and preserve the task-starting boundary.
-7. Delegate acceptance review to a fresh `acceptance-reviewer`. Supply the exact manifest, selected task, source, and complete patch-artifact paths; task ID; task starting HEAD; complete changed-file list; worker report; reported verification; pre-existing-change boundaries; and task-artifact tracking mode. Require one result for every acceptance ID and final `PASS` or `FAIL`.
-8. On `FAIL`, pass only the blocking findings and complete acceptance result to a fresh `worker` with the same boundaries and `ALLOW_COMMIT: no`. Do not ask it to fix follow-ups, warnings, pre-existing defects, or optional hardening. Repeat steps 6 and 7 after remediation. Allow at most two remediation worker-review cycles after the initial acceptance review.
-9. After acceptance review passes, independently inspect every changed file and account for the complete task diff. Run all verification required by the selected task file and exercise delivered behavior. Stop with the task still `pending` and implementation uncommitted if any criterion, verification, repository instruction, or behavior check fails.
-10. Fill the selected task file's completion record with changes, decisions or deviations, evidence mapped to every acceptance ID, verification results, and remaining risks. Change only that task's manifest status from `pending` to `complete`.
-11. Commit the completed task from the parent as one cohesive, path-limited commit containing only implementation changes and tracked task artifacts. Do not use broad staging or a commit that consumes unrelated staged entries. Follow repository signing instructions, confirm HEAD ancestry, and compare the post-commit staged state with the exact pre-existing staged state recorded in step 3. Preserve every unrelated staged entry; stop and report any difference that cannot be restored exactly without changing worktree content.
-12. Re-read the manifest and repeat from step 4 until every task is `complete` or no `pending` task has all blockers `complete`.
+1. Choose one available task in manifest order. Read its complete task file, record its starting HEAD and repository state, and delegate it to a fresh `worker` with:
+   - Exact manifest, task, linked source, applicable instruction, and external report paths.
+   - Task ID, task starting HEAD, pre-existing-change boundaries, task-artifact tracking mode, and `ALLOW_COMMIT: no`.
+   - Instructions to read the referenced context, implement only the task contract, preserve unrelated state, and avoid editing task artifacts, staging, committing, or delegating.
+   - Instructions to run task-scoped verification and exercise actual behavior when possible. Use check mode or changed-file-scoped formatters. Do not run repository-wide write-mode formatters, dependency updaters, or generators; defer those authoritative gates to the parent.
+   - Instructions to write complete acceptance evidence and command logs to external artifacts and return a compact summary.
+2. Check and recover repository invariants before semantic review:
+   - Confirm the assignment completed, identify every changed file including ignored and untracked files, and run `git diff --check`.
+   - If the task started with an empty index and the worker staged files, restore the index to the task-starting HEAD while preserving worktree content.
+   - If the task started with an empty index, the task-starting HEAD remains an ancestor of current HEAD, and every intervening commit contains only current-task work, reset mixed to the task-starting HEAD so all changes remain in the worktree. Record the violation and continue.
+   - If the starting index was nonempty, restore its exact recorded state only when this can be done mechanically and verified without changing worktree bytes.
+   - Restore an out-of-scope or task-artifact file automatically only when it was clean at the task boundary, its exact prior content is recorded, the mutation is incidental rather than required behavior, and restoration can be verified byte-for-byte. This includes deterministic formatter spillover. Record the recovery and continue.
+   - Retry an operationally failed subagent with a fresh agent. Safety-halt only when history, index, worktree, or unrelated user state cannot be restored and attributed with certainty.
+   - Create a complete task patch artifact outside the repository from the task boundary after recovery.
+3. Delegate acceptance review to a fresh `acceptance-reviewer`. Supply paths for the manifest, task, source, instructions, complete patch, worker report, and verification artifacts plus the task boundary and tracking mode. Require the full external report to account for every changed file and every acceptance ID. Require the compact response to contain final `PASS` or `FAIL`, failed IDs, blocking findings, warnings, and the report path.
+4. Classify the review result:
+   - A finding blocks only when it cites an acceptance criterion, source requirement, repository instruction, or demonstrable correctness, security, or regression defect. Treat style preferences, nits, optional hardening, follow-ups, and pre-existing defects as warnings even if the reviewer labels them blocking.
+   - On a valid implementation blocker, delegate only the blockers and report paths to a fresh worker with the same boundaries and `ALLOW_COMMIT: no`. Repeat invariant recovery and use a delta acceptance review for affected criteria and regression risk.
+   - Continue remediation for as many cycles as needed while the existing task contract determines the fix. If the same finding persists, sharpen the handoff or change workers; repetition alone is not a stop condition.
+   - Escalate only under the escalation condition defined below.
+5. After acceptance passes, confirm the reviewer accounted for every changed file. Run all task-file verification and obtain sufficient behavioral evidence using the context rules above. Route any implementation-related failure back through invariant recovery, review classification, and remediation. Do not stop merely because parent verification found another defect.
+6. Fill the task file's completion record from the external evidence artifacts, including changes, decisions or deviations, evidence for every acceptance ID, verification results, and remaining risks. Change only that task's manifest status from `pending` to `complete`.
+7. Commit the completed task from the parent as one cohesive, path-limited commit containing only implementation changes and tracked task artifacts. Do not consume unrelated staged entries. Follow repository signing instructions, confirm ancestry, and verify the post-commit staged state exactly matches the recorded pre-existing staged state.
+8. Re-read the manifest and repeat the per-task cycle for the next available task until every task is `complete`.
 
 The per-task loop is:
 
-`worker -> acceptance review -> remediation worker -> acceptance review -> parent verification -> task completion record -> manifest status -> parent commit -> next task`
-
-Skip the remediation branch when acceptance review passes.
+`worker -> invariant recovery -> acceptance review -> remediation as needed -> authoritative verification -> completion record -> parent commit -> next task`
 
 ## Final integrated code review
 
-13. After all manifest tasks are `complete`, read every linked task file and create a complete cumulative patch artifact outside the repository from the task-set starting boundary. Include every task-set-relevant changed file, including ignored or untracked task artifacts, untracked implementation files, and final-review work. Delegate one cumulative review to a fresh `reviewer`. Supply the exact manifest, all task, source, and patch-artifact paths; task-set starting HEAD; all task commits; complete cumulative changed-file list; completion records; reported verification; pre-existing-change boundaries; and task-artifact tracking mode. Require review of the task-set change range for cross-task correctness, security, maintainability, and integration regressions, followed by `PASS` or `FAIL`.
-14. On `FAIL`, record the final-remediation starting HEAD and pass only blocking findings to a fresh `worker` with `ALLOW_COMMIT: no`. Require focused verification and preserve completed behavior. Apply the repository invariant and scoped single-commit recovery checks from step 6. If a fix changes an accepted task's behavior, rerun steps 6 and 7 for that task, then update its completion evidence after parent verification. After all remediation and evidence updates, regenerate the complete cumulative patch artifact and rerun cumulative code review with a fresh `reviewer`. Allow at most two final remediation-review cycles.
-15. After cumulative review passes, inspect any final remediation diff, run the manifest's final verification gate, and exercise behavior changed during final remediation. Commit verified final-review fixes and tracked evidence updates from the parent in cohesive, path-limited units using the staged-state preservation and comparison rules from step 11. If verification fails, leave final fixes uncommitted and report the failure.
-16. Before finishing or stopping, retroactively sign any unsigned commits created by this run when signing is available. Report completed tasks and commits, pending tasks, blocking failures, verification not completed, unsigned commits, and remaining work.
+1. After all tasks are `complete`, create a complete cumulative patch artifact outside the repository from the task-set starting boundary. Include implementation files, ignored or untracked task artifacts, untracked implementation files, and final-review work. Delegate cumulative review to a fresh `reviewer` using paths for the manifest, source, tasks, patch, evidence, instructions, task commits, boundaries, and tracking mode. Require complete cross-task correctness, security, maintainability, and regression analysis in an external report and a compact `PASS` or `FAIL` response.
+2. Classify cumulative findings with the per-task blocking threshold. On a valid blocker, delegate focused remediation, apply the repository invariant recovery rules, and rerun cumulative review. Rerun delta acceptance review only for accepted criteria whose behavior or evidence could have changed. Continue without a fixed cycle limit while the selected source determines the fix; escalate only under the escalation condition below.
+3. After cumulative review passes, run the manifest's final verification gate and exercise behavior changed during final remediation. Snapshot clean out-of-scope files and task artifacts before any repository-wide mutating command; automatically restore and verify only incidental changes under the repository invariant recovery rules. Route implementation failures back through remediation and review. Commit verified final-review fixes and tracked evidence updates from the parent in cohesive, path-limited units.
+4. Retroactively sign unsigned commits created by this run when signing is available. Report completed tasks and commits, verification performed, recovered subagent violations, warnings, unsigned commits, and remaining work.
 
-The final loop is:
+## Escalation and safety halts
 
-`cumulative code review -> remediation worker -> affected acceptance review when needed -> cumulative code review -> parent final verification -> parent commit -> finish`
+Escalate to the user only when implementation requires an unsettled decision that would materially change specified product behavior, a normative specification, an architecture boundary, a public contract, a migration or persisted-data format, or the security model.
 
-Skip the remediation branch when cumulative review passes.
+Safety-halt without marking current work complete when:
 
-## Stop conditions
+- Pre-existing or concurrent work overlaps the assignment and cannot be separated safely.
+- Repository history, index state, worktree content, or unrelated user changes cannot be restored and verified exactly.
+- Required verification remains unavailable after bounded retries, so completion cannot be established.
+- Manifest state is malformed, contradictory, or deadlocked.
 
-Stop without marking current work `complete` or committing it when:
-
-- Pre-existing or concurrent changes overlap the assignment.
-- A subagent fails or changes repository state outside the recoverable single-commit case.
-- Acceptance or cumulative review does not pass within two remediation cycles.
-- Parent inspection, required verification, or behavioral verification fails.
-- Manifest state, task scope, repository state, or completion evidence is uncertain.
-- No `pending` task has all blockers `complete`.
-
-Do not discard, overwrite, force-add, or include unrelated changes to recover from a stop condition.
+Do not stop merely because a subagent committed, staged, or touched an out-of-scope file when exact recovery is safe; a review or verification failed; remediation exceeded a round count; or a reviewer reported a nit, warning, follow-up, or optional improvement. Never discard uncertain changes, force-add ignored files, or include unrelated work in a commit.
