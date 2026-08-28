@@ -91,6 +91,7 @@ source $HOME/scripts/aliases.sh
 export VISUAL=nvim
 export EDITOR=nvim
 export GPG_TTY="${tty}"
+export SSH_AUTH_SOCK="$HOME/.1password/agent.sock"
 export GEM_HOME="$HOME/.gem"
 
 # Work
