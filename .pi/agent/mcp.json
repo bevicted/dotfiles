@@ -1,0 +1,15 @@
+{
+  "settings": {
+    "disableProxyTool": true,
+    "scriptMode": false
+  },
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--browser", "firefox"],
+      "lifecycle": "eager",
+      "directTools": true,
+      "toolPrefix": "none"
+    }
+  }
+}

@@ -32,12 +32,12 @@ arch-init: self-installers pacman aur tpm go-install zsh link agents gsettings
 # opencode is packaged (pacman extra + homebrew core) so it rides pkgs/common
 # instead; only its herdr integration is wired here.
 #
-# plannotator needs a per-agent plugin on top of its binary. Claude Code's is
-# declared in .claude/settings.json and opencode's in .config/opencode/
-# opencode.jsonc, both tracked here. Pi's cannot be: `pi install` writes to
-# ~/.pi/agent/settings.json, which also holds mutable state (theme,
-# lastChangelogVersion), and only *project* settings auto-install missing
-# packages on startup. Hence the one imperative line; it is idempotent.
+# Agent integrations need per-agent packages on top of their binaries. Claude
+# Code's and opencode's are declared in tracked settings. Pi's cannot be:
+# `pi install` writes to ~/.pi/agent/settings.json, which also holds mutable
+# state (theme, lastChangelogVersion), and only *project* settings auto-install
+# missing packages on startup. Hence the imperative install lines; they are
+# idempotent.
 #
 # Must run AFTER `link`: ~/.claude is a stow symlink into this repo, and both
 # the plannotator installer and `herdr integration install` write there. Run
@@ -54,6 +54,8 @@ agents:
 	npm ci --omit=dev --prefix .pi/agent/extensions/web-fetch
 	pi install npm:@plannotator/pi-extension
 	pi install npm:pi-lens
+	pi install npm:pi-mcp-adapter
+	npx -y @playwright/mcp@latest install-browser firefox
 
 .PHONY: pacman
 pacman:

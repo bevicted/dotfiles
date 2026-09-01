@@ -6,6 +6,7 @@
 ^/\.config/opencode/internal\.jsonc$
 ^/\.pi/agent/models\.json$
 ^/\.pi/agent/extensions/web-fetch/node_modules$
+^/\.playwright-mcp$
 ^/scripts/internal\.sh$
 ^/pi-session-.*\.html$
 LICENSE.md
