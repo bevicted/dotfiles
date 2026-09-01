@@ -19,6 +19,7 @@
 .pi/agent/models.json
 .pi/agent/settings.json
 .pi/agent/auth.json
+.pi/agent/skills/training/
 .pi/agent/extensions/web-fetch/node_modules/
 /.playwright-mcp/
 /pi-session-*.html
