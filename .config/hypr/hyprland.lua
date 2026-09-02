@@ -50,8 +50,9 @@ hl.config({
             inactive_border = "rgba(595959aa)",
         },
         resize_on_border = false,
-        -- Tearing only engages for windows with the `immediate` rule (see window rules).
-        -- Other windows are unaffected. https://wiki.hypr.land/Configuring/Tearing/
+        -- Tearing stays available for future per-game `immediate` rules, but no
+        -- blanket game rule is enabled so fullscreen games use VRR by default.
+        -- https://wiki.hypr.land/Configuring/Tearing/
         allow_tearing = true,
         layout = "dwindle",
     },
@@ -220,12 +221,6 @@ hl.window_rule({
     },
     no_focus = true,
 })
-
--- Allow tearing for games (uncapped fps, lowest input latency).
--- Requires general.allow_tearing=true and cursor.no_hardware_cursors=true.
-for _, class in ipairs({ "^(steam_app_.*)$", "^(gamescope.*)$", "^(cs2)$" }) do
-    hl.window_rule({ match = { class = class }, immediate = true })
-end
 
 -- Floating calculator (ghostty --class=floatcalc -e qalc)
 hl.window_rule({
