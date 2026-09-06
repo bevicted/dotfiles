@@ -233,6 +233,7 @@ hl.window_rule({
 
 -- Autostart: launched on Hyprland start.
 hl.on("hyprland.start", function()
+    hl.exec_cmd("xrandr --output DP-1 --primary") -- default monitor for XWayland games
     hl.exec_cmd(terminal)
     hl.exec_cmd("quickshell")
     hl.exec_cmd("1password --silent")
