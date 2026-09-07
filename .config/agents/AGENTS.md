@@ -35,6 +35,7 @@ Never push. Never ask to push. Pushing is user-only.
 Commits must be signed via 1Password SSH key (`gpg.ssh.program = op-ssh-sign`). If signing fails (missed/timed-out unlock prompt), DO NOT block work.
 
 **Recovery workflow:**
+
 1. Commit unsigned: `git -c commit.gpgsign=false commit ...` (one-off flag; never edit `~/.gitconfig`)
 2. Continue work - chain additional unsigned commits same way
 3. At task end (or when user returns), retroactively sign unsigned range:
