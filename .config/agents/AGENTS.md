@@ -10,6 +10,7 @@
 
 - Treat the user's request as the scope: choose the smallest verified solution, omit unrequested work, ask before any material expansion of scope, and stop once the requested outcome is verified.
 - Material expansion includes new infrastructure, abstractions, dependencies, hardening, or validation unrelated to the changed behavior.
+- When a change is backward-incompatible, ask whether compatibility, migration, or versioning work is required instead of adding it by default.
 - Report optional improvements instead of implementing them.
 
 # Coding
