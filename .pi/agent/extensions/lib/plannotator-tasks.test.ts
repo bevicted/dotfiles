@@ -5,7 +5,10 @@ import { join } from "node:path";
 import test from "node:test";
 
 import plannotatorPlanPath from "../plannotator-plan-path.ts";
-import { buildTasksSkillMessage, TASKS_SKILL_COMMAND } from "./plannotator-tasks.ts";
+import {
+	buildTasksSkillMessage,
+	TASKS_SKILL_COMMAND,
+} from "./plannotator-tasks.ts";
 
 test("uses the renamed tasks command", () => {
 	assert.equal(TASKS_SKILL_COMMAND, "skill:tasks");
@@ -32,7 +35,10 @@ test("expands the tasks skill and approved plan into one user message", () => {
 	assert.match(message, /Do not implement the plan\./);
 	assert.match(message, /Plan: \.agents\/2026-08-12-example\/PLAN\.md/);
 	assert.match(message, /Working directory: \/repo/);
-	assert.match(message, /Approval notes to incorporate:\nKeep the migration reversible\./);
+	assert.match(
+		message,
+		/Approval notes to incorporate:\nKeep the migration reversible\./,
+	);
 });
 
 test("omits the approval-notes section when feedback is blank", () => {
@@ -52,7 +58,10 @@ test("omits the approval-notes section when feedback is blank", () => {
 test("approved plans steer the expanded tasks skill into the active session", () => {
 	const skillDirectory = mkdtempSync(join(tmpdir(), "plannotator-tasks-"));
 	const skillPath = join(skillDirectory, "SKILL.md");
-	writeFileSync(skillPath, "---\nname: tasks\ndescription: test\n---\n# Tasks\n");
+	writeFileSync(
+		skillPath,
+		"---\nname: tasks\ndescription: test\n---\n# Tasks\n",
+	);
 
 	let approvalHandler: ((data: unknown) => void) | undefined;
 	let sent: { content: string; options: unknown } | undefined;
@@ -96,7 +105,10 @@ test("approved plans steer the expanded tasks skill into the active session", ()
 test("automatic approval overrides are stopped before tasks are queued", async () => {
 	const skillDirectory = mkdtempSync(join(tmpdir(), "plannotator-tasks-"));
 	const skillPath = join(skillDirectory, "SKILL.md");
-	writeFileSync(skillPath, "---\nname: tasks\ndescription: test\n---\n# Tasks\n");
+	writeFileSync(
+		skillPath,
+		"---\nname: tasks\ndescription: test\n---\n# Tasks\n",
+	);
 
 	let toolResultHandler: ((event: any, ctx: any) => Promise<any>) | undefined;
 	let sent: { content: string; options: unknown } | undefined;
@@ -171,7 +183,13 @@ test("plan command selects Astra, enters Plannotator, and starts the grill skill
 		},
 		on() {},
 		getCommands() {
-			return [{ name: "skill:grill", source: "skill", sourceInfo: { path: "/skills/grill/SKILL.md" } }];
+			return [
+				{
+					name: "skill:grill",
+					source: "skill",
+					sourceInfo: { path: "/skills/grill/SKILL.md" },
+				},
+			];
 		},
 		async setModel(model: { id: string }) {
 			selectedModels.push(model.id);
@@ -209,7 +227,10 @@ test("plan command selects Astra, enters Plannotator, and starts the grill skill
 test("switches to Sol after approved-plan task creation settles", async () => {
 	const skillDirectory = mkdtempSync(join(tmpdir(), "plannotator-tasks-"));
 	const skillPath = join(skillDirectory, "SKILL.md");
-	writeFileSync(skillPath, "---\nname: tasks\ndescription: test\n---\n# Tasks\n");
+	writeFileSync(
+		skillPath,
+		"---\nname: tasks\ndescription: test\n---\n# Tasks\n",
+	);
 
 	let approvalHandler: ((data: unknown) => void) | undefined;
 	let settledHandler: ((event: unknown, ctx: any) => Promise<void>) | undefined;
@@ -225,7 +246,9 @@ test("switches to Sol after approved-plan task creation settles", async () => {
 			if (name === "agent_settled") settledHandler = handler;
 		},
 		getCommands() {
-			return [{ name: "skill:tasks", source: "skill", sourceInfo: { path: skillPath } }];
+			return [
+				{ name: "skill:tasks", source: "skill", sourceInfo: { path: skillPath } },
+			];
 		},
 		sendUserMessage() {},
 		async setModel(model: { id: string }) {
@@ -241,14 +264,19 @@ test("switches to Sol after approved-plan task creation settles", async () => {
 	assert.ok(approvalHandler);
 	assert.ok(settledHandler);
 	approvalHandler({ cwd: "/repo", planFilePath: ".agents/example/PLAN.md" });
-	await settledHandler({}, {
-		modelRegistry: {
-			find(provider: string, id: string) {
-				return provider === "openai-codex" && id === "gpt-5.6-sol" ? { provider, id } : undefined;
+	await settledHandler(
+		{},
+		{
+			modelRegistry: {
+				find(provider: string, id: string) {
+					return provider === "openai-codex" && id === "gpt-5.6-sol"
+						? { provider, id }
+						: undefined;
+				},
 			},
+			ui: { notify() {} },
 		},
-		ui: { notify() {} },
-	});
+	);
 
 	assert.deepEqual(selectedModels, ["gpt-5.6-sol"]);
 });

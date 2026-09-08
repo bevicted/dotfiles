@@ -1,6 +1,13 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { buildTasksSkillMessage, TASKS_SKILL_COMMAND, type ApprovedPlan } from "./lib/plannotator-tasks.ts";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
+import {
+	buildTasksSkillMessage,
+	TASKS_SKILL_COMMAND,
+	type ApprovedPlan,
+} from "./lib/plannotator-tasks.ts";
 
 const PLAN_SUBMIT_TOOL = "plannotator_submit_plan";
 const PLAN_APPROVED_CHANNEL = "plannotator:plan-approved";
@@ -8,7 +15,10 @@ const PLANNOTATOR_REQUEST_CHANNEL = "plannotator:request";
 const GUIDANCE_TYPE = "plannotator-plan-path-guidance";
 const GRILL_SKILL_COMMAND = "skill:grill";
 const PLAN_MODEL = { provider: "openai-codex", id: "gpt-6-astra" } as const;
-const POST_TASKS_MODEL = { provider: "openai-codex", id: "gpt-5.6-sol" } as const;
+const POST_TASKS_MODEL = {
+	provider: "openai-codex",
+	id: "gpt-5.6-sol",
+} as const;
 const PLAN_MODE_TIMEOUT_MS = 5_000;
 const GUIDANCE = `[PLANNOTATOR - PLAN PATH GUIDANCE]
 Create this task's plan at \`.agents/<YYYY-MM-DD>-<short-kebab-slug>/PLAN.md\`. Choose a stable, task-specific ID for the first draft. Reuse that exact path for every revision of the same plan and when resubmitting it with plannotator_submit_plan. Approval hands the plan to the tasks skill; do not implement it in this session.`;
@@ -21,17 +31,26 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 	let guidanceInjected = false;
 	let switchModelAfterTasks = false;
 
-	function requestPlanMode(mode: "enter" | "exit" | "status"): Promise<"idle" | "planning" | "executing"> {
+	function requestPlanMode(
+		mode: "enter" | "exit" | "status",
+	): Promise<"idle" | "planning" | "executing"> {
 		return new Promise((resolve, reject) => {
 			const timeout = setTimeout(
-				() => reject(new Error(`Timed out while asking Plannotator to ${mode} plan mode.`)),
+				() =>
+					reject(
+						new Error(`Timed out while asking Plannotator to ${mode} plan mode.`),
+					),
 				PLAN_MODE_TIMEOUT_MS,
 			);
 			pi.events.emit(PLANNOTATOR_REQUEST_CHANNEL, {
 				requestId: `plan-workflow-${mode}-${Date.now()}`,
 				action: "plan-mode",
 				payload: { mode },
-				respond(response: { status: string; result?: { phase?: unknown }; error?: string }): void {
+				respond(response: {
+					status: string;
+					result?: { phase?: unknown };
+					error?: string;
+				}): void {
 					clearTimeout(timeout);
 					const phase = response.result?.phase;
 					if (
@@ -41,7 +60,11 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 						resolve(phase);
 						return;
 					}
-					reject(new Error(response.error ?? "Plannotator plan-mode control is unavailable."));
+					reject(
+						new Error(
+							response.error ?? "Plannotator plan-mode control is unavailable.",
+						),
+					);
 				},
 			});
 		});
@@ -57,7 +80,10 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 			return false;
 		}
 		if (!(await pi.setModel(model))) {
-			ctx.ui.notify(`No API key is available for ${ref.provider}/${ref.id}.`, "error");
+			ctx.ui.notify(
+				`No API key is available for ${ref.provider}/${ref.id}.`,
+				"error",
+			);
 			return false;
 		}
 		return true;
@@ -66,7 +92,10 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 	function dispatchTasks(event: ApprovedPlan): void {
 		const tasksSkill = pi
 			.getCommands()
-			.find((command) => command.source === "skill" && command.name === TASKS_SKILL_COMMAND);
+			.find(
+				(command) =>
+					command.source === "skill" && command.name === TASKS_SKILL_COMMAND,
+			);
 		if (!tasksSkill) throw new Error("Could not find the /skill:tasks skill.");
 
 		const message = buildTasksSkillMessage(tasksSkill.sourceInfo.path, event);
@@ -97,7 +126,10 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 		return false;
 	}
 
-	async function startPlanning(args: string, ctx: ExtensionContext): Promise<void> {
+	async function startPlanning(
+		args: string,
+		ctx: ExtensionContext,
+	): Promise<void> {
 		const previousModel = ctx.model;
 		if (!(await selectModel(PLAN_MODEL, ctx))) return;
 
@@ -105,7 +137,9 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 		try {
 			const phase = await requestPlanMode("enter");
 			if (phase !== "planning") {
-				throw new Error(`Plannotator is in ${phase} mode instead of planning mode.`);
+				throw new Error(
+					`Plannotator is in ${phase} mode instead of planning mode.`,
+				);
 			}
 			planningEntered = true;
 			const topic = args.trim();
@@ -136,13 +170,19 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 				return;
 			}
 			if (!ctx.isIdle()) {
-				ctx.ui.notify("Wait for the current agent run before starting /plan.", "warning");
+				ctx.ui.notify(
+					"Wait for the current agent run before starting /plan.",
+					"warning",
+				);
 				return;
 			}
 
 			const grillSkill = pi
 				.getCommands()
-				.find((command) => command.source === "skill" && command.name === GRILL_SKILL_COMMAND);
+				.find(
+					(command) =>
+						command.source === "skill" && command.name === GRILL_SKILL_COMMAND,
+				);
 			if (!grillSkill) {
 				ctx.ui.notify("Could not find the /skill:grill skill.", "error");
 				return;
@@ -154,8 +194,14 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 
 	pi.events.on(PLAN_APPROVED_CHANNEL, (data) => {
 		const event = data as Partial<ApprovedPlan> | null;
-		if (!event || typeof event.cwd !== "string" || typeof event.planFilePath !== "string") {
-			console.error("Plannotator tasks handoff received an invalid approved-plan event.");
+		if (
+			!event ||
+			typeof event.cwd !== "string" ||
+			typeof event.planFilePath !== "string"
+		) {
+			console.error(
+				"Plannotator tasks handoff received an invalid approved-plan event.",
+			);
 			return;
 		}
 
@@ -177,7 +223,9 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 	// its execution instruction before the agent can continue.
 	pi.on("tool_result", async (event, ctx) => {
 		if (event.toolName !== PLAN_SUBMIT_TOOL) return;
-		const details = event.details as { approved?: boolean; handedOff?: boolean; feedback?: unknown } | undefined;
+		const details = event.details as
+			| { approved?: boolean; handedOff?: boolean; feedback?: unknown }
+			| undefined;
 		if (details?.approved !== true || details.handedOff === true) return;
 
 		const filePath = (event.input as { filePath?: unknown }).filePath;
@@ -188,13 +236,16 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 			dispatchTasks({
 				cwd: ctx.cwd,
 				planFilePath: filePath,
-				...(typeof details.feedback === "string" ? { feedback: details.feedback } : {}),
+				...(typeof details.feedback === "string"
+					? { feedback: details.feedback }
+					: {}),
 			});
 			return {
 				content: [
 					{
 						type: "text" as const,
-						text: "Plan approved. Current-session implementation was stopped and implementation task creation was queued.",
+						text:
+							"Plan approved. Current-session implementation was stopped and implementation task creation was queued.",
 					},
 				],
 				details: { ...details, tasksQueued: true },
@@ -202,7 +253,12 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			return {
-				content: [{ type: "text" as const, text: `Plan approved, but the tasks handoff failed: ${message}` }],
+				content: [
+					{
+						type: "text" as const,
+						text: `Plan approved, but the tasks handoff failed: ${message}`,
+					},
+				],
 				isError: true,
 			};
 		}
@@ -212,7 +268,10 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 		if (!switchModelAfterTasks) return;
 		switchModelAfterTasks = false;
 		if (await selectModel(POST_TASKS_MODEL, ctx)) {
-			ctx.ui.notify("Implementation tasks created. Switched to GPT-5.6 Sol.", "info");
+			ctx.ui.notify(
+				"Implementation tasks created. Switched to GPT-5.6 Sol.",
+				"info",
+			);
 		}
 	});
 
