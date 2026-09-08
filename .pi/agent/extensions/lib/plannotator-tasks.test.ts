@@ -63,6 +63,7 @@ test("approved plans steer the expanded tasks skill into the active session", ()
 				approvalHandler = handler;
 			},
 		},
+		registerCommand() {},
 		on() {},
 		getCommands() {
 			return [
@@ -108,6 +109,7 @@ test("automatic approval overrides are stopped before tasks are queued", async (
 				request.respond({ status: "handled", result: { phase: "idle" } });
 			},
 		},
+		registerCommand() {},
 		on(name: string, handler: (event: any, ctx: any) => Promise<any>) {
 			if (name === "tool_result") toolResultHandler = handler;
 		},
@@ -142,4 +144,111 @@ test("automatic approval overrides are stopped before tasks are queued", async (
 	assert.deepEqual(sent?.options, { deliverAs: "steer" });
 	assert.match(sent?.content ?? "", /Plan: \.agents\/override\/PLAN\.md/);
 	assert.match(sent?.content ?? "", /One task only\./);
+});
+
+test("plan command selects Astra, enters Plannotator, and starts the grill skill", async () => {
+	const astra = { provider: "openai-codex", id: "gpt-6-astra" };
+	const sol = { provider: "openai-codex", id: "gpt-5.6-sol" };
+	let planHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
+	let sent: { content: string; options: unknown } | undefined;
+	const selectedModels: string[] = [];
+
+	const pi = {
+		events: {
+			on() {},
+			emit(channel: string, request: any) {
+				assert.equal(channel, "plannotator:request");
+				const mode = request.payload.mode;
+				assert.ok(mode === "status" || mode === "enter");
+				request.respond({
+					status: "handled",
+					result: { phase: mode === "status" ? "idle" : "planning" },
+				});
+			},
+		},
+		registerCommand(name: string, options: any) {
+			if (name === "plan") planHandler = options.handler;
+		},
+		on() {},
+		getCommands() {
+			return [{ name: "skill:grill", source: "skill", sourceInfo: { path: "/skills/grill/SKILL.md" } }];
+		},
+		async setModel(model: { id: string }) {
+			selectedModels.push(model.id);
+			return true;
+		},
+		sendUserMessage(content: string, options: unknown) {
+			sent = { content, options };
+		},
+		getActiveTools() {
+			return [];
+		},
+	};
+
+	plannotatorPlanPath(pi as never);
+	assert.ok(planHandler);
+	await planHandler("replace the auth flow", {
+		mode: "tui",
+		isIdle: () => true,
+		model: sol,
+		modelRegistry: {
+			find(provider: string, id: string) {
+				return provider === astra.provider && id === astra.id ? astra : undefined;
+			},
+		},
+		ui: { notify() {} },
+	});
+
+	assert.deepEqual(selectedModels, ["gpt-6-astra"]);
+	assert.deepEqual(sent, {
+		content: "/skill:grill replace the auth flow",
+		options: { expandPromptTemplates: true },
+	});
+});
+
+test("switches to Sol after approved-plan task creation settles", async () => {
+	const skillDirectory = mkdtempSync(join(tmpdir(), "plannotator-tasks-"));
+	const skillPath = join(skillDirectory, "SKILL.md");
+	writeFileSync(skillPath, "---\nname: tasks\ndescription: test\n---\n# Tasks\n");
+
+	let approvalHandler: ((data: unknown) => void) | undefined;
+	let settledHandler: ((event: unknown, ctx: any) => Promise<void>) | undefined;
+	const selectedModels: string[] = [];
+	const pi = {
+		events: {
+			on(_channel: string, handler: (data: unknown) => void) {
+				approvalHandler = handler;
+			},
+		},
+		registerCommand() {},
+		on(name: string, handler: any) {
+			if (name === "agent_settled") settledHandler = handler;
+		},
+		getCommands() {
+			return [{ name: "skill:tasks", source: "skill", sourceInfo: { path: skillPath } }];
+		},
+		sendUserMessage() {},
+		async setModel(model: { id: string }) {
+			selectedModels.push(model.id);
+			return true;
+		},
+		getActiveTools() {
+			return [];
+		},
+	};
+
+	plannotatorPlanPath(pi as never);
+	assert.ok(approvalHandler);
+	assert.ok(settledHandler);
+	approvalHandler({ cwd: "/repo", planFilePath: ".agents/example/PLAN.md" });
+	await settledHandler({}, {
+		modelRegistry: {
+			find(provider: string, id: string) {
+				return provider === "openai-codex" && id === "gpt-5.6-sol" ? { provider, id } : undefined;
+			},
+		},
+		ui: { notify() {} },
+	});
+
+	assert.deepEqual(selectedModels, ["gpt-5.6-sol"]);
 });
