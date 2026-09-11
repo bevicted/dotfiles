@@ -54,7 +54,7 @@ agents:
 	npm ci --omit=dev --prefix .pi/agent/extensions/web-fetch
 	pi install npm:@plannotator/pi-extension
 	pi install npm:pi-lens
-	pi install npm:pi-mcp-adapter
+	npm_config_allow_remote=all pi install npm:pi-mcp-adapter
 	npx -y @playwright/mcp@latest install-browser firefox
 
 .PHONY: pacman
