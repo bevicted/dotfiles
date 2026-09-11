@@ -5,7 +5,6 @@ git
 ladspa
 linux-lts
 man
-maven
 openssh
 swh-plugins
 terraform
