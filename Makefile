@@ -1,8 +1,9 @@
-SHELL = /usr/bin/env bash
+SHELL=/usr/bin/env bash
 
 ARKEN_TMP_REPO_PATH := /tmp/arkenfox
 ARKEN_USER_PATH := $(HOME)/.mozilla/firefox/user.arkenfox
 LOCAL_BIN_PATH := $(HOME)/.local/bin
+PI_SETTINGS_PATH := $(HOME)/.pi/agent/settings.json
 
 COMMON_PKGS := $(shell cat pkgs/common)
 ARCH_PKGS   := $(COMMON_PKGS) $(shell cat pkgs/pacman)
@@ -37,7 +38,8 @@ arch-init: self-installers pacman aur tpm go-install zsh link agents gsettings
 # `pi install` writes to ~/.pi/agent/settings.json, which also holds mutable
 # state (theme, lastChangelogVersion), and only *project* settings auto-install
 # missing packages on startup. Hence the imperative install lines; they are
-# idempotent.
+# idempotent. Plannotator also installs its shared skills under ~/.agents, so
+# suppress the package's duplicate skill while retaining its Pi extension.
 #
 # Must run AFTER `link`: ~/.claude is a stow symlink into this repo, and both
 # the plannotator installer and `herdr integration install` write there. Run
@@ -53,6 +55,8 @@ agents:
 	herdr integration install opencode
 	npm ci --omit=dev --prefix .pi/agent/extensions/web-fetch
 	pi install npm:@plannotator/pi-extension
+	jq '(.packages //= []) | .packages |= map(if . == "npm:@plannotator/pi-extension" then {source: ., skills: []} elif type == "object" and .source == "npm:@plannotator/pi-extension" then .skills = [] else . end)' $(PI_SETTINGS_PATH) > $(PI_SETTINGS_PATH).tmp
+	mv $(PI_SETTINGS_PATH).tmp $(PI_SETTINGS_PATH)
 	pi install npm:pi-lens
 	pi install npm:pi-mcp-adapter
 	npx -y @playwright/mcp@latest install-browser firefox
@@ -118,7 +122,7 @@ tpm:
 
 .PHONY: go-install
 go-install:
-	for pkg in $(GO_PKGS); do go install "$$pkg" || exit 1; done
+	for _pkg in $(GO_PKGS); do go install "$$_pkg" || exit 1; done
 
 .PHONY: link
 link:
