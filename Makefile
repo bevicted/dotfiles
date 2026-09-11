@@ -52,8 +52,8 @@ agents:
 	herdr integration install pi
 	herdr integration install opencode
 	npm ci --omit=dev --prefix .pi/agent/extensions/web-fetch
-	pi install npm:@plannotator/pi-extension
-	pi install npm:pi-lens
+	npm_config_allow_remote=all pi install npm:@plannotator/pi-extension
+	npm_config_allow_remote=all pi install npm:pi-lens
 	npm_config_allow_remote=all pi install npm:pi-mcp-adapter
 	npx -y @playwright/mcp@latest install-browser firefox
 
