@@ -83,6 +83,26 @@ return {
         golangci_lint_ls = {},
         bashls = {}, -- requires nodejs
         yamlls = {}, -- requires nodejs
+        jdtls = {
+          cmd = {
+            'jdtls',
+            '--java-executable',
+            '/usr/lib/jvm/java-26-openjdk/bin/java',
+          },
+          settings = {
+            java = {
+              configuration = {
+                runtimes = {
+                  {
+                    name = 'JavaSE-1.8',
+                    path = '/usr/lib/jvm/java-8-openjdk',
+                    default = true,
+                  },
+                },
+              },
+            },
+          },
+        },
         lua_ls = {
           settings = {
             Lua = {
@@ -103,15 +123,12 @@ return {
       })
       require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
-      require('mason-lspconfig').setup {
-        handlers = {
-          function(server_name)
-            local server = servers[server_name] or {}
-            server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
-            require('lspconfig')[server_name].setup(server)
-          end,
-        },
-      }
+      for server_name, server in pairs(servers) do
+        server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+        vim.lsp.config(server_name, server)
+      end
+
+      require('mason-lspconfig').setup()
     end,
   },
 }
