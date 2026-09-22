@@ -27,6 +27,7 @@ Create a task-set manifest and linked task specifications for the task passed to
 5. Write `TASKS.md` as the coordination manifest. It owns shared context, task IDs and paths, persisted status, dependencies, and the final task-set gate. Do not put task-specific criteria or completion notes in the manifest.
 6. Write each linked task file as that task's implementation contract. It owns the delivered outcome, task-specific context and boundaries, numbered acceptance criteria, focused verification, and parent-written completion record. Do not duplicate status or dependencies from the manifest.
 7. Audit the complete result: every selected-source requirement belongs to at least one task, every task link resolves, IDs and blockers match the manifest, every task has one cohesive independently verifiable outcome, acceptance and verification are observable, shared constraints have one owner, and no task contains separable outcomes that can each leave the repository valid.
+8. In the final response, report the manifest's full absolute path, followed by a concise list of created or updated tasks. Resolve the path from the repository root; do not abbreviate it or report only `TASKS.md` or a relative path.
 
 ## Canonical ownership
 
