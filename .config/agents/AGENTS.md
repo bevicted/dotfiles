@@ -22,7 +22,7 @@
 
 Commit proactively in cohesive, self-contained units. One logical change per commit. Never batch unrelated changes. User can override batching or say "don't commit".
 
-Only commit verified changes. Leave unverified work uncommitted and report what needs checking. "Verified" = exercised actual behavior, not just passing tests.
+Only commit changes verified by exercising the affected behavior; a test counts if it demonstrates that behavior. For bugs: reproduce -> fix -> verify the reproducer passes. Reuse valid verification evidence, including from subagents; rerun only affected or missing checks. Leave unverified changes uncommitted and report what remains unchecked.
 
 Stage files without bypassing Git's ignore rules. Never use `git add -f` or `git add --force` unless the user explicitly asks to track the exact ignored path. If a path does not stage, inspect it with `git check-ignore -v -- <path>`; leave ignored paths untracked and report them.
 
