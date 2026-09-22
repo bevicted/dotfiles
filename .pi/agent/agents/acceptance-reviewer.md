@@ -20,29 +20,11 @@ Do not modify files or run commands. Read the exact task, source, and complete p
 
 ## Output
 
-### Files Reviewed
+Return a concise review in any clear format. It must state:
 
-- `path/to/file.ts` (lines X-Y)
+- A `PASS` or `FAIL` verdict.
+- Which changed files and acceptance criteria were reviewed.
+- Evidence-backed blockers, each citing the violated criterion or requirement, evidence, and path.
+- Non-blocking warnings, or that none remain.
 
-### Acceptance Criteria
-
-1. `SATISFIED`, `NOT SATISFIED`, or `INSUFFICIENT EVIDENCE` - evidence and relevant paths
-
-### Blocking Findings
-
-- `path/to/file.ts:42` - criterion and issue, or `None`
-
-### Follow-ups
-
-- Non-blocking pre-existing or out-of-scope concern, or `None`
-
-### Evidence
-
-- Source evidence inspected
-- Reported execution evidence
-
-### Final
-
-`PASS` or `FAIL`
-
-`PASS` requires every acceptance criterion to be `SATISFIED` and no blocking finding. Be specific with file paths and line numbers.
+`PASS` requires every acceptance criterion to be satisfied and no blocking finding. Do not repeat per-criterion prose when a compact accounting is sufficient.
