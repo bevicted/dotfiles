@@ -5,3 +5,6 @@
 /.agents/
 
 **/.claude/settings.local.json
+
+.DS_Store
+.playwright-mcp/
