@@ -100,6 +100,7 @@ hl.config({
         sensitivity = 0, -- -1.0 - 1.0, 0 means no modification.
         touchpad = {
             natural_scroll = false,
+            scroll_factor = 0.4,
         },
     },
     xwayland = {

@@ -56,6 +56,10 @@ PanelWindow {
                 Layout.alignment: Qt.AlignVCenter
             }
 
+            Battery {
+                Layout.alignment: Qt.AlignVCenter
+            }
+
             Clock {
                 Layout.alignment: Qt.AlignVCenter
             }
