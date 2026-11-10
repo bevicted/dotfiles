@@ -1,5 +1,6 @@
 {
   "compress": {
+    "maxContextLimit": "45%",
     "nudgeGrowthTokens": 20000
   }
 }
