@@ -346,7 +346,7 @@ export function resolveWorkingDirectory(parentCwd: string, requestedCwd?: string
 }
 
 export function selectChildTools(requestedTools: string[] | undefined, parentActiveTools: readonly string[]): string[] {
-	const isDelegationTool = (tool: string) => tool === "subagent" || tool === "research" || tool === "oracle";
+	const isDelegationTool = (tool: string) => tool === "subagent" || tool === "research";
 	const parentTools = new Set(parentActiveTools.filter((tool) => !isDelegationTool(tool)));
 	const candidates = requestedTools ?? parentActiveTools;
 	return [...new Set(candidates.filter((tool) => !isDelegationTool(tool) && parentTools.has(tool)))];

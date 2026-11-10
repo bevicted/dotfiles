@@ -21,7 +21,7 @@ The retained v6 and v7 attempts separate the remaining defects:
 
 Treat `.agents/2026-08-13-research-context-isolation/audit/v3/` through `audit/v7/` and every committed evaluation design/result as immutable historical evidence. Do not edit, overwrite, delete, or retry a retained attempt. New evaluation work must use a new versioned audit directory.
 
-Use `openai-codex/gpt-5.6-sol:high` as the correctness baseline. Keep direct `websearch` and `webfetch` limited to one narrow lookup or one known URL. Do not add Oracle behavior, mutation tools, shell access to the researcher, nested delegation, or default report artifacts.
+Use `openai-codex/gpt-5.6-sol:high` as the correctness baseline. Keep direct `websearch` and `webfetch` limited to one narrow lookup or one known URL. Do not add mutation tools, shell access to the researcher, nested delegation, or default report artifacts.
 
 Relevant starting points:
 
@@ -363,7 +363,7 @@ This roadmap is closed. Do not start an unchecked task or change its heading; re
 - [ ] Final guidance states when to use direct `websearch` or `webfetch`, when to use Research, why delegated investigation must not be duplicated, the measured isolation benefit, and the remaining isolation premium.
 - [ ] Details/UI and audit documentation state the effective model/reasoning, parent/child/total usage, cache, masking, budgets, provenance, lineage, continuation, and retention behavior without exposing private evidence.
 - [ ] Normal Pi export/deletion, process restart, fresh/resumed local and web Research, concurrent retrieval, cancellation, compaction, budget exhaustion, citation validation, and interactive rendering all work on the accepted configuration.
-- [ ] The >100 KiB provider-boundary and downstream-quality gates pass on the final configuration; no Oracle behavior, mutation capability, shell, nested delegation, or default report artifact was introduced.
+- [ ] The >100 KiB provider-boundary and downstream-quality gates pass on the final configuration; no mutation capability, shell, nested delegation, or default report artifact was introduced.
 - [ ] Every tracked design/result/task link resolves, historical v3-v7 attempts remain unchanged, ignored raw artifacts are retained, every remediation-task commit is signed or recovered through the documented signing workflow, and the repository is clean except for documented ignored audits. Historical commits are not rewritten.
 
 **Verification:**

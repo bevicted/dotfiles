@@ -93,8 +93,8 @@ test("resolves relative cwd and rejects missing or non-directory paths", async (
 });
 
 test("intersects requested tools with parent tools and removes every delegation tool", () => {
-	assert.deepEqual(selectChildTools(["read", "bash", "subagent", "research", "oracle", "grep", "read"], ["read", "grep", "subagent", "research", "oracle"]), ["read", "grep"]);
-	assert.deepEqual(selectChildTools(undefined, ["read", "subagent", "research", "oracle", "edit", "read"]), ["read", "edit"]);
+	assert.deepEqual(selectChildTools(["read", "bash", "subagent", "research", "grep", "read"], ["read", "grep", "subagent", "research"]), ["read", "grep"]);
+	assert.deepEqual(selectChildTools(undefined, ["read", "subagent", "research", "edit", "read"]), ["read", "edit"]);
 });
 
 type TestRenderNode = { kind: "text"; text: string } | { kind: "spacer" } | { kind: "markdown"; text: string } | { kind: "container"; children: TestRenderNode[] };
@@ -107,7 +107,7 @@ function singleRenderFixture(overrides: Record<string, unknown> = {}) { return {
 
 test("one renderer handles generic and dedicated Research partial, final, and failure states without mutating details", () => {
 	assert.deepEqual(renderDedicatedSingleCall("research", "x".repeat(61), testTheme, testRenderAdapter), { kind: "text", text: `research\n  ${"x".repeat(60)}...` });
-	assert.deepEqual(renderGenericSingleCall("oracle", "user", "x", testTheme, testRenderAdapter), { kind: "text", text: "subagent oracle [user]\n  x" });
+	assert.deepEqual(renderGenericSingleCall("scout", "user", "x", testTheme, testRenderAdapter), { kind: "text", text: "subagent scout [user]\n  x" });
 	const partial = singleRenderFixture({ agent: "researcher", agentSource: "user", status: "running", messages: [] }); const before = structuredClone(partial); deepFreeze(partial);
 	assert.match(renderText(renderSingleResult(partial, { expanded: false, isPartial: true, failed: false, descriptor: { label: "research", showSource: false } }, testTheme, testRenderAdapter)), /\.\.\. research/); assert.deepEqual(partial, before);
 	const final = singleRenderFixture({ agent: "researcher", agentSource: "user" });
@@ -119,7 +119,7 @@ test("one renderer handles generic and dedicated Research partial, final, and fa
 
 test("failure middleware marks only Research and generic single failures as tool errors", () => {
 	let handler: ((event: ToolResultEvent) => { isError: true } | undefined) | undefined; registerToolResultMiddleware({ on: (_event, registered) => (handler = registered) }); assert.ok(handler);
-	assert.deepEqual(handler({ toolName: "research", details: { failed: true } }), { isError: true }); assert.deepEqual(handler({ toolName: "subagent", details: { mode: "single", failed: true } }), { isError: true }); assert.equal(handler({ toolName: "subagent", details: { mode: "parallel", failed: true } }), undefined); assert.equal(isFailedToolResult("oracle", { failed: true }), false);
+	assert.deepEqual(handler({ toolName: "research", details: { failed: true } }), { isError: true }); assert.deepEqual(handler({ toolName: "subagent", details: { mode: "single", failed: true } }), { isError: true }); assert.equal(handler({ toolName: "subagent", details: { mode: "parallel", failed: true } }), undefined); assert.equal(isFailedToolResult("read", { failed: true }), false);
 });
 
 test("validates exactly one bounded dispatch mode", () => {
@@ -173,6 +173,10 @@ test("registered generic subagent executes single, parallel, and chain modes", a
 			assert.equal(single.content[0].text, "child:single");
 			assert.equal(single.details.mode, "single");
 			assert.equal(single.details.results[0].status, "completed");
+
+			const missing = await execute({ agent: "missing", task: "inspect", agentScope: "project", confirmProjectAgents: false });
+			assert.equal(missing.details.failed, true);
+			assert.match(missing.content[0].text, /Unknown agent: "missing"\. Available agents: "test-worker"\./);
 
 			const parallel = await execute({ tasks: [{ agent: "test-worker", task: "first" }, { agent: "test-worker", task: "second" }], agentScope: "project", confirmProjectAgents: false });
 			assert.match(parallel.content[0].text, /Parallel: 2\/2 succeeded/);

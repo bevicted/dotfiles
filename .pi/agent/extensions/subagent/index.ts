@@ -319,7 +319,6 @@ async function runSingleAgent(
 	if (!agent) {
 		const available =
 			agents
-				.filter((candidate) => candidate.name !== "oracle")
 				.map((candidate) => `"${candidate.name}"`)
 				.join(", ") || "none";
 		return makeFailure(

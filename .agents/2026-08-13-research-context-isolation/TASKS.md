@@ -28,7 +28,6 @@ Approved decisions and constraints:
 - Mechanically validate the required final sections and web citations against successful `webfetch` evidence, including evidence retained from earlier calls in a resumed Research session.
 - Direct `websearch` and `webfetch` remain for one narrow bounded lookup or one known URL. Multi-query, multi-source, adaptive, conflicting, or source-sensitive work stays isolated. Parent guidance must prohibit duplicating delegated research.
 - Keep `openai-codex/gpt-5.6-sol:high` as the correctness baseline. Change the standard model or reasoning only after non-inferior answer and citation quality is measured.
-- Do not invoke Oracle or restore any dedicated Oracle behavior. Keep `.pi/agent/agents/oracle.md` unchanged.
 
 Relevant starting points:
 
@@ -214,13 +213,13 @@ This roadmap is closed. Do not start an unchecked task or change its heading; re
 - [ ] Validation and Research-ID metadata fit inside the existing 8 KiB/400-line cap, preserve an Answer-first head, and keep complete untruncated model output and evidence diagnostics in details.
 - [ ] `researcher.md` remains the single workflow source, adds only continuation/parallel-independent-retrieval guidance needed by the runtime, and still uses exactly the pinned model and six read-only tools.
 - [ ] Research tool metadata reserves direct web tools for one known URL or one narrow bounded lookup, routes iterative/multi-source/conflicting/source-sensitive work to Research, and tells the parent not to duplicate delegated investigation.
-- [ ] No dedicated Oracle behavior, research skill, mutation capability, shell, nested delegation, or default persistent report artifact is introduced.
+- [ ] No research skill, mutation capability, shell, nested delegation, or default persistent report artifact is introduced.
 
 **Verification:**
 
 - Exercise valid current-turn citations, prior-resumed citations, redirects/final URLs, search excerpts, inaccessible sources, failed fetches, missing sections, malformed Markdown URLs, and unsupported material claims.
 - Run a real required-web Research call and independently compare every cited URL with recorded successful fetch evidence.
-- Inspect registered tool metadata/system prompt and confirm narrow direct routing, no duplicated parent work, and no Oracle advertisement.
+- Inspect registered tool metadata/system prompt and confirm narrow direct routing and no duplicated parent work.
 - Run focused Research/subagent tests, both web suites, offline loading, interactive rendering/failure checks, and repository mutation checks.
 
 **Completion notes:**
