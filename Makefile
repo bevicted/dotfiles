@@ -58,7 +58,6 @@ agents:
 	jq '(.packages //= []) | .packages |= map(if . == "npm:@plannotator/pi-extension" then {source: ., skills: []} elif type == "object" and .source == "npm:@plannotator/pi-extension" then .skills = [] else . end)' $(PI_SETTINGS_PATH) > $(PI_SETTINGS_PATH).tmp
 	mv $(PI_SETTINGS_PATH).tmp $(PI_SETTINGS_PATH)
 	pi install npm:pi-lens
-	pi install npm:pi-mcp-adapter
 	npx -y @playwright/mcp@latest install-browser firefox
 
 .PHONY: pacman
