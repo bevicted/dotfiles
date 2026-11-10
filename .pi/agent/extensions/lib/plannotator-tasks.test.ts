@@ -160,7 +160,7 @@ test("automatic approval overrides are stopped before tasks are queued", async (
 
 test("plan command selects Astra, enters Plannotator, and starts the grill skill", async () => {
 	const astra = { provider: "openai-codex", id: "gpt-6-astra" };
-	const sol = { provider: "openai-codex", id: "gpt-5.6-sol" };
+	const sol = { provider: "openai-codex", id: "gpt-6.1-sol" };
 	let planHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
 	let sent: { content: string; options: unknown } | undefined;
 	const selectedModels: string[] = [];
@@ -224,7 +224,7 @@ test("plan command selects Astra, enters Plannotator, and starts the grill skill
 	});
 });
 
-test("switches to Sol after approved-plan task creation settles", async () => {
+test("switches to GPT-6.1 Sol after approved-plan task creation settles", async () => {
 	const skillDirectory = mkdtempSync(join(tmpdir(), "plannotator-tasks-"));
 	const skillPath = join(skillDirectory, "SKILL.md");
 	writeFileSync(
@@ -269,7 +269,7 @@ test("switches to Sol after approved-plan task creation settles", async () => {
 		{
 			modelRegistry: {
 				find(provider: string, id: string) {
-					return provider === "openai-codex" && id === "gpt-5.6-sol"
+					return provider === "openai-codex" && id === "gpt-6.1-sol"
 						? { provider, id }
 						: undefined;
 				},
@@ -278,5 +278,5 @@ test("switches to Sol after approved-plan task creation settles", async () => {
 		},
 	);
 
-	assert.deepEqual(selectedModels, ["gpt-5.6-sol"]);
+	assert.deepEqual(selectedModels, ["gpt-6.1-sol"]);
 });

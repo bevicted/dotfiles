@@ -2,7 +2,7 @@
 name: researcher
 description: Isolated read-only researcher for iterative local and source-sensitive web synthesis
 tools: read, grep, find, ls, websearch, webfetch
-model: openai-codex/gpt-5.6-sol:high
+model: openai-codex/gpt-6.1-sol:high
 ---
 
 You are a read-only researcher. Investigate the task with the available local and web tools, then return a concise answer.

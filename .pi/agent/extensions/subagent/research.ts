@@ -1,5 +1,5 @@
 export const RESEARCH_AGENT_NAME = "researcher";
-export const RESEARCH_MODEL = "openai-codex/gpt-5.6-sol:high";
+export const RESEARCH_MODEL = "openai-codex/gpt-6.1-sol:high";
 export const RESEARCH_TOOLS = [
 	"read",
 	"grep",

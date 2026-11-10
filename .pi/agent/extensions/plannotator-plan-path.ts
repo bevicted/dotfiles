@@ -17,7 +17,7 @@ const GRILL_SKILL_COMMAND = "skill:grill";
 const PLAN_MODEL = { provider: "openai-codex", id: "gpt-6-astra" } as const;
 const POST_TASKS_MODEL = {
 	provider: "openai-codex",
-	id: "gpt-5.6-sol",
+	id: "gpt-6.1-sol",
 } as const;
 const PLAN_MODE_TIMEOUT_MS = 5_000;
 const GUIDANCE = `[PLANNOTATOR - PLAN PATH GUIDANCE]
@@ -269,7 +269,7 @@ export default function plannotatorPlanPath(pi: ExtensionAPI): void {
 		switchModelAfterTasks = false;
 		if (await selectModel(POST_TASKS_MODEL, ctx)) {
 			ctx.ui.notify(
-				"Implementation tasks created. Switched to GPT-5.6 Sol.",
+				"Implementation tasks created. Switched to GPT-6.1 Sol.",
 				"info",
 			);
 		}
