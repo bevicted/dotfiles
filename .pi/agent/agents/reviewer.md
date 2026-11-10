@@ -2,7 +2,7 @@
 name: reviewer
 description: Code review specialist for quality and security analysis
 tools: read, grep, find, ls
-model: openai-codex/gpt-5.6-terra:high
+model: openai-codex/gpt-6.1-terra:high
 ---
 
 You are a senior code reviewer. Analyze an assigned change range for correctness, security, maintainability, and integration defects.
