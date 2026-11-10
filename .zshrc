@@ -112,7 +112,7 @@ then
   # export MANPATH="/opt/homebrew/opt/coreutils/libexec/gnuman:${MANPATH}"
 fi
 export GOPATH="$HOME/go"
-export PATH=$HOME/.opencode/bin:$HOME/.local/bin:$GOPATH/bin:$PATH
+export PATH="$HOME/.cargo/bin:$HOME/.opencode/bin:$HOME/.local/bin:$GOPATH/bin:$PATH"
 
 # bun completions
 [ -s ~/.bun/_bun ] && source ~/.bun/_bun

@@ -13,8 +13,9 @@ The `Makefile` is the canonical entry point — prefer `make <target>` over invo
 - `make link` - `stow --restow` everything into `$HOME`, including a separate `bin/` package into `~/.local/bin`. Run this after adding/renaming files at the repo root.
 - `make link-delete` - remove all current stow symlinks.
 - `make link-delete-legacy-bin` - remove the old `bin/` links from `/usr/local/bin`. Run this once on systems that used the previous system-wide target.
-- `make arch-init` — full bootstrap on Arch (`self-installers` + `pacman` + `aur` + `tpm` + `go-install` + `zsh` + `link` + `agents` + `gsettings`).
-- `make agents` — install the herdr + pi + plannotator stack via their own installers, then wire herdr's agent-state integrations for claude, pi, and opencode plus plannotator's pi extension. Ordered after `link` in `arch-init` on purpose; see the target comment. opencode itself comes from `pkgs/common`, not from an installer.
+- `make self-installers` - install rustup and the stable Rust toolchain, including `rustc` and `cargo`.
+- `make arch-init` - full bootstrap on Arch (`self-installers` + `pacman` + `aur` + `tpm` + `go-install` + `zsh` + `link` + `agents` + `gsettings`).
+- `make agents` - install the herdr + pi + plannotator stack, including `plannotator-tui` via Cargo, then wire herdr's agent-state integrations for claude, pi, and opencode plus plannotator's pi extension. Ordered after `link` in `arch-init` on purpose; see the target comment. opencode itself comes from `pkgs/common`, not from an installer.
 - `make arkenfox` — fetch/refresh the arkenfox `user.js` toolchain into `~/.mozilla/firefox/user.arkenfox/` and apply it. Note the comment in the target: the Firefox profile must already exist at that path (create via `firefox -p`) before running.
 - `make arkenfox-apply` — re-apply the existing arkenfox `user-overrides.js` without re-fetching the upstream toolchain.
 - `make osx-packages` / `make osx-shims` — macOS equivalents of the Arch package targets.

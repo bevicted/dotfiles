@@ -3,7 +3,11 @@ SHELL=/usr/bin/env bash
 ARKEN_TMP_REPO_PATH := /tmp/arkenfox
 ARKEN_USER_PATH := $(HOME)/.mozilla/firefox/user.arkenfox
 LOCAL_BIN_PATH := $(HOME)/.local/bin
+CARGO_BIN_PATH := $(HOME)/.cargo/bin
 PI_SETTINGS_PATH := $(HOME)/.pi/agent/settings.json
+
+RUSTUP_BIN := $(shell command -v rustup 2>/dev/null || printf '%s/rustup' $(CARGO_BIN_PATH))
+CARGO_BIN  := $(shell command -v cargo 2>/dev/null || printf '%s/cargo' $(CARGO_BIN_PATH))
 
 COMMON_PKGS := $(shell cat pkgs/common)
 ARCH_PKGS   := $(COMMON_PKGS) $(shell cat pkgs/pacman)
@@ -21,14 +25,16 @@ YAY_INSTALL    := yay --needed --answerclean None --answerdiff None -S
 
 .PHONY: self-installers
 self-installers:
-	command -v rustup >/dev/null 2>&1 || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+	command -v rustup >/dev/null 2>&1 || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+	$(RUSTUP_BIN) default stable
 
 .PHONY: arch-init
 arch-init: self-installers pacman aur tpm go-install zsh link agents gsettings
 
 # herdr (terminal workspace manager), pi (coding agent), plannotator
-# (annotate/review UI). Each ships an installer that drops a binary in
-# ~/.local/bin and self-updates afterwards, so only a missing one is fetched.
+# (annotate/review UI), and plannotator-tui. The first three ship installers
+# that drop binaries in ~/.local/bin and self-update afterwards, so only a
+# missing one is fetched. The TUI is installed as a Rust crate via Cargo.
 # pi needs the nodejs/npm from pkgs/common, hence the ordering after `pacman`.
 # opencode is packaged (pacman extra + homebrew core) so it rides pkgs/common
 # instead; only its herdr integration is wired here.
@@ -46,10 +52,11 @@ arch-init: self-installers pacman aur tpm go-install zsh link agents gsettings
 # before `link` they would create real files under ~/.claude and stow would
 # then refuse to link .claude/settings.json.
 .PHONY: agents
-agents:
+agents: self-installers
 	command -v herdr >/dev/null 2>&1 || curl -fsSL https://herdr.dev/install.sh | sh
 	command -v pi >/dev/null 2>&1 || curl -fsSL https://pi.dev/install.sh | sh
 	command -v plannotator >/dev/null 2>&1 || curl -fsSL https://plannotator.ai/install.sh | bash -s -- --non-interactive
+	command -v plannotator-tui >/dev/null 2>&1 || $(CARGO_BIN) install plannotator-tui
 	herdr integration install claude
 	herdr integration install pi
 	herdr integration install opencode
