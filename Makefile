@@ -65,6 +65,8 @@ agents: self-installers
 	jq '(.packages //= []) | .packages |= map(if . == "npm:@plannotator/pi-extension" then {source: ., skills: []} elif type == "object" and .source == "npm:@plannotator/pi-extension" then .skills = [] else . end) | (.defaultTools //= []) | .defaultTools |= if all(.[]; startswith("+") or startswith("-")) then map(select(. != "+codemode" and . != "-codemode")) + ["+codemode"] elif index("codemode") then . else . + ["codemode"] end' $(PI_SETTINGS_PATH) > $(PI_SETTINGS_PATH).tmp
 	mv $(PI_SETTINGS_PATH).tmp $(PI_SETTINGS_PATH)
 	pi install npm:pi-lens
+	pi install npm:@dietrichgebert/ponytail
+	pi install npm:billion-context
 	npx -y @playwright/mcp@latest install-browser firefox
 
 .PHONY: pacman
