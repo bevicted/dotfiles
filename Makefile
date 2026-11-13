@@ -62,7 +62,7 @@ agents: self-installers
 	herdr integration install opencode
 	npm ci --omit=dev --prefix .pi/agent/extensions/web-fetch
 	pi install npm:@plannotator/pi-extension
-	jq '(.packages //= []) | .packages |= map(if . == "npm:@plannotator/pi-extension" then {source: ., skills: []} elif type == "object" and .source == "npm:@plannotator/pi-extension" then .skills = [] else . end) | .defaultProvider = "openai-codex" | .defaultModel = "gpt-6.1-sol" | (.defaultTools //= []) | .defaultTools |= if all(.[]; startswith("+") or startswith("-")) then map(select(. != "+codemode" and . != "-codemode")) + ["+codemode"] elif index("codemode") then . else . + ["codemode"] end' $(PI_SETTINGS_PATH) > $(PI_SETTINGS_PATH).tmp
+	jq '(.packages //= []) | .packages |= map(if . == "npm:@plannotator/pi-extension" then {source: ., skills: []} elif type == "object" and .source == "npm:@plannotator/pi-extension" then .skills = [] else . end) | .defaultProvider = "openai-codex" | .defaultModel = "gpt-6.1-sol" | .defaultThinkingLevel = "high" | (.defaultTools //= []) | .defaultTools |= if all(.[]; startswith("+") or startswith("-")) then map(select(. != "+codemode" and . != "-codemode")) + ["+codemode"] elif index("codemode") then . else . + ["codemode"] end' $(PI_SETTINGS_PATH) > $(PI_SETTINGS_PATH).tmp
 	mv $(PI_SETTINGS_PATH).tmp $(PI_SETTINGS_PATH)
 	pi install npm:pi-lens
 	pi install npm:@dietrichgebert/ponytail
