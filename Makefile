@@ -13,6 +13,7 @@ COMMON_PKGS := $(shell cat pkgs/common)
 ARCH_PKGS   := $(COMMON_PKGS) $(shell cat pkgs/pacman)
 HYPR_PKGS   := $(shell cat pkgs/pacman-hypr)
 NVIDIA_PKGS := $(shell cat pkgs/pacman-nvidia)
+VM_PKGS     := $(shell cat pkgs/pacman-vm)
 BREW_PKGS   := $(COMMON_PKGS) $(shell cat pkgs/brew)
 BREW_CASKS  := $(shell cat pkgs/brew-cask)
 AUR_PKGS    := $(shell cat pkgs/aur)
@@ -107,6 +108,12 @@ hypr-nvidia:
 gaming:
 	$(PACMAN_INSTALL) $(GAMING_PKGS)
 	$(YAY_INSTALL) $(AUR_GAMING_PKGS)
+
+.PHONY: vm-setup
+vm-setup:
+	$(PACMAN_INSTALL) $(VM_PKGS)
+	systemctl cat libvirtd.service virtlogd.service >/dev/null
+	sudo systemctl enable --now libvirtd.service virtlogd.service
 
 .PHONY: docker-setup
 docker-setup:
